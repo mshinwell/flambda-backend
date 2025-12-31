@@ -246,7 +246,7 @@ let jit_load (type a r)
       List.iter (fun r ->
         Printf.printf "  offset=%d sym=%s\n"
           (E.Relocation.offset_from_section_beginning r)
-          (E.Relocation.target_symbol r)) relocs);
+          (Symbols.target_to_string (E.Relocation.target_symbol r))) relocs);
     Printf.printf "=== End JIT Relocations ===\n\n%!");
   let relocated_text = relocate_text (module E) ~symbols addressed_text in
   relocate_other (module E) ~symbols addressed_sections;

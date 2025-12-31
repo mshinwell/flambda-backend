@@ -117,13 +117,13 @@ let encode_instruction :
       | Label lbl -> lbl
       | Symbol _ -> Misc.fatal_error "ADR: expected label, got symbol"
     in
-    let lbl_name = Asm_label.encode lbl in
     (* Compute PC-relative offset at assembly time *)
     let target_offset =
-      match Section_state.find_label_offset_in_bytes state lbl_name with
+      match Section_state.find_label_offset_in_bytes state lbl with
       | Some off -> off
       | None ->
-        Misc.fatal_errorf "ADR: label %s not found in current section" lbl_name
+        Misc.fatal_errorf "ADR: label %a not found in current section"
+          Asm_label.print lbl
     in
     let current_offset = Section_state.offset_in_bytes state in
     let pc_rel = target_offset - current_offset + sym.offset in

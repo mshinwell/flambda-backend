@@ -27,6 +27,7 @@
 
 module Asm_section = Asm_targets.Asm_section
 module D = Asm_targets.Asm_directives
+module Symbol = Arm64_ast.Ast.Symbol
 
 val eval_constant :
   Section_state.t ->
@@ -54,7 +55,7 @@ val is_rela_platform : unit -> bool
     On macOS, returns the original label name and offset unchanged. *)
 val resolve_local_label_for_elf :
   all_sections:All_section_states.t ->
-  sym_name:string ->
+  target:Symbol.target ->
   sym_offset:int ->
   string * int
 

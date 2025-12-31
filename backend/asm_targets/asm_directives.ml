@@ -148,21 +148,27 @@ module Directive = struct
     let print_using_decimals = print_aux ~force_decimal:true
 
     (* Evaluate a constant expression to a 64-bit value. Returns None if the
-       constant references an undefined symbol or if [lookup] returns None. *)
-    let rec eval ~this ~lookup t =
+       constant references an undefined symbol or if a lookup returns None. *)
+    let rec eval ~this ~lookup_label ~lookup_symbol ~lookup_variable t =
       match t with
       | Signed_int n -> Some n
       | Unsigned_int n -> Some (Uint64.to_int64 n)
       | This -> Some (this ())
-      | Label lbl -> lookup (Asm_label.encode lbl)
-      | Symbol sym -> lookup (Asm_symbol.encode sym)
-      | Variable name -> lookup name
+      | Label lbl -> lookup_label lbl
+      | Symbol sym -> lookup_symbol sym
+      | Variable name -> lookup_variable name
       | Add (a, b) -> (
-        match eval ~this ~lookup a, eval ~this ~lookup b with
+        match
+          ( eval ~this ~lookup_label ~lookup_symbol ~lookup_variable a,
+            eval ~this ~lookup_label ~lookup_symbol ~lookup_variable b )
+        with
         | Some va, Some vb -> Some (Int64.add va vb)
         | _ -> None)
       | Sub (a, b) -> (
-        match eval ~this ~lookup a, eval ~this ~lookup b with
+        match
+          ( eval ~this ~lookup_label ~lookup_symbol ~lookup_variable a,
+            eval ~this ~lookup_label ~lookup_symbol ~lookup_variable b )
+        with
         | Some va, Some vb -> Some (Int64.sub va vb)
         | _ -> None)
   end
@@ -196,6 +202,10 @@ module Directive = struct
   type thing_after_label =
     | Code
     | Machine_width_data
+
+  type label_or_symbol =
+    | Label of Asm_label.t
+    | Symbol of Asm_symbol.t
 
   type reloc_type = R_X86_64_PLT32
 
@@ -231,38 +241,33 @@ module Directive = struct
         { file_num : int option;
           filename : string
         }
-    | Global of string
-    | Indirect_symbol of string
+    | Global of Asm_symbol.t
+    | Indirect_symbol of Asm_symbol.t
     | Loc of
         { file_num : int;
           line : int;
           col : int;
           discriminator : int option
         }
-    | New_label of string * thing_after_label
+    | New_label of label_or_symbol * thing_after_label
     | New_line
-    | Private_extern of string
-    | Section of
-        { names : string list;
-          flags : string option;
-          args : string list;
-          is_delayed : bool
-        }
-    | Size of string * Constant.t
+    | Private_extern of Asm_symbol.t
+    | Section of Asm_section.t * [ `First_occurrence | `Not_first_occurrence ]
+    | Size of Asm_symbol.t * Constant.t
     | Sleb128 of
         { constant : Constant.t;
           comment : string option
         }
     | Space of { bytes : int }
-    | Type of string * symbol_type
+    | Type of label_or_symbol * symbol_type
     | Uleb128 of
         { constant : Constant.t;
           comment : string option
         }
-    | Protected of string
-    | Hidden of string
-    | Weak of string
-    | External of string
+    | Protected of Asm_symbol.t
+    | Hidden of Asm_symbol.t
+    | Weak of Asm_symbol.t
+    | External of Asm_symbol.t
     | Reloc of
         { offset : Constant.t;
           name : reloc_type;
@@ -394,17 +399,28 @@ module Directive = struct
       | _, _ -> print_ascii_string_gas ~chunk_size:80 buf str);
       bprintf buf "%s" (gas_comment_opt comment)
     | Comment s -> if emit_comments () then bprintf buf "\t\t\t\t/* %s */" s
-    | Global s -> bprintf buf "\t.globl\t%s" s
-    | New_label (s, _typ) -> bprintf buf "%s:" s
+    | Global sym -> bprintf buf "\t.globl\t%s" (Asm_symbol.encode sym)
+    | New_label (Label lbl, _typ) -> bprintf buf "%s:" (Asm_label.encode lbl)
+    | New_label (Symbol sym, _typ) -> bprintf buf "%s:" (Asm_symbol.encode sym)
     | New_line -> ()
-    | Section { names = [".data"]; _ } -> bprintf buf "\t.data"
-    | Section { names = [".text"]; _ } -> bprintf buf "\t.text"
-    | Section { names; flags; args; is_delayed = _ } -> (
-      bprintf buf "\t.section %s" (String.concat "," names);
-      (match flags with None -> () | Some flags -> bprintf buf ",%S" flags);
-      match args with
-      | [] -> ()
-      | _ -> bprintf buf ",%s" (String.concat "," args))
+    | Section (section, first_occurrence) ->
+      let first_occurrence =
+        match first_occurrence with
+        | `First_occurrence -> true
+        | `Not_first_occurrence -> false
+      in
+      let details = Asm_section.details section ~first_occurrence in
+      (match details.names with
+      | [".data"] -> bprintf buf "\t.data"
+      | [".text"] -> bprintf buf "\t.text"
+      | names ->
+        bprintf buf "\t.section %s" (String.concat "," names);
+        (match details.flags with
+        | None -> ()
+        | Some flags -> bprintf buf ",%S" flags);
+        match details.args with
+        | [] -> ()
+        | args -> bprintf buf ",%s" (String.concat "," args))
     | Space { bytes } -> (
       match TS.system () with
       | Solaris -> bprintf buf "\t.zero\t%d" bytes
@@ -423,7 +439,7 @@ module Directive = struct
     | File { file_num = Some file_num; filename } ->
       bprintf buf "\t.file\t%d\t\"%s\"" file_num
         (string_of_string_literal filename)
-    | Indirect_symbol s -> bprintf buf "\t.indirect_symbol %s" s
+    | Indirect_symbol sym -> bprintf buf "\t.indirect_symbol %s" (Asm_symbol.encode sym)
     | Loc { file_num; line; col; discriminator } ->
       (* PR#7726: Location.none uses column -1, breaks LLVM assembler *)
       (* If we don't set the optional column field, debug_line program gets the
@@ -438,9 +454,9 @@ module Directive = struct
       in
       bprintf buf "\t.loc\t%d\t%d%a%a" file_num line print_col col
         print_discriminator discriminator
-    | Private_extern s -> bprintf buf "\t.private_extern %s" s
-    | Size (s, c) ->
-      bprintf buf "\t.size %s,%a" s Constant.print c
+    | Private_extern sym -> bprintf buf "\t.private_extern %s" (Asm_symbol.encode sym)
+    | Size (sym, c) ->
+      bprintf buf "\t.size %s,%a" (Asm_symbol.encode sym) Constant.print c
       (* We use %Ld and not %Lx on Unix-like platforms to ensure that ".sleb128"
          directives do not end up with hex arguments (since this denotes a
          variable-length encoding it would not be clear where the sign bit
@@ -449,13 +465,17 @@ module Directive = struct
       let comment = gas_comment_opt comment in
       bprintf buf "\t.sleb128\t%a%s" Constant.print_using_decimals constant
         comment
-    | Type (s, typ) ->
+    | Type (target, typ) ->
       let typ = symbol_type_to_string typ in
+      let name = match target with
+        | Label lbl -> Asm_label.encode lbl
+        | Symbol sym -> Asm_symbol.encode sym
+      in
       (* CR sspies: Technically, ",STT_OBJECT" violates the assembler syntax
          (see https://sourceware.org/binutils/docs/as/Type.html). We probably
          want to turn this into " STT_OBJECT", but for that we should use "STT_"
          versions for all of them and probably on all architectures. *)
-      bprintf buf "\t.type %s,%s" s typ
+      bprintf buf "\t.type %s,%s" name typ
     | Uleb128 { constant; comment } ->
       let comment = gas_comment_opt comment in
       bprintf buf "\t.uleb128\t%a%s" Constant.print_using_decimals constant
@@ -466,9 +486,9 @@ module Directive = struct
       | _ ->
         Misc.fatal_error
           "Cannot emit [Direct_assignment] except on macOS-like assemblers")
-    | Protected s -> bprintf buf "\t.protected\t%s" s
-    | Hidden s -> bprintf buf "\t.hidden\t%s" s
-    | Weak s -> bprintf buf "\t.weak\t%s" s
+    | Protected sym -> bprintf buf "\t.protected\t%s" (Asm_symbol.encode sym)
+    | Hidden sym -> bprintf buf "\t.hidden\t%s" (Asm_symbol.encode sym)
+    | Weak sym -> bprintf buf "\t.weak\t%s" (Asm_symbol.encode sym)
     (* masm only *)
     | External _ -> assert false
     | Reloc { offset; name; expr } ->
@@ -509,14 +529,17 @@ module Directive = struct
       bprintf buf "\t%s\t%a%s" directive Constant.print
         (Constant_with_width.constant constant)
         comment
-    | Global s -> bprintf buf "\tPUBLIC\t%s" s
-    | Section { names = [".data"]; _ } -> bprintf buf "\t.DATA"
-    | Section { names = [".text"]; _ } -> bprintf buf "\t.CODE"
+    | Global sym -> bprintf buf "\tPUBLIC\t%s" (Asm_symbol.encode sym)
+    | Section (Data, _) -> bprintf buf "\t.DATA"
+    | Section (Text, _) -> bprintf buf "\t.CODE"
     | Section _ -> Misc.fatal_error "Unknown section name for MASM emitter"
     | Space { bytes } -> bprintf buf "\tBYTE\t%d DUP (?)" bytes
-    | New_label (label, Code) -> bprintf buf "%s:" label
-    | New_label (label, Machine_width_data) ->
-      bprintf buf "%s LABEL QWORD" label
+    | New_label (Label lbl, Code) -> bprintf buf "%s:" (Asm_label.encode lbl)
+    | New_label (Symbol sym, Code) -> bprintf buf "%s:" (Asm_symbol.encode sym)
+    | New_label (Label lbl, Machine_width_data) ->
+      bprintf buf "%s LABEL QWORD" (Asm_label.encode lbl)
+    | New_label (Symbol sym, Machine_width_data) ->
+      bprintf buf "%s LABEL QWORD" (Asm_symbol.encode sym)
     | New_line -> ()
     | Cfi_adjust_cfa_offset _ -> unsupported "Cfi_adjust_cfa_offset"
     | Cfi_def_cfa_offset _ -> unsupported "Cfi_def_cfa_offset"
@@ -538,7 +561,7 @@ module Directive = struct
     | Protected _ -> unsupported "Protected"
     | Hidden _ -> unsupported "Hidden"
     | Weak _ -> unsupported "Weak"
-    | External s -> bprintf buf "\tEXTRN\t%s: NEAR" s
+    | External sym -> bprintf buf "\tEXTRN\t%s: NEAR" (Asm_symbol.encode sym)
     (* The only supported "type" on EXTRN declarations is NEAR. *)
     | Reloc _ -> unsupported "Reloc"
 
@@ -696,9 +719,6 @@ let emit (d : Directive.t) =
 let emit_non_masm (d : Directive.t) =
   match TS.assembler () with MASM -> () | MacOS | GAS_like -> emit d
 
-let section ~names ~flags ~args ~is_delayed =
-  emit (Section { names; flags; args; is_delayed })
-
 let align ~fill ~bytes = emit (Align { bytes; fill })
 
 let should_generate_cfi () =
@@ -744,23 +764,23 @@ let space ~bytes = if bytes > 0 then emit (Space { bytes })
 let string ?comment str =
   if String.length str <> 0 then emit (Bytes { str; comment })
 
-let global symbol = emit (Global (Asm_symbol.encode symbol))
+let global symbol = emit (Global symbol)
 
-let indirect_symbol symbol = emit (Indirect_symbol (Asm_symbol.encode symbol))
+let indirect_symbol symbol = emit (Indirect_symbol symbol)
 
-let private_extern symbol = emit (Private_extern (Asm_symbol.encode symbol))
+let private_extern symbol = emit (Private_extern symbol)
 
-let extrn symbol = emit (External (Asm_symbol.encode symbol))
+let extrn symbol = emit (External symbol)
 
-let hidden symbol = emit (Hidden (Asm_symbol.encode symbol))
+let hidden symbol = emit (Hidden symbol)
 
-let weak symbol = emit (Weak (Asm_symbol.encode symbol))
+let weak symbol = emit (Weak symbol)
 
-let size symbol cst = emit (Size (Asm_symbol.encode symbol, lower_expr cst))
+let size symbol cst = emit (Size (symbol, lower_expr cst))
 
-let size_const sym n = emit (Size (Asm_symbol.encode sym, Signed_int n))
+let size_const sym n = emit (Size (sym, Signed_int n))
 
-let type_ symbol ~type_ = emit (Type (symbol, type_))
+let type_ target ~type_ = emit (Type (target, type_))
 
 let sleb128 ?comment i =
   emit (Sleb128 { constant = Directive.Constant.Signed_int i; comment })
@@ -768,7 +788,7 @@ let sleb128 ?comment i =
 let uleb128 ?comment i =
   emit (Uleb128 { constant = Directive.Constant.Unsigned_int i; comment })
 
-let protected symbol = emit (Protected (Asm_symbol.encode symbol))
+let protected symbol = emit (Protected symbol)
 
 let direct_assignment var cst = emit (Direct_assignment (var, lower_expr cst))
 
@@ -832,7 +852,7 @@ let define_label label =
   let typ : Directive.thing_after_label =
     if current_section_is_text () then Code else Machine_width_data
   in
-  emit (New_label (Asm_label.encode label, typ))
+  emit (New_label (Label label, typ))
 
 let new_line () = if !Clflags.keep_asm_file then emit New_line
 
@@ -847,21 +867,25 @@ let switch_to_section ?(emit_label_on_first_occurrence = false) section =
      not switching. *)
   let first_occurrence =
     if List.mem section !sections_seen
-    then false
+    then `Not_first_occurrence
     else (
       sections_seen := section :: !sections_seen;
-      true)
+      `First_occurrence)
   in
   current_section_ref := Some section;
-  let ({ names; flags; args; is_delayed } : Asm_section.section_details) =
-    Asm_section.details section ~first_occurrence
-  in
-  emit (Section { names; flags; args; is_delayed });
-  if first_occurrence && emit_label_on_first_occurrence
-  then define_label (Asm_label.for_section section)
+  emit (Section (section, first_occurrence));
+  (match first_occurrence with
+   | `First_occurrence when emit_label_on_first_occurrence ->
+     define_label (Asm_label.for_section section)
+   | `First_occurrence | `Not_first_occurrence -> ())
 
-let switch_to_section_raw ~names ~flags ~args ~is_delayed =
-  emit (Section { names; flags; args; is_delayed })
+let switch_to_section_raw ~names ~flags:_ ~args:_ ~is_delayed:_ =
+  (* Convert names to Asm_section.t if possible *)
+  match Asm_section.of_names names with
+  | Some section -> switch_to_section section
+  | None ->
+    Misc.fatal_errorf "switch_to_section_raw: unknown section names: %s"
+      (String.concat ", " names)
 
 let unsafe_set_internal_section_ref section =
   current_section_ref := Some section
@@ -947,9 +971,9 @@ let file ~file_num ~file_name = file ~file_num ~file_name ()
 let define_data_symbol symbol =
   (* CR sspies: enable check again *)
   (* check_symbol_for_definition_in_current_section symbol; *)
-  emit (New_label (Asm_symbol.encode symbol, Machine_width_data));
+  emit (New_label (Symbol symbol, Machine_width_data));
   match TS.assembler (), TS.windows () with
-  | GAS_like, false -> type_ (Asm_symbol.encode symbol) ~type_:Object
+  | GAS_like, false -> type_ (Directive.Symbol symbol) ~type_:Object
   | GAS_like, true | MacOS, _ | MASM, _ -> ()
 
 (* CR mshinwell: Rename to [define_text_symbol]? *)
@@ -957,25 +981,25 @@ let define_function_symbol symbol =
   (* CR sspies: enable check again *)
   (* check_symbol_for_definition_in_current_section symbol; *)
   (* CR mshinwell: This shouldn't be called "New_label" *)
-  emit (New_label (Asm_symbol.encode symbol, Code));
+  emit (New_label (Symbol symbol, Code));
   match TS.assembler (), TS.windows () with
-  | GAS_like, false -> type_ (Asm_symbol.encode symbol) ~type_:Function
+  | GAS_like, false -> type_ (Directive.Symbol symbol) ~type_:Function
   | GAS_like, true | MacOS, _ | MASM, _ -> ()
 
 let define_symbol_label ~section symbol =
   let typ : Directive.thing_after_label =
     match section with Asm_section.Text -> Code | _ -> Machine_width_data
   in
-  emit (New_label (Asm_symbol.encode symbol, typ))
+  emit (New_label (Symbol symbol, typ))
 
 let type_symbol symbol ~ty =
   match TS.assembler (), TS.windows () with
-  | GAS_like, false -> type_ (Asm_symbol.encode symbol) ~type_:ty
+  | GAS_like, false -> type_ (Directive.Symbol symbol) ~type_:ty
   | GAS_like, true | MacOS, _ | MASM, _ -> ()
 
 let type_label label ~ty =
   match TS.assembler (), TS.windows () with
-  | GAS_like, false -> type_ (Asm_label.encode label) ~type_:ty
+  | GAS_like, false -> type_ (Directive.Label label) ~type_:ty
   | GAS_like, true | MacOS, _ | MASM, _ -> ()
 
 let define_joint_label_and_symbol ~section symbol =
@@ -1039,9 +1063,7 @@ let emit_cached_strings () =
 
 let mark_stack_non_executable () =
   match TS.system () with
-  | Linux ->
-    section ~names:[".note.GNU-stack"] ~flags:(Some "") ~args:["%progbits"]
-      ~is_delayed:false
+  | Linux -> switch_to_section Asm_section.Note_gnu_stack
   | _ -> ()
 
 let new_temp_var () =

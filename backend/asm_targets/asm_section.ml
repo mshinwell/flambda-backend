@@ -55,6 +55,7 @@ type t =
   | Stapsdt_note
   | Probes
   | Note_ocaml_eh
+  | Note_gnu_stack
 
 let dwarf_sections_in_order () =
   let sections =
@@ -80,7 +81,8 @@ let is_delayed = function
       | Debug_rnglists | Debug_addr | Debug_loc | Debug_ranges )
   | Data | Read_only_data | Eight_byte_literals | Sixteen_byte_literals
   | Thirtytwo_byte_literals | Sixtyfour_byte_literals | Jump_tables | Text
-  | Function_text _ | Stapsdt_base | Stapsdt_note | Probes | Note_ocaml_eh ->
+  | Function_text _ | Stapsdt_base | Stapsdt_note | Probes | Note_ocaml_eh
+  | Note_gnu_stack ->
     false
 
 let print ppf t =
@@ -109,6 +111,7 @@ let print ppf t =
     | Stapsdt_note -> "Stapsdt_note"
     | Probes -> "Probes"
     | Note_ocaml_eh -> "Note_ocaml_eh"
+    | Note_gnu_stack -> "Note_gnu_stack"
   in
   Format.pp_print_string ppf str
 
@@ -130,7 +133,7 @@ let section_is_text = function
   | Text | Function_text _ -> true
   | Data | Read_only_data | Eight_byte_literals | Sixteen_byte_literals
   | Thirtytwo_byte_literals | Sixtyfour_byte_literals | Jump_tables | DWARF _
-  | Stapsdt_base | Stapsdt_note | Probes | Note_ocaml_eh ->
+  | Stapsdt_base | Stapsdt_note | Probes | Note_ocaml_eh | Note_gnu_stack ->
     false
 
 type section_details =
@@ -238,6 +241,7 @@ let details t ~first_occurrence =
     | Probes, _, MacOS_like -> ["__TEXT"; "__probes"], None, ["regular"]
     | Probes, _, _ -> [".probes"], Some "wa", ["\"progbits\""]
     | Note_ocaml_eh, _, _ -> [".note.ocaml_eh"], Some "?", ["\"note\""]
+    | Note_gnu_stack, _, _ -> [".note.GNU-stack"], Some "", ["%progbits"]
   in
   let is_delayed = is_delayed t in
   { names; flags; args; is_delayed }
@@ -271,6 +275,7 @@ let of_names names =
   | [".note.stapsdt"] -> Some Stapsdt_note
   | [".probes"] -> Some Probes
   | [".note.ocaml_eh"] -> Some Note_ocaml_eh
+  | [".note.GNU-stack"] -> Some Note_gnu_stack
   (* macOS *)
   | ["__TEXT"; "__text"] -> Some Text
   | ["__DATA"; "__data"] -> Some Data

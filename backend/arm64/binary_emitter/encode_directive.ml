@@ -41,14 +41,15 @@ let rec extract_symbol_name (cst : C.t) =
   | Add (a, _) | Sub (a, _) -> extract_symbol_name a
   | Signed_int _ | Unsigned_int _ | This -> None
 
-let extract_label_this_offset (cst : C.t) =
+(* Extract (target, offset) from expressions like (Label - This) + offset *)
+let extract_target_this_offset (cst : C.t) : (Symbol.target * int64) option =
   match[@warning "-4"] cst with
   | Add (Sub (Label lbl, This), Signed_int offset) ->
-    Some (Asm_label.encode lbl, offset)
+    Some (Symbol.Label lbl, offset)
   | Add (Sub (Symbol sym, This), Signed_int offset) ->
-    Some (Asm_symbol.encode sym, offset)
-  | Sub (Label lbl, This) -> Some (Asm_label.encode lbl, 0L)
-  | Sub (Symbol sym, This) -> Some (Asm_symbol.encode sym, 0L)
+    Some (Symbol.Symbol sym, offset)
+  | Sub (Label lbl, This) -> Some (Symbol.Label lbl, 0L)
+  | Sub (Symbol sym, This) -> Some (Symbol.Symbol sym, 0L)
   | _ -> None
 
 let rec eval_constant state ~all_sections const =
@@ -56,37 +57,43 @@ let rec eval_constant state ~all_sections const =
      within the section is all that matters. Cross-section references are
      detected and handled via relocations before this function is called. *)
   let this () = Int64.of_int (SS.offset_in_bytes state) in
-  let lookup name =
-    (* First check if this is a direct assignment (e.g., temp0 from .set) *)
+  let lookup_label lbl =
+    (* First try current section, then fall back to global lookup. *)
+    match SS.find_label_offset_in_bytes state lbl with
+    | Some offset -> Some (Int64.of_int offset)
+    | None -> (
+      match
+        All_section_states.find_in_any_section all_sections (Symbol.Label lbl)
+      with
+      | Some (offset, _section) -> Some (Int64.of_int offset)
+      | None -> None)
+  in
+  let lookup_symbol sym =
+    (* When generating PIC code (dlcode=true), global symbols should not be
+       resolved as they may be interposed at runtime. We must emit zeros and
+       let the linker handle them via relocations. *)
+    let is_global_symbol = Option.is_some (SS.find_symbol_offset_in_bytes state sym) in
+    if !Clflags.dlcode && is_global_symbol
+    then None
+    else
+      match SS.find_symbol_offset_in_bytes state sym with
+      | Some offset -> Some (Int64.of_int offset)
+      | None -> (
+        match
+          All_section_states.find_in_any_section all_sections (Symbol.Symbol sym)
+        with
+        | Some (offset, _section) -> Some (Int64.of_int offset)
+        | None -> None)
+  in
+  let lookup_variable name =
+    (* Check if this is a direct assignment (e.g., temp0 from .set) *)
     match All_section_states.find_direct_assignment all_sections name with
     | Some expr ->
       (* Recursively evaluate the assigned expression *)
       eval_constant state ~all_sections expr
-    | None -> (
-      (* When generating PIC code (dlcode=true), global symbols should not be
-         resolved as they may be interposed at runtime. We must emit zeros and
-         let the linker handle them via relocations. Note: global symbols appear
-         both in the symbol table (via Global directive) AND in the label table
-         (via the New_label for the : definition). So we check if the name is a
-         declared global symbol first. *)
-      let is_global_symbol =
-        Option.is_some (SS.find_symbol_offset_in_bytes state name)
-      in
-      if !Clflags.dlcode && is_global_symbol
-      then None
-      else
-        (* First try current section, then fall back to global lookup. *)
-        match SS.find_label_offset_in_bytes state name with
-        | Some offset -> Some (Int64.of_int offset)
-        | None -> (
-          match SS.find_symbol_offset_in_bytes state name with
-          | Some offset -> Some (Int64.of_int offset)
-          | None -> (
-            match All_section_states.find_in_any_section all_sections name with
-            | Some (offset, _section) -> Some (Int64.of_int offset)
-            | None -> None)))
+    | None -> None
   in
-  C.eval ~this ~lookup const
+  C.eval ~this ~lookup_label ~lookup_symbol ~lookup_variable const
 
 (* Handle cross-section (Label - This) + offset pattern. This occurs in
    frametable entries where a DATA section location references a TEXT section
@@ -94,11 +101,11 @@ let rec eval_constant state ~all_sections const =
    .rodata.cst8. On ELF with function sections, we emit R_AARCH64_PREL32 with
    section name and addend. On macOS, we emit PREL32_PAIR using symbol pairs. *)
 let is_cross_section_relative_reference state ~all_sections ~current_section c =
-  match extract_label_this_offset c with
+  match extract_target_this_offset c with
   | None -> None
-  | Some (label_name, offset_upper) -> (
-    (* First check if label is in current section *)
-    match SS.find_label_offset_in_bytes state label_name with
+  | Some (target, offset_upper) -> (
+    (* First check if target is in current section *)
+    match SS.find_target_offset_in_bytes state target with
     | Some _ -> None (* Same section, use normal eval *)
     | None -> (
       let macosx = String.equal Config.system "macosx" in
@@ -111,7 +118,7 @@ let is_cross_section_relative_reference state ~all_sections ~current_section c =
          &&
          match
            All_section_states.find_in_any_individual_section_with_state
-             all_sections label_name
+             all_sections target
          with
          | Some (target_offset, section, _target_state) ->
            if not (Asm_section.equal current_section Asm_section.Data)
@@ -134,10 +141,9 @@ let is_cross_section_relative_reference state ~all_sections ~current_section c =
       else
         (* Try cross-section lookup for standard sections. Use
            find_in_any_section_with_state to get the actual state where the
-           label was found. *)
+           target was found. *)
         match
-          All_section_states.find_in_any_section_with_state all_sections
-            label_name
+          All_section_states.find_in_any_section_with_state all_sections target
         with
         | None -> None (* Not found at all *)
         | Some (target_offset, label_section, _target_state) -> (
@@ -211,6 +217,18 @@ let is_rela_platform () =
   | "macosx" | "darwin" -> false
   | _ -> false (* Default to REL behavior for unknown systems *)
 
+(* Encode a Symbol.target to its string representation *)
+let encode_target (target : Symbol.target) : string =
+  match target with
+  | Label lbl -> Asm_label.encode lbl
+  | Symbol sym -> Asm_symbol.encode sym
+
+(* Check if a target is a global symbol in the given state *)
+let is_global_in_state state (target : Symbol.target) : bool =
+  match target with
+  | Symbol sym -> Option.is_some (SS.find_symbol_offset_in_bytes state sym)
+  | Label _ -> false
+
 (* On Linux ELF, local symbols don't have symbol table entries and the assembler
    converts them to section symbol + offset. This includes: 1. Local labels
    starting with .L 2. File-scope symbols (defined via label, not global symbol)
@@ -218,7 +236,8 @@ let is_rela_platform () =
    addend) where symbol_name is either the original symbol or the section name,
    and addend includes the offset within the section plus any original
    offset. *)
-let resolve_local_label_for_elf ~all_sections ~sym_name ~sym_offset =
+let resolve_local_label_for_elf ~all_sections ~target ~sym_offset =
+  let sym_name = encode_target target in
   if not (is_rela_platform ())
   then (* macOS: use symbol names directly *)
     sym_name, sym_offset
@@ -235,13 +254,11 @@ let resolve_local_label_for_elf ~all_sections ~sym_name ~sym_offset =
     let try_individual_sections () =
       match
         All_section_states.find_in_any_individual_section_with_state
-          all_sections sym_name
+          all_sections target
       with
       | Some (label_offset, section, target_state) ->
         (* Check if this is a global symbol in the target section *)
-        let is_global_in_target =
-          Option.is_some (SS.find_symbol_offset_in_bytes target_state sym_name)
-        in
+        let is_global_in_target = is_global_in_state target_state target in
         if is_local_label || not is_global_in_target
         then
           let section_name = Asm_section.to_string section in
@@ -252,13 +269,11 @@ let resolve_local_label_for_elf ~all_sections ~sym_name ~sym_offset =
     (* Try to find in standard sections *)
     let try_standard_sections () =
       match
-        All_section_states.find_in_any_section_with_state all_sections sym_name
+        All_section_states.find_in_any_section_with_state all_sections target
       with
       | Some (label_offset, section, target_state) ->
         let section_name = Asm_section.to_string section in
-        let is_global_in_target =
-          Option.is_some (SS.find_symbol_offset_in_bytes target_state sym_name)
-        in
+        let is_global_in_target = is_global_in_state target_state target in
         if is_local_label || not is_global_in_target
         then Some (section_name, label_offset + sym_offset)
         else None
@@ -297,16 +312,10 @@ let is_absolute_symbol_reference state ~all_sections ~current_section
     match target_of_constant cst with
     | None -> None
     | Some target ->
-      let name =
-        match target with
-        | Label lbl -> Asm_label.encode lbl
-        | Symbol sym -> Asm_symbol.encode sym
-      in
       let for_jit = All_section_states.for_jit all_sections in
       (* Check if symbol is in the same section *)
       let is_same_section =
-        Option.is_some (SS.find_label_offset_in_bytes state name)
-        || Option.is_some (SS.find_symbol_offset_in_bytes state name)
+        Option.is_some (SS.find_target_offset_in_bytes state target)
       in
       if is_same_section
       then
@@ -321,7 +330,7 @@ let is_absolute_symbol_reference state ~all_sections ~current_section
         else None (* Resolve same-section refs at emit time via eval_constant *)
       else
         (* Cross-section reference - always needs relocation *)
-        match All_section_states.find_in_any_section all_sections name with
+        match All_section_states.find_in_any_section all_sections target with
         | None -> None (* Not found, will fall through to emit_unresolved *)
         | Some (_, sym_section) ->
           if Asm_section.equal sym_section current_section
@@ -411,10 +420,7 @@ let emit_directive state ~current_section ~all_sections
   let buf = SS.buffer state in
   (* Update current section when we see a Section directive *)
   (match[@warning "-4"] directive with
-  | Section { names; _ } -> (
-    match Asm_section.of_names names with
-    | Some section -> current_section := section
-    | None -> ())
+  | Section (section, _) -> current_section := section
   | _ -> ());
   match directive with
   | Bytes { str; _ } -> Buffer.add_string buf str

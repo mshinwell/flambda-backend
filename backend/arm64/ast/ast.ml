@@ -539,6 +539,11 @@ module Symbol = struct
 
   let is_label t = match t.target with Label _ -> true | Symbol _ -> false
 
+  let print_target ppf (target : target) =
+    match target with
+    | Label lbl -> Asm_label.print ppf lbl
+    | Symbol sym -> Asm_symbol.print ppf sym
+
   let print_with_reloc_directive :
       type w. Format.formatter -> string * w reloc_directive -> unit =
    fun ppf (s, reloc) ->

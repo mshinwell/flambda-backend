@@ -25,6 +25,8 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
+module Asm_label = Asm_targets.Asm_label
+module Asm_section = Asm_targets.Asm_section
 module Asm_symbol = Asm_targets.Asm_symbol
 module Symbol = Arm64_ast.Ast.Symbol
 
@@ -48,25 +50,23 @@ val add_relocation_at_current_offset : t -> reloc_kind:Relocation.Kind.t -> unit
 
 val add_relocation : t -> Relocation.t -> unit
 
-(** Define a symbol at the current offset. The name should be already encoded
-    (e.g., with the platform symbol prefix). *)
-val define_symbol :
-  t -> name:string -> visibility:Asm_symbol.visibility -> unit
+(** Define a symbol at the current offset. *)
+val define_symbol : t -> Asm_symbol.t -> unit
 
-(** Define a label at the current offset. The name should be already encoded. *)
-val define_label : t -> string -> unit
+(** Define a label at the current offset. *)
+val define_label : t -> Asm_label.t -> unit
 
-(** Find the offset of a symbol by its encoded name. *)
-val find_symbol_offset_in_bytes : t -> string -> int option
+(** Find the offset of a symbol. *)
+val find_symbol_offset_in_bytes : t -> Asm_symbol.t -> int option
 
-(** Find the offset of a label by its encoded name. *)
-val find_label_offset_in_bytes : t -> string -> int option
+(** Find the offset of a label. *)
+val find_label_offset_in_bytes : t -> Asm_label.t -> int option
 
 (** Find the nearest global symbol strictly before a given offset.
     Returns the symbol and its offset. *)
 val find_nearest_symbol_before : t -> int -> (Asm_symbol.t * int) option
 
-(** Look up a target (symbol or label) by encoded name. *)
+(** Look up a target (symbol or label). *)
 val find_target_offset_in_bytes : t -> Symbol.target -> int option
 
 val relocations : t -> Relocation.t list
@@ -74,8 +74,8 @@ val relocations : t -> Relocation.t list
 (** Iterate over all defined symbols with their offsets. *)
 val iter_symbols : t -> f:(Asm_symbol.t -> int -> unit) -> unit
 
-(** Iterate over all defined labels with their offsets (as encoded strings). *)
-val iter_labels : t -> f:(string -> int -> unit) -> unit
+(** Iterate over all defined labels with their offsets. *)
+val iter_labels : t -> f:(Asm_label.t -> int -> unit) -> unit
 
 val add_patch : t -> offset:int -> size:patch_size -> data:int64 -> unit
 

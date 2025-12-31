@@ -1434,14 +1434,20 @@ let assemble_line b loc ins =
         assemble_instr b loc instr;
         incr loc
     | Directive (D.Comment _ )-> ()
-    | Directive (D.Global sym) -> (get_symbol b sym).sy_binding <- Sy_global
-    | Directive (D.Weak sym) -> (get_symbol b sym).sy_binding <- Sy_weak
-    | Directive (D.Protected sym) -> (get_symbol b sym).sy_protected <- true
+    | Directive (D.Global sym) ->
+      (get_symbol b (Asm_symbol.encode sym)).sy_binding <- Sy_global
+    | Directive (D.Weak sym) ->
+      (get_symbol b (Asm_symbol.encode sym)).sy_binding <- Sy_weak
+    | Directive (D.Protected sym) ->
+      (get_symbol b (Asm_symbol.encode sym)).sy_protected <- true
     | Directive (D.Const {constant = c; comment = _ }) ->
       constant b
               (D.Constant_with_width.constant c)
               (D.Constant_with_width.width_in_bytes c)
-    | Directive (D.New_label (s, _)) -> declare_label b s
+    | Directive (D.New_label (D.Label lbl, _)) ->
+      declare_label b (Asm_label.encode lbl)
+    | Directive (D.New_label (D.Symbol sym, _)) ->
+      declare_label b (Asm_symbol.encode sym)
     | Directive (D.Bytes { str; comment = _ }) -> Buffer.add_string b.buf str
     | Directive (D.External _) -> ()
     | Directive (D.Direct_assignment _) -> assert false
@@ -1458,10 +1464,13 @@ let assemble_line b loc ins =
     | Directive (D.Loc _) -> ()
     | Directive (D.Private_extern _) -> assert false
     | Directive (D.Indirect_symbol _) -> assert false
-    | Directive (D.Type (lbl, kind)) -> (get_symbol b lbl).sy_type <- Some kind
-    | Directive (D.Size (lbl, cst)) -> (
+    | Directive (D.Type (D.Label lbl, kind)) ->
+      (get_symbol b (Asm_label.encode lbl)).sy_type <- Some kind
+    | Directive (D.Type (D.Symbol sym, kind)) ->
+      (get_symbol b (Asm_symbol.encode sym)).sy_type <- Some kind
+    | Directive (D.Size (sym, cst)) -> (
         match eval_const b (Buffer.length b.buf) cst with
-        | Rint n -> (get_symbol b lbl).sy_size <- Some (Int64.to_int n)
+        | Rint n -> (get_symbol b (Asm_symbol.encode sym)).sy_size <- Some (Int64.to_int n)
         | _ -> assert false)
     | Directive (D.Align { fill=data; bytes = n}) -> (
         (* TODO: Buffer.length = 0 => set section align *)
@@ -1529,8 +1538,10 @@ let assemble_section arch section =
 
   let icount = ref 0 in
   ArrayLabels.iter section.sec_instrs ~f:(function
-    | Directive (D.New_label (lbl, _)) ->
-        String.Tbl.add local_labels lbl !icount
+    | Directive (D.New_label (D.Label lbl, _)) ->
+        String.Tbl.add local_labels (Asm_label.encode lbl) !icount
+    | Directive (D.New_label (D.Symbol sym, _)) ->
+        String.Tbl.add local_labels (Asm_symbol.encode sym) !icount
     | Ins _ -> incr icount
     | _ -> ());
 
@@ -1643,20 +1654,25 @@ module For_jit = struct
       | Kind.REL32 _ | Kind.DIR32 _ -> Binary_emitter_intf.B32
       | Kind.DIR64 _ -> Binary_emitter_intf.B64
 
+    module Symbol = Arm64_ast.Ast.Symbol
+
     let parse_label label =
       match String.split_on_char '@' label with
       | [sym] -> sym, None
       | [sym; suffix] -> sym, Some suffix
       | _ -> label, None
 
-    let target_symbol (r : Reloc.t) =
+    let string_to_target name : Symbol.target =
+      Symbol.Symbol (Asm_symbol.create_global name)
+
+    let target_symbol (r : Reloc.t) : Symbol.target =
       let label = match r.Reloc.kind with
         | Kind.REL32 (label, _)
         | Kind.DIR32 (label, _)
         | Kind.DIR64 (label, _) -> label
       in
       let sym, _ = parse_label label in
-      sym
+      string_to_target sym
 
     (* x86 doesn't have paired relocations, so this just returns a singleton *)
     let target_symbols r = [target_symbol r]
@@ -1670,7 +1686,7 @@ module For_jit = struct
         | Kind.DIR64 (label, addend) -> label, addend
       in
       let sym, _ = parse_label label in
-      [sym, Int64.to_int addend]
+      [string_to_target sym, Int64.to_int addend]
 
     let is_got_reloc (r : Reloc.t) =
       let label = match r.Reloc.kind with
@@ -1690,7 +1706,7 @@ module For_jit = struct
       let _, suffix = parse_label label in
       match suffix with Some "PLT" -> true | _ -> false
 
-    let compute_value (r : Reloc.t) ~place_address ~lookup_symbol
+    let compute_value (r : Reloc.t) ~place_address ~lookup_target
           ~read_instruction:_ =
       let label, addend = match r.Reloc.kind with
         | Kind.REL32 (label, addend)
@@ -1698,8 +1714,10 @@ module For_jit = struct
         | Kind.DIR64 (label, addend) -> label, addend
       in
       let sym, _ = parse_label label in
-      match lookup_symbol sym with
-      | None -> Error (Printf.sprintf "Symbol not found: %s" sym)
+      let target = string_to_target sym in
+      match lookup_target target with
+      | None ->
+        Error (Format.asprintf "Symbol not found: %a" Symbol.print_target target)
       | Some target_addr ->
         let target_addr = Int64.add target_addr addend in
         (match r.Reloc.kind with
@@ -1725,18 +1743,24 @@ module For_jit = struct
 
     let relocations b = b.relocations
 
-    let find_symbol_offset b name =
-      match String.Tbl.find_opt b.labels name with
-      | Some sym -> sym.sy_pos
+    let find_symbol_offset b (sym : Asm_symbol.t) =
+      match String.Tbl.find_opt b.labels (Asm_symbol.encode sym) with
+      | Some s -> s.sy_pos
       | None -> None
 
-    let find_label_offset = find_symbol_offset
+    let find_label_offset b (lbl : Asm_label.t) =
+      match String.Tbl.find_opt b.labels (Asm_label.encode lbl) with
+      | Some s -> s.sy_pos
+      | None -> None
 
-    let iter_symbols b ~f =
+    let iter_labels_and_symbols b ~f =
       String.Tbl.iter
         (fun name sym ->
           match sym.sy_pos with
-          | Some offset -> f ~name ~offset
+          | Some offset ->
+            (* x86 uses strings internally; wrap as Symbol *)
+            let target = Relocation.string_to_target name in
+            f target ~offset
           | None -> ())
         b.labels
 

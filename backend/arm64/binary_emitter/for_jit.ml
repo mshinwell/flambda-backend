@@ -27,7 +27,7 @@
 
 (* For_jit module implementing Binary_emitter_intf.S *)
 
-module Asm_symbol = Asm_targets.Asm_symbol
+module Symbol = Arm64_ast.Ast.Symbol
 
 module Relocation = struct
   type t = Relocation.t
@@ -37,33 +37,27 @@ module Relocation = struct
   let size = Relocation.size
 
   (* TODO: The JIT interface uses strings. It should be updated to use typed
-     targets (Symbol.target). For now, convert between the two. *)
-  let target_symbol r = Relocation.target_to_string (Relocation.primary_target r)
+     targets (Symbol.target). *)
+  let target_symbol r = Relocation.primary_target r
 
-  let target_symbols r =
-    List.map Relocation.target_to_string (Relocation.all_targets r)
+  let target_symbols r = Relocation.all_targets r
 
-  let target_symbols_with_addends r =
-    List.map
-      (fun (target, addend) -> Relocation.target_to_string target, addend)
-      (Relocation.all_targets_with_addends r)
+  let target_symbols_with_addends r = Relocation.all_targets_with_addends r
 
   let is_got_reloc = Relocation.is_got_reloc
 
   let is_plt_reloc = Relocation.is_plt_reloc
 
-  let compute_value (r : Relocation.t) ~place_address ~lookup_symbol
+  let compute_value (r : Relocation.t) ~place_address ~lookup_target
       ~read_instruction =
-    let sym = target_symbol r in
-    match lookup_symbol sym with
-    | None -> Error (Printf.sprintf "Symbol not found: %s" sym)
+    let target = target_symbol r in
+    match lookup_target target with
+    | None ->
+      Error
+        (Format.asprintf "Symbol not found: %a" Symbol.print_target target)
     | Some sym_addr ->
       let addend = Relocation.get_addend r.kind in
       let target_addr = Int64.add sym_addr (Int64.of_int addend) in
-      (* Wrap lookup_symbol to work with Symbol.target *)
-      let lookup_target target =
-        lookup_symbol (Relocation.target_to_string target)
-      in
       Relocation.compute_value r ~target_addr ~place_address ~read_instruction
         ~lookup_target
 end
@@ -81,18 +75,18 @@ module Assembled_section = struct
 
   let relocations t = Section_state.relocations t
 
-  let find_symbol_offset t name =
-    Section_state.find_symbol_offset_in_bytes t name
+  let find_symbol_offset t sym =
+    Section_state.find_symbol_offset_in_bytes t sym
 
-  let find_label_offset t name = Section_state.find_label_offset_in_bytes t name
+  let find_label_offset t lbl = Section_state.find_label_offset_in_bytes t lbl
 
-  let iter_symbols t ~f =
+  let iter_labels_and_symbols t ~f =
     (* For JIT, we need to export both global symbols and local labels. Local
        labels like _camlFoo__immstring51 need to be resolvable. *)
     Section_state.iter_symbols t ~f:(fun sym offset ->
-        let name = Asm_symbol.encode sym in
-        f ~name ~offset);
-    Section_state.iter_labels t ~f:(fun name offset -> f ~name ~offset)
+        f (Symbol.Symbol sym) ~offset);
+    Section_state.iter_labels t ~f:(fun lbl offset ->
+        f (Symbol.Label lbl) ~offset)
 
   let add_patch t ~offset ~size:(sz : Binary_emitter_intf.data_size) ~data =
     let sz =

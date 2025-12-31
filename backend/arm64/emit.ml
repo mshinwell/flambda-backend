@@ -3136,12 +3136,12 @@ let end_assembly () =
                    Also convert local/file-scope symbols to section+offset. *)
                 let offset = R.offset_from_section_beginning reloc in
                 List.iter
-                  (fun (sym, addend) ->
+                  (fun (target, addend) ->
                     (* For verification output, convert local/file-scope symbols
                        to section+offset format to match assembler behavior *)
                     let resolved_sym, resolved_addend =
                       ED.resolve_local_label_for_elf ~all_sections:section_tbl
-                        ~sym_name:sym ~sym_offset:addend
+                        ~target ~sym_offset:addend
                     in
                     if resolved_addend = 0
                     then Printf.fprintf oc "%d %s\n" offset resolved_sym

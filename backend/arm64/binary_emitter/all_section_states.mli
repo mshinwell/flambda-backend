@@ -27,7 +27,10 @@
 
 (** Collection of section states for all sections in an assembly unit. *)
 
+module Asm_label = Asm_targets.Asm_label
 module Asm_section = Asm_targets.Asm_section
+module Asm_symbol = Asm_targets.Asm_symbol
+module Symbol = Arm64_ast.Ast.Symbol
 
 type t
 
@@ -61,20 +64,21 @@ val iter_individual : t -> f:(string -> Section_state.t -> unit) -> unit
 val fold_individual :
   t -> init:'a -> f:(string -> Section_state.t -> 'a -> 'a) -> 'a
 
-val find_in_any_individual_section : t -> string -> (int * Asm_section.t) option
+val find_in_any_individual_section :
+  t -> Symbol.target -> (int * Asm_section.t) option
 
 (** Search individual sections for a label or symbol. Returns (offset,
     section, state) if found. *)
 val find_in_any_individual_section_with_state :
-  t -> string -> (int * Asm_section.t * Section_state.t) option
+  t -> Symbol.target -> (int * Asm_section.t * Section_state.t) option
 
 (** Search all sections for a label or symbol. Returns (offset, section,
     section_state) if found. This is needed when the caller needs to access
     the actual state where the label was found. *)
 val find_in_any_section_with_state :
-  t -> string -> (int * Asm_section.t * Section_state.t) option
+  t -> Symbol.target -> (int * Asm_section.t * Section_state.t) option
 
-val find_in_any_section : t -> string -> (int * Asm_section.t) option
+val find_in_any_section : t -> Symbol.target -> (int * Asm_section.t) option
 
 val reset_offsets : t -> unit
 

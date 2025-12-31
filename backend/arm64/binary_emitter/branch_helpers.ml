@@ -27,7 +27,6 @@
 
 open Arm64_ast.Ast
 
-module Asm_symbol = Asm_targets.Asm_symbol
 module Symbol = Arm64_ast.Ast.Symbol
 
 (* Helper to compute a 26-bit PC-relative offset for B/BL instructions. If the
@@ -40,9 +39,7 @@ module Symbol = Arm64_ast.Ast.Symbol
 let compute_branch_imm26 state ~instr_name ~reloc_kind (sym : _ Symbol.t) =
   let is_global_symbol =
     match sym.target with
-    | Symbol s ->
-      Option.is_some
-        (Section_state.find_symbol_offset_in_bytes state (Asm_symbol.encode s))
+    | Symbol s -> Option.is_some (Section_state.find_symbol_offset_in_bytes state s)
     | Label _ -> false
   in
   (* Create relocation with addend 0 (branching to symbol itself) *)

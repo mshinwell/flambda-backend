@@ -38,7 +38,8 @@ let from_binary_section (type a r)
     List.fold_left relocs ~init:(0, String.Map.empty)
       ~f:(fun (index, map) reloc ->
         if is_relevant_reloc reloc then
-          let label = E.Relocation.target_symbol reloc in
+          let target = E.Relocation.target_symbol reloc in
+          let label = Symbols.target_to_string target in
           if String.Map.mem label map then (index, map)
           else (index + 1, String.Map.add ~key:label ~data:index map)
         else (index, map))

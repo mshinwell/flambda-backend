@@ -34,7 +34,8 @@ let one (type a r)
   let is_got = E.Relocation.is_got_reloc reloc in
   let is_plt = E.Relocation.is_plt_reloc reloc in
   (* Build lookup function that routes to GOT/PLT/symbols as appropriate *)
-  let lookup_symbol name =
+  let lookup_target target =
+    let name = Symbols.target_to_string target in
     if is_got then
       match got_lookup with
       | None -> None
@@ -79,7 +80,7 @@ let one (type a r)
     Int32.(logor (logor (of_int b0) (shift_left (of_int b1) 8))
       (logor (shift_left (of_int b2) 16) (shift_left (of_int b3) 24)))
   in
-  let* data = E.Relocation.compute_value reloc ~place_address ~lookup_symbol ~read_instruction in
+  let* data = E.Relocation.compute_value reloc ~place_address ~lookup_target ~read_instruction in
   let size = E.Relocation.size reloc in
   E.Assembled_section.add_patch binary_section.value ~offset ~size ~data;
   Ok ()

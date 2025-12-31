@@ -359,12 +359,16 @@ module Directive : sig
 
     (** Evaluate a constant expression to a 64-bit value.
         @param this Called to get the current offset when [This] is encountered.
-        @param lookup Called to resolve Label/Symbol/Variable values.
+        @param lookup_label Called to resolve Label values.
+        @param lookup_symbol Called to resolve Symbol values.
+        @param lookup_variable Called to resolve Variable values (for .set on macOS).
         @return [Some value] if evaluation succeeds, [None] if a symbol cannot
                 be resolved. *)
     val eval :
       this:(unit -> int64) ->
-      lookup:(string -> int64 option) ->
+      lookup_label:(Asm_label.t -> int64 option) ->
+      lookup_symbol:(Asm_symbol.t -> int64 option) ->
+      lookup_variable:(string -> int64 option) ->
       t ->
       int64 option
   end
@@ -393,6 +397,10 @@ module Directive : sig
   type thing_after_label = private
     | Code
     | Machine_width_data
+
+  type label_or_symbol = private
+    | Label of Asm_label.t
+    | Symbol of Asm_symbol.t
 
   type comment = private string
 
@@ -439,38 +447,33 @@ module Directive : sig
         { file_num : int option;
           filename : string
         }
-    | Global of string
-    | Indirect_symbol of string
+    | Global of Asm_symbol.t
+    | Indirect_symbol of Asm_symbol.t
     | Loc of
         { file_num : int;
           line : int;
           col : int;
           discriminator : int option
         }
-    | New_label of string * thing_after_label
+    | New_label of label_or_symbol * thing_after_label
     | New_line
-    | Private_extern of string
-    | Section of
-        { names : string list;
-          flags : string option;
-          args : string list;
-          is_delayed : bool
-        }
-    | Size of string * Constant.t
+    | Private_extern of Asm_symbol.t
+    | Section of Asm_section.t * [ `First_occurrence | `Not_first_occurrence ]
+    | Size of Asm_symbol.t * Constant.t
     | Sleb128 of
         { constant : Constant.t;
           comment : string option
         }
     | Space of { bytes : int }
-    | Type of string * symbol_type
+    | Type of label_or_symbol * symbol_type
     | Uleb128 of
         { constant : Constant.t;
           comment : string option
         }
-    | Protected of string
-    | Hidden of string
-    | Weak of string
-    | External of string
+    | Protected of Asm_symbol.t
+    | Hidden of Asm_symbol.t
+    | Weak of Asm_symbol.t
+    | External of Asm_symbol.t
     | Reloc of
         { offset : Constant.t;
           name : reloc_type;

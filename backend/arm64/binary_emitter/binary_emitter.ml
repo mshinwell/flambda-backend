@@ -79,24 +79,9 @@ let iter emitter ~all_sections ~on_insn ~on_directive =
         Section_state.set_offset_in_bytes !current_state (offset + 4)
       | Directive d ->
         (match[@warning "-4"] d with
-        | Section { names; _ } -> (
-          match Asm_section.of_names names with
-          | Some section ->
-            current_state
-              := All_section_states.get_or_create all_sections section
-          | None -> (
-            (* Handle function sections (.text.caml.<funcname>) individually.
-               Each function section is tracked separately so we can compare
-               them against the assembler output during verification. *)
-            match names with
-            | [name]
-              when String.length name > 5 && String.sub name 0 5 = ".text" ->
-              current_state
-                := All_section_states.get_or_create_individual all_sections name
-            | _ ->
-              (* Skip unknown sections like .note.GNU-stack (Linux stack
-                 non-executable marker) - they contain no data we need *)
-              ()))
+        | Section (section, _) ->
+          current_state
+            := All_section_states.get_or_create all_sections section
         | _ -> ());
         on_directive !current_state d;
         let offset_in_bytes = Section_state.offset_in_bytes !current_state in
@@ -112,15 +97,12 @@ let compute_label_offsets emitter ~all_sections =
     ~on_insn:(fun _state _insn -> ())
     ~on_directive:(fun state directive ->
       match directive with
-      | New_label (name, _) -> Section_state.define_label state name
-      | Global name ->
-        Section_state.define_symbol state ~name
-          ~visibility:Asm_targets.Asm_symbol.Global
+      | New_label (Label lbl, _) -> Section_state.define_label state lbl
+      | New_label (Symbol sym, _) -> Section_state.define_symbol state sym
+      | Global sym -> Section_state.define_symbol state sym
       (* Weak symbols also have symbol table entries on ELF, so track them
          too *)
-      | Weak name ->
-        Section_state.define_symbol state ~name
-          ~visibility:Asm_targets.Asm_symbol.Local
+      | Weak sym -> Section_state.define_symbol state sym
       | Direct_assignment (name, expr) ->
         All_section_states.add_direct_assignment all_sections name expr
       (* Directives that don't define labels or symbols *)

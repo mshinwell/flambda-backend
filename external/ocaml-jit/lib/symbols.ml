@@ -54,13 +54,19 @@ let aggregate ~current ~new_symbols =
     then Some new_
     else failwithf "Multiple occurrences of the symbol %s" symbol_name)
 
+let target_to_string (target : Arm64_ast.Ast.Symbol.target) =
+  match target with
+  | Label lbl -> Asm_targets.Asm_label.encode lbl
+  | Symbol sym -> Asm_targets.Asm_symbol.encode sym
+
 let from_binary_section (type a r)
     (module E : Binary_emitter_intf.S
       with type Assembled_section.t = a
        and type Relocation.t = r)
     { address; value = binary_section } =
   let acc = ref String.Map.empty in
-  E.Assembled_section.iter_symbols binary_section ~f:(fun ~name ~offset ->
+  E.Assembled_section.iter_labels_and_symbols binary_section ~f:(fun target ~offset ->
+    let name = target_to_string target in
     match name with
     | "caml_absf_mask" | "caml_negf_mask"
     | "caml_absf32_mask" | "caml_negf32_mask" -> ()

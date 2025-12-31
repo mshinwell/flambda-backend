@@ -55,6 +55,7 @@ type t =
   | Stapsdt_note
   | Probes
   | Note_ocaml_eh
+  | Note_gnu_stack
 
 val to_string : t -> string
 

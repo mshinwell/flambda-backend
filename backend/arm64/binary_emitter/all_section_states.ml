@@ -27,8 +27,11 @@
 
 (* Collection of section states for all sections in an assembly unit. *)
 
+module Asm_label = Asm_targets.Asm_label
 module Asm_section = Asm_targets.Asm_section
+module Asm_symbol = Asm_targets.Asm_symbol
 module D = Asm_targets.Asm_directives
+module Symbol = Arm64_ast.Ast.Symbol
 
 type t =
   { sections : Section_state.t Asm_section.Tbl.t;
@@ -86,83 +89,71 @@ let fold_individual t ~init ~f = Hashtbl.fold f t.individual_sections init
 
 (* Search individual sections for a label or symbol. Returns (offset,
    section) if found. *)
-let find_in_any_individual_section t name =
+let find_in_any_individual_section t target =
   let result = ref None in
   Hashtbl.iter
     (fun section_name state ->
       if Option.is_none !result
       then
         let section = Asm_section.Function_text section_name in
-        match Section_state.find_label_offset_in_bytes state name with
+        match Section_state.find_target_offset_in_bytes state target with
         | Some offset -> result := Some (offset, section)
-        | None -> (
-          match Section_state.find_symbol_offset_in_bytes state name with
-          | Some offset -> result := Some (offset, section)
-          | None -> ()))
+        | None -> ())
     t.individual_sections;
   !result
 
 (* Search individual sections for a label or symbol. Returns (offset,
    section, state) if found. *)
-let find_in_any_individual_section_with_state t name =
+let find_in_any_individual_section_with_state t target =
   let result = ref None in
   Hashtbl.iter
     (fun section_name state ->
       if Option.is_none !result
       then
         let section = Asm_section.Function_text section_name in
-        match Section_state.find_label_offset_in_bytes state name with
+        match Section_state.find_target_offset_in_bytes state target with
         | Some offset -> result := Some (offset, section, state)
-        | None -> (
-          match Section_state.find_symbol_offset_in_bytes state name with
-          | Some offset -> result := Some (offset, section, state)
-          | None -> ()))
+        | None -> ())
     t.individual_sections;
   !result
 
 (* Search all sections for a label or symbol. Returns (offset, section,
    section_state) if found. This is needed when the caller needs to access the
    actual state where the label was found. *)
-let find_in_any_section_with_state t name =
+let find_in_any_section_with_state t target =
   let result = ref None in
   Asm_section.Tbl.iter
     (fun section state ->
       if Option.is_none !result
       then
-        match Section_state.find_label_offset_in_bytes state name with
+        match Section_state.find_target_offset_in_bytes state target with
         | Some offset -> result := Some (offset, section, state)
-        | None -> (
-          match Section_state.find_symbol_offset_in_bytes state name with
-          | Some offset -> result := Some (offset, section, state)
-          | None -> ()))
+        | None -> ())
     t.sections;
   (* If not found in standard sections, search individual sections. *)
   (if Option.is_none !result
    then
-     match find_in_any_individual_section_with_state t name with
+     match find_in_any_individual_section_with_state t target with
      | Some (offset, section, state) -> result := Some (offset, section, state)
      | None -> ());
   !result
 
 (* Search all sections for a label or symbol. Returns (offset, section) if
    found. Cross-section references are handled via relocations. *)
-let find_in_any_section t name =
+let find_in_any_section t target =
   let result = ref None in
   Asm_section.Tbl.iter
     (fun section state ->
       if Option.is_none !result
       then
-        match Section_state.find_label_offset_in_bytes state name with
+        match Section_state.find_target_offset_in_bytes state target with
         | Some offset -> result := Some (offset, section)
-        | None -> (
-          match Section_state.find_symbol_offset_in_bytes state name with
-          | Some offset -> result := Some (offset, section)
-          | None -> ()))
+        | None -> ())
     t.sections;
   (* If not found in standard sections, search individual sections. *)
   (if Option.is_none !result
    then
-     match find_in_any_individual_section t name with
+     match find_in_any_individual_section t target with
      | Some (offset, section) -> result := Some (offset, section)
      | None -> ());
   !result

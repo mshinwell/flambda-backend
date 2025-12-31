@@ -26,6 +26,7 @@
  ******************************************************************************)
 
 module Asm_label = Asm_targets.Asm_label
+module Asm_section = Asm_targets.Asm_section
 module Asm_symbol = Asm_targets.Asm_symbol
 module Symbol = Arm64_ast.Ast.Symbol
 
@@ -35,16 +36,11 @@ type patch_size =
   | P32
   | P64
 
-(* We store symbols with their visibility so we can reconstruct Asm_symbol.t
-   when returning from find_nearest_symbol_before. Labels are stored as plain
-   strings since reconstructing Asm_label.t from encoded strings is complex. *)
 type t =
   { buffer : Buffer.t;
     mutable offset_in_bytes : int;
-    (* Maps encoded symbol name -> (visibility, offset) *)
-    symbol_offset_tbl : (string, Asm_symbol.visibility * int) Hashtbl.t;
-    (* Maps encoded label name -> offset *)
-    label_offset_tbl : (string, int) Hashtbl.t;
+    symbol_offset_tbl : int Asm_symbol.Tbl.t;
+    label_offset_tbl : int Asm_label.Tbl.t;
     mutable relocations : Relocation.t list;
     mutable patches : (int * patch_size * int64) list
   }
@@ -52,8 +48,8 @@ type t =
 let create () =
   { buffer = Buffer.create 1024;
     offset_in_bytes = 0;
-    symbol_offset_tbl = Hashtbl.create 16;
-    label_offset_tbl = Hashtbl.create 16;
+    symbol_offset_tbl = Asm_symbol.Tbl.create 16;
+    label_offset_tbl = Asm_label.Tbl.create 16;
     relocations = [];
     patches = []
   }
@@ -74,18 +70,17 @@ let add_relocation_at_current_offset t ~reloc_kind =
 let add_relocation t (reloc : Relocation.t) =
   t.relocations <- reloc :: t.relocations
 
-let define_symbol t ~name ~visibility =
-  Hashtbl.replace t.symbol_offset_tbl name (visibility, t.offset_in_bytes)
+let define_symbol t sym =
+  Asm_symbol.Tbl.replace t.symbol_offset_tbl sym t.offset_in_bytes
 
-let define_label t name =
-  Hashtbl.replace t.label_offset_tbl name t.offset_in_bytes
+let define_label t lbl =
+  Asm_label.Tbl.replace t.label_offset_tbl lbl t.offset_in_bytes
 
-let find_symbol_offset_in_bytes t name =
-  match Hashtbl.find_opt t.symbol_offset_tbl name with
-  | Some (_, offset) -> Some offset
-  | None -> None
+let find_symbol_offset_in_bytes t sym =
+  Asm_symbol.Tbl.find_opt t.symbol_offset_tbl sym
 
-let find_label_offset_in_bytes t name = Hashtbl.find_opt t.label_offset_tbl name
+let find_label_offset_in_bytes t lbl =
+  Asm_label.Tbl.find_opt t.label_offset_tbl lbl
 
 (* Find the nearest global symbol strictly before a given offset. Returns
    (symbol, symbol_offset) or None.
@@ -103,42 +98,29 @@ let find_label_offset_in_bytes t name = Hashtbl.find_opt t.label_offset_tbl name
    are at the exact target offset (e.g., _code_end at a return address). *)
 let find_nearest_symbol_before t offset =
   let best = ref None in
-  Hashtbl.iter
-    (fun name (visibility, sym_offset) ->
+  Asm_symbol.Tbl.iter
+    (fun sym sym_offset ->
       if sym_offset < offset
       then
         match !best with
-        | None -> best := Some (name, visibility, sym_offset)
-        | Some (_, _, best_offset) when sym_offset > best_offset ->
-          best := Some (name, visibility, sym_offset)
+        | None -> best := Some (sym, sym_offset)
+        | Some (_, best_offset) when sym_offset > best_offset ->
+          best := Some (sym, sym_offset)
         | Some _ -> ())
     t.symbol_offset_tbl;
-  match !best with
-  | None -> None
-  | Some (name, visibility, sym_offset) ->
-    let sym = Asm_symbol.create_without_encoding ~visibility name in
-    Some (sym, sym_offset)
+  !best
 
 (* Look up a target (symbol or label) by its typed value *)
 let find_target_offset_in_bytes t (target : Symbol.target) =
   match target with
-  | Symbol sym ->
-    let name = Asm_symbol.encode sym in
-    find_symbol_offset_in_bytes t name
-  | Label lbl ->
-    let name = Asm_label.encode lbl in
-    find_label_offset_in_bytes t name
+  | Symbol sym -> find_symbol_offset_in_bytes t sym
+  | Label lbl -> find_label_offset_in_bytes t lbl
 
 let relocations t = List.rev t.relocations
 
-let iter_symbols t ~f =
-  Hashtbl.iter
-    (fun name (visibility, offset) ->
-      let sym = Asm_symbol.create_without_encoding ~visibility name in
-      f sym offset)
-    t.symbol_offset_tbl
+let iter_symbols t ~f = Asm_symbol.Tbl.iter f t.symbol_offset_tbl
 
-let iter_labels t ~f = Hashtbl.iter (fun name offset -> f name offset) t.label_offset_tbl
+let iter_labels t ~f = Asm_label.Tbl.iter f t.label_offset_tbl
 
 let add_patch t ~offset ~size ~data =
   t.patches <- (offset, size, data) :: t.patches

@@ -198,11 +198,11 @@ let encode_load_store_gp_sized :
     (* This is encoded as "LDR (literal)" - only valid for word/doubleword *)
     if size < 0b10
     then Misc.fatal_errorf "%s does not support literal addressing" instr_name;
-    let target_key = Relocation.target_to_string sym.target in
-    match Section_state.find_symbol_offset_in_bytes state target_key with
+    match Section_state.find_target_offset_in_bytes state sym.target with
     | None ->
-      Misc.fatal_errorf "%s (literal) references undefined symbol '%s' (rd=%s)"
-        instr_name target_key (Reg.name rd)
+      Misc.fatal_errorf
+        "%s (literal) references undefined symbol '%a' (rd=%s)" instr_name
+        Symbol.print_target sym.target (Reg.name rd)
     | Some target_offset ->
       let pc_relative_offset =
         target_offset - Section_state.offset_in_bytes state
@@ -211,14 +211,14 @@ let encode_load_store_gp_sized :
       if pc_relative_offset mod 4 <> 0
       then
         Misc.fatal_errorf
-          "%s (literal) offset %d to symbol '%s' must be 4-byte aligned"
-          instr_name pc_relative_offset target_key;
+          "%s (literal) offset %d to symbol '%a' must be 4-byte aligned"
+          instr_name pc_relative_offset Symbol.print_target sym.target;
       let imm19_unmasked = pc_relative_offset / 4 in
       if imm19_unmasked < -0x40000 || imm19_unmasked > 0x3ffff
       then
         Misc.fatal_errorf
-          "%s (literal) offset %d to symbol '%s' out of range (max ±1MB)"
-          instr_name pc_relative_offset target_key;
+          "%s (literal) offset %d to symbol '%a' out of range (max ±1MB)"
+          instr_name pc_relative_offset Symbol.print_target sym.target;
       let imm19 = imm19_unmasked land 0x7FFFF in
       let v = 0 in
       encode_load_literal ~opc ~v ~imm19 ~rt)
@@ -496,11 +496,10 @@ let encode_load_store_simd_fp :
       let imm9 = imm land 0x1FF in
       encode_load_store_unscaled ~size ~vr ~opc ~imm9 ~rn ~rt
   | Literal (_rn, sym) -> (
-    let target_key = Relocation.target_to_string sym.target in
-    match Section_state.find_symbol_offset_in_bytes state target_key with
+    match Section_state.find_target_offset_in_bytes state sym.target with
     | None ->
-      Misc.fatal_errorf "%s (literal) references undefined symbol '%s'"
-        instr_name target_key
+      Misc.fatal_errorf "%s (literal) references undefined symbol '%a'"
+        instr_name Symbol.print_target sym.target
     | Some target_offset ->
       let pc_relative_offset =
         target_offset - Section_state.offset_in_bytes state
@@ -508,14 +507,14 @@ let encode_load_store_simd_fp :
       if pc_relative_offset mod 4 <> 0
       then
         Misc.fatal_errorf
-          "%s (literal) offset %d to symbol '%s' must be 4-byte aligned"
-          instr_name pc_relative_offset target_key;
+          "%s (literal) offset %d to symbol '%a' must be 4-byte aligned"
+          instr_name pc_relative_offset Symbol.print_target sym.target;
       let imm19_unmasked = pc_relative_offset / 4 in
       if imm19_unmasked < -0x40000 || imm19_unmasked > 0x3ffff
       then
         Misc.fatal_errorf
-          "%s (literal) offset %d to symbol '%s' out of range (max ±1MB)"
-          instr_name pc_relative_offset target_key;
+          "%s (literal) offset %d to symbol '%a' out of range (max ±1MB)"
+          instr_name pc_relative_offset Symbol.print_target sym.target;
       let imm19 = imm19_unmasked land 0x7FFFF in
       let opc_lit =
         match rd.reg_name with

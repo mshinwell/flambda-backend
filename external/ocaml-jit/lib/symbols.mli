@@ -46,6 +46,9 @@ val aggregate : current:t -> new_symbols:t -> t
     When there is a conflict for those symbols, the returned mapping will
     contain the symbol from [new_symbols]. *)
 
+val target_to_string : Arm64_ast.Ast.Symbol.target -> string
+(** Convert a typed target to its encoded string representation *)
+
 val find : t -> string -> Address.t option
 (** Lookup a symbol's address in the given symbol map. If it is missing from the map
     look it up using dlsym. *)

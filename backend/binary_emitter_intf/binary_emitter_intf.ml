@@ -44,17 +44,17 @@ module type Relocation = sig
 
   val size : t -> data_size
 
-  val target_symbol : t -> string
+  val target_symbol : t -> Arm64_ast.Ast.Symbol.target
 
   (** For paired relocations (e.g., SUBTRACTOR + UNSIGNED), returns all symbols.
       For single relocations, returns a singleton list.
       Used for saving relocations to files for verification. *)
-  val target_symbols : t -> string list
+  val target_symbols : t -> Arm64_ast.Ast.Symbol.target list
 
   (** For paired relocations, returns all symbols with their addends.
       On RELA platforms (Linux ELF), addends are stored in relocations.
       On REL platforms (macOS), addends are encoded in instructions. *)
-  val target_symbols_with_addends : t -> (string * int) list
+  val target_symbols_with_addends : t -> (Arm64_ast.Ast.Symbol.target * int) list
 
   (** Is this a GOT relocation? (JIT needs to know for GOT table building) *)
   val is_got_reloc : t -> bool
@@ -64,14 +64,14 @@ module type Relocation = sig
 
   (** Compute the value to patch given:
       - [place_address]: where the relocation site is in memory
-      - [lookup_symbol]: resolve symbol name -> address
+      - [lookup_target]: resolve symbol/label -> address
       - [read_instruction]: read the 32-bit instruction at the relocation site
         (used by ARM64 to read-modify-write instruction bit fields)
       Returns the value to write at the relocation site, or an error. *)
   val compute_value :
     t ->
     place_address:int64 ->
-    lookup_symbol:(string -> int64 option) ->
+    lookup_target:(Arm64_ast.Ast.Symbol.target -> int64 option) ->
     read_instruction:(unit -> int32) ->
     (int64, string) result
 end
@@ -91,13 +91,14 @@ module type Assembled_section = sig
   val relocations : t -> relocation list
 
   (** Find the offset of a symbol within this section *)
-  val find_symbol_offset : t -> string -> int option
+  val find_symbol_offset : t -> Asm_targets.Asm_symbol.t -> int option
 
   (** Find the offset of a label within this section *)
-  val find_label_offset : t -> string -> int option
+  val find_label_offset : t -> Asm_targets.Asm_label.t -> int option
 
-  (** Iterate over all symbols defined in this section *)
-  val iter_symbols : t -> f:(name:string -> offset:int -> unit) -> unit
+  (** Iterate over all symbols and labels defined in this section *)
+  val iter_labels_and_symbols :
+    t -> f:(Arm64_ast.Ast.Symbol.target -> offset:int -> unit) -> unit
 
   (** Patch bytes at the given offset *)
   val add_patch : t -> offset:int -> size:data_size -> data:int64 -> unit

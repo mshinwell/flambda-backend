@@ -214,6 +214,8 @@ module Symbol : sig
   (** Returns true if the target is a label. *)
   val is_label : _ t -> bool
 
+  val print_target : Format.formatter -> target -> unit
+
   val print : Format.formatter -> _ t -> unit
 end
 
