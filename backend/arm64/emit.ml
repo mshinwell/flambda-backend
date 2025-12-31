@@ -3119,18 +3119,29 @@ let end_assembly () =
             let module R =
               Arm64_binary_emitter.Binary_emitter.For_jit.Relocation
             in
+            let module ED =
+              Arm64_binary_emitter.Binary_emitter.Encode_directive
+            in
             List.iter
               (fun reloc ->
                 (* For paired relocations (SUBTRACTOR + UNSIGNED), write both
                    symbols as separate lines at the same offset. On RELA
-                   platforms (Linux), include addends for proper
-                   verification. *)
+                   platforms (Linux), include addends for proper verification.
+                   Also convert local/file-scope symbols to section+offset. *)
                 let offset = R.offset_from_section_beginning reloc in
                 List.iter
                   (fun (sym, addend) ->
-                    if addend = 0
-                    then Printf.fprintf oc "%d %s\n" offset sym
-                    else Printf.fprintf oc "%d %s %d\n" offset sym addend)
+                    (* For verification output, convert local/file-scope symbols
+                       to section+offset format to match assembler behavior *)
+                    let resolved_sym, resolved_addend =
+                      ED.resolve_local_label_for_elf ~all_sections:section_tbl
+                        ~sym_name:sym ~sym_offset:addend
+                    in
+                    if resolved_addend = 0
+                    then Printf.fprintf oc "%d %s\n" offset resolved_sym
+                    else
+                      Printf.fprintf oc "%d %s %d\n" offset resolved_sym
+                        resolved_addend)
                   (R.target_symbols_with_addends reloc))
               relocs;
             close_out oc)

@@ -172,7 +172,7 @@ let encode_load_store_gp_sized :
     | `Post ]
     Operand.Addressing_mode.t ->
     int32 =
- fun ~all_sections state ~instr_name ~size ~opc ~rd addressing ->
+ fun ~all_sections:_ state ~instr_name ~size ~opc ~rd addressing ->
   let vr = 0 in
   let rt = Reg.gp_encoding rd in
   match addressing with
@@ -242,13 +242,11 @@ let encode_load_store_gp_sized :
     match sym.reloc with
     | Needs_reloc reloc ->
       let max_imm12 = 0xfff in
-      let resolved_sym, resolved_addend =
-        Encode_directive.resolve_local_label_for_elf ~all_sections
-          ~sym_name:sym.name ~sym_offset:sym.offset
-      in
+      (* Keep original symbol name in relocation for JIT use.
+         The conversion to section+offset for verification is done in emit.ml *)
       let reloc_kind : Relocation.Kind.t =
         let r =
-          { Relocation.Kind.symbol = resolved_sym; addend = resolved_addend }
+          { Relocation.Kind.symbol = sym.name; addend = sym.offset }
         in
         match reloc with
         | GOT_PAGE_OFF | GOT_LOWER_TWELVE -> R_AARCH64_LD64_GOT_LO12_NC r
@@ -260,7 +258,7 @@ let encode_load_store_gp_sized :
           else R_AARCH64_ADD_ABS_LO12_NC r
       in
       Section_state.add_relocation_at_current_offset state
-        ~symbol_name:resolved_sym ~reloc_kind;
+        ~symbol_name:sym.name ~reloc_kind;
       let rn = Reg.gp_encoding rn in
       (* On RELA platforms (Linux), encode 0 in instruction - addend is in
          relocation. On REL platforms (macOS), encode addend in instruction. *)
@@ -474,7 +472,7 @@ let encode_load_store_simd_fp :
     | `Post ]
     Operand.Addressing_mode.t ->
     int32 =
- fun ~all_sections state ~instr_name ~is_load ~rd addressing ->
+ fun ~all_sections:_ state ~instr_name ~is_load ~rd addressing ->
   let vr = 1 in
   let size, opc, scale =
     match rd.reg_name with
@@ -548,13 +546,11 @@ let encode_load_store_simd_fp :
     match sym.reloc with
     | Needs_reloc reloc ->
       let max_imm12 = 0xfff in
-      let resolved_sym, resolved_addend =
-        Encode_directive.resolve_local_label_for_elf ~all_sections
-          ~sym_name:sym.name ~sym_offset:sym.offset
-      in
+      (* Keep original symbol name in relocation for JIT use.
+         The conversion to section+offset for verification is done in emit.ml *)
       let reloc_kind : Relocation.Kind.t =
         let r =
-          { Relocation.Kind.symbol = resolved_sym; addend = resolved_addend }
+          { Relocation.Kind.symbol = sym.name; addend = sym.offset }
         in
         match reloc with
         | GOT_PAGE_OFF | GOT_LOWER_TWELVE -> R_AARCH64_LD64_GOT_LO12_NC r
@@ -566,7 +562,7 @@ let encode_load_store_simd_fp :
           else R_AARCH64_ADD_ABS_LO12_NC r
       in
       Section_state.add_relocation_at_current_offset state
-        ~symbol_name:resolved_sym ~reloc_kind;
+        ~symbol_name:sym.name ~reloc_kind;
       let rn = Reg.gp_encoding rn in
       (* On RELA platforms (Linux), encode 0 in instruction - addend is in
          relocation. On REL platforms (macOS), encode addend in instruction. *)

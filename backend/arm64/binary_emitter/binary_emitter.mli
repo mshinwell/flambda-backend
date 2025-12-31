@@ -46,6 +46,20 @@ module For_jit :
     with type Assembled_section.t = Section_state.t
      and type Relocation.t = Relocation.t
 
+module Encode_directive : sig
+  (** On Linux ELF, local labels (starting with .L) don't have symbol table
+      entries. The assembler converts them to section symbol + offset. This
+      function performs that conversion. Returns (symbol_name, addend) where
+      symbol_name is either the original label or the section name, and addend
+      includes the offset within the section plus any original offset.
+      On macOS, returns the original label name and offset unchanged. *)
+  val resolve_local_label_for_elf :
+    all_sections:All_section_states.t ->
+    sym_name:string ->
+    sym_offset:int ->
+    string * int
+end
+
 (** When true, emit relocations for ALL 8-byte symbol references (matching
     assembler behavior). When false, only emit relocations for cross-section
     references and resolve same-section refs at emit time. Set to true for

@@ -189,13 +189,34 @@ module Relocation = struct
     let insn = logor insn (of_int (imm26 land 0x03ffffff)) in
     int64_of_int32_unsigned insn
 
+  (* Extract the addend from a relocation kind *)
+  let get_addend (kind : Relocation.Kind.t) : int =
+    match kind with
+    | R_AARCH64_ADR_PREL_LO21 { addend; _ }
+    | R_AARCH64_ADR_PREL_PG_HI21 { addend; _ }
+    | R_AARCH64_ADR_GOT_PAGE { addend; _ }
+    | R_AARCH64_LD64_GOT_LO12_NC { addend; _ }
+    | R_AARCH64_ADD_ABS_LO12_NC { addend; _ }
+    | R_AARCH64_LDST64_ABS_LO12_NC { addend; _ }
+    | R_AARCH64_CALL26 { addend; _ }
+    | R_AARCH64_JUMP26 { addend; _ }
+    | R_AARCH64_ABS64 { addend; _ }
+    | R_AARCH64_PREL32 { addend; _ } ->
+      addend
+    | R_AARCH64_PREL32_PAIR _ ->
+      0 (* Pairs don't have addends in the same way *)
+
   let compute_value (r : Relocation.t) ~place_address ~lookup_symbol
       ~read_instruction =
     let sym = target_symbol r in
     match lookup_symbol sym with
     | None -> Error (Printf.sprintf "Symbol not found: %s" sym)
-    | Some target_addr -> (
-      match r.kind with
+    | Some sym_addr ->
+      (* Add the addend to get the actual target address.
+         On RELA platforms (Linux), the addend is stored in the relocation. *)
+      let addend = get_addend r.kind in
+      let target_addr = Int64.add sym_addr (Int64.of_int addend) in
+      (match r.kind with
       | R_AARCH64_ADR_PREL_LO21 _ ->
         (* PC-relative offset for ADR instruction, low 21 bits. ADR has the same
            bit layout as ADRP but the immediate is a byte offset, not a page
@@ -291,12 +312,10 @@ module Relocation = struct
           let _ = plus_symbol in
           (* target_addr is plus_symbol's address *)
           Ok (Int64.sub target_addr minus_addr))
-      | R_AARCH64_PREL32 { section_name = _; addend } ->
+      | R_AARCH64_PREL32 _ ->
         (* ELF section-relative: section_address + addend - place_address. For
-           JIT, target_addr should be the section start address. *)
-        let result =
-          Int64.sub (Int64.add target_addr (Int64.of_int addend)) place_address
-        in
+           JIT, target_addr already includes the addend. *)
+        let result = Int64.sub target_addr place_address in
         Ok result)
 end
 

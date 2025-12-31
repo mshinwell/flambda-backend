@@ -285,14 +285,11 @@ let is_absolute_symbol_reference state ~all_sections ~current_section
     then
       if for_jit || !emit_relocs_for_all_symbol_refs
       then (
-        (* Emit relocation for all symbol references. On RELA platforms, resolve
-           local symbols to section + offset. *)
-        let resolved_sym, resolved_addend =
-          resolve_local_label_for_elf ~all_sections ~sym_name:name ~sym_offset:0
-        in
-        SS.add_relocation_at_current_offset state ~symbol_name:resolved_sym
-          ~reloc_kind:
-            (R_AARCH64_ABS64 { symbol = resolved_sym; addend = resolved_addend });
+        (* Emit relocation for all symbol references. Keep original symbol name
+           in relocation for JIT use. The conversion to section+offset for
+           verification is done in emit.ml *)
+        SS.add_relocation_at_current_offset state ~symbol_name:name
+          ~reloc_kind:(R_AARCH64_ABS64 { symbol = name; addend = 0 });
         Some 0L (* Emit zero, relocation will patch *))
       else None (* Resolve same-section refs at emit time via eval_constant *)
     else
@@ -304,17 +301,12 @@ let is_absolute_symbol_reference state ~all_sections ~current_section
            && (not for_jit)
            && not !emit_relocs_for_all_symbol_refs
         then None (* Same section after all, resolve at emit time *)
-        else
-          (* Resolve local symbols to section + offset on RELA platforms *)
-          let resolved_sym, resolved_addend =
-            resolve_local_label_for_elf ~all_sections ~sym_name:name
-              ~sym_offset:0
-          in
-          SS.add_relocation_at_current_offset state ~symbol_name:resolved_sym
-            ~reloc_kind:
-              (R_AARCH64_ABS64
-                 { symbol = resolved_sym; addend = resolved_addend });
-          Some 0L (* Emit zero, relocation will patch *))
+        else (
+          (* Keep original symbol name in relocation for JIT use. The conversion
+             to section+offset for verification is done in emit.ml *)
+          SS.add_relocation_at_current_offset state ~symbol_name:name
+            ~reloc_kind:(R_AARCH64_ABS64 { symbol = name; addend = 0 });
+          Some 0L (* Emit zero, relocation will patch *)))
   | _ -> None
 
 (* Handle unresolved symbol reference by emitting zeros and recording a

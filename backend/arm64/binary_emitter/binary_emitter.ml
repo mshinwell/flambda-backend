@@ -157,6 +157,7 @@ let emit ?(for_jit = false) emitter =
   all_sections
 
 module For_jit = For_jit
+module Encode_directive = Encode_directive
 
 (* Re-export ref to control relocation emission behavior for verification *)
 let emit_relocs_for_all_symbol_refs =
