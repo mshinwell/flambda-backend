@@ -55,7 +55,7 @@ let offset_in_bytes t = t.offset_in_bytes
 
 let set_offset_in_bytes t offset = t.offset_in_bytes <- offset
 
-let add_relocation_at_current_offset t ~symbol_name:_ ~reloc_kind =
+let add_relocation_at_current_offset t ~reloc_kind =
   t.relocations
     <- { Relocation.offset_from_section_beginning = t.offset_in_bytes;
          kind = reloc_kind

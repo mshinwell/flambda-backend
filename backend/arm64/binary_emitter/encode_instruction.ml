@@ -27,6 +27,8 @@
 
 open Arm64_ast.Ast
 
+module Asm_label = Asm_targets.Asm_label
+
 let encode_instruction :
     type num operands.
     all_sections:All_section_states.t ->
@@ -49,17 +51,15 @@ let encode_instruction :
     let sh = match shift with Some _ -> 1 | None -> 0 in
     match sym.reloc with
     | Needs_reloc reloc ->
-      let sym_name = Symbol.name sym in
-      (* Keep original symbol name in relocation for JIT use. The conversion to
+      (* Keep original target in relocation for JIT use. The conversion to
          section+offset for verification is done in emit.ml *)
       let reloc_kind : Relocation.Kind.t =
-        let r = { Relocation.Kind.symbol = sym_name; addend = sym.offset } in
+        let r = { Relocation.Kind.target = sym.target; addend = sym.offset } in
         match reloc with
         | LOWER_TWELVE | PAGE_OFF -> R_AARCH64_ADD_ABS_LO12_NC r
         | GOT_LOWER_TWELVE | GOT_PAGE_OFF -> R_AARCH64_LD64_GOT_LO12_NC r
       in
-      Section_state.add_relocation_at_current_offset state ~symbol_name:sym_name
-        ~reloc_kind;
+      Section_state.add_relocation_at_current_offset state ~reloc_kind;
       (* On RELA platforms (Linux), encode 0 in instruction - addend is in
          relocation. On REL platforms (macOS), encode addend in instruction. *)
       let imm12 =
@@ -112,30 +112,33 @@ let encode_instruction :
   | Pair (Reg rd, Imm (Sym sym)), ADR ->
     (* ADR only accepts Same_section_and_unit symbols (local labels) *)
     let Same_section_and_unit = sym.reloc in
-    let sym_name = Symbol.name sym in
+    let lbl =
+      match sym.target with
+      | Label lbl -> lbl
+      | Symbol _ -> Misc.fatal_error "ADR: expected label, got symbol"
+    in
+    let lbl_name = Asm_label.encode lbl in
     (* Compute PC-relative offset at assembly time *)
     let target_offset =
-      match Section_state.find_label_offset_in_bytes state sym_name with
+      match Section_state.find_label_offset_in_bytes state lbl_name with
       | Some off -> off
       | None ->
-        Misc.fatal_errorf "ADR: label %s not found in current section" sym_name
+        Misc.fatal_errorf "ADR: label %s not found in current section" lbl_name
     in
     let current_offset = Section_state.offset_in_bytes state in
     let pc_rel = target_offset - current_offset + sym.offset in
     let immlo, immhi = Adr_helpers.split_21bit_immediate pc_rel in
     Adr_helpers.encode_adr ~op:0 ~immlo ~immhi ~rd
   | Pair (Reg rd, Imm (Sym sym)), ADRP ->
-    let sym_name = Symbol.name sym in
-    (* Keep original symbol name in relocation for JIT use. The conversion to
+    (* Keep original target in relocation for JIT use. The conversion to
        section+offset for verification is done in emit.ml *)
     let reloc_kind : Relocation.Kind.t =
-      let r = { Relocation.Kind.symbol = sym_name; addend = sym.offset } in
+      let r = { Relocation.Kind.target = sym.target; addend = sym.offset } in
       match sym.reloc with
       | Needs_reloc GOT_PAGE -> R_AARCH64_ADR_GOT_PAGE r
       | Needs_reloc PAGE -> R_AARCH64_ADR_PREL_PG_HI21 r
     in
-    Section_state.add_relocation_at_current_offset state ~symbol_name:sym_name
-      ~reloc_kind;
+    Section_state.add_relocation_at_current_offset state ~reloc_kind;
     (* On RELA platforms (Linux), encode 0 in instruction - addend is in
        relocation. On REL platforms (macOS), encode addend in instruction. *)
     let offset =

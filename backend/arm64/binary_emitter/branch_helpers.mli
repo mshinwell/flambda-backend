@@ -30,7 +30,7 @@ open Arm64_ast.Ast
 val compute_branch_imm26 :
   Section_state.t ->
   instr_name:string ->
-  reloc_kind:(Relocation.Kind.sym_with_addend -> Relocation.Kind.t) ->
+  reloc_kind:(Relocation.Kind.target_with_addend -> Relocation.Kind.t) ->
   'a Symbol.t ->
   int
 

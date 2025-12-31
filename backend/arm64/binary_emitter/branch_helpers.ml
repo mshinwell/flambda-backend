@@ -27,6 +27,8 @@
 
 open Arm64_ast.Ast
 
+module Symbol = Arm64_ast.Ast.Symbol
+
 (* Helper to compute a 26-bit PC-relative offset for B/BL instructions. If the
    symbol is undefined, creates a relocation and returns 0.
 
@@ -35,14 +37,14 @@ open Arm64_ast.Ast
    behavior which uses RELA relocations with zero in the instruction for all
    global symbol references, allowing for symbol interposition at link time. *)
 let compute_branch_imm26 state ~instr_name ~reloc_kind (sym : _ Symbol.t) =
-  let symbol_name = Symbol.name sym in
+  let target_key = Relocation.target_to_string sym.target in
   let is_global_symbol =
-    Option.is_some (Section_state.find_symbol_offset_in_bytes state symbol_name)
+    Option.is_some (Section_state.find_symbol_offset_in_bytes state target_key)
   in
   (* Create relocation with addend 0 (branching to symbol itself) *)
   let make_reloc () =
-    let r = { Relocation.Kind.symbol = symbol_name; addend = 0 } in
-    Section_state.add_relocation_at_current_offset state ~symbol_name
+    let r = { Relocation.Kind.target = sym.target; addend = 0 } in
+    Section_state.add_relocation_at_current_offset state
       ~reloc_kind:(reloc_kind r)
   in
   (* On Linux ELF, emit relocations for global symbols to match assembler *)
@@ -53,7 +55,7 @@ let compute_branch_imm26 state ~instr_name ~reloc_kind (sym : _ Symbol.t) =
     0)
   else
     match
-      Section_state.find_symbol_or_label_offset_in_bytes state symbol_name
+      Section_state.find_symbol_or_label_offset_in_bytes state target_key
     with
     | None ->
       (* Symbol is undefined - create a relocation and use 0 as placeholder *)
@@ -66,24 +68,24 @@ let compute_branch_imm26 state ~instr_name ~reloc_kind (sym : _ Symbol.t) =
       if pc_relative_offset mod 4 <> 0
       then
         Misc.fatal_errorf "%s offset %d to symbol '%s' must be 4-byte aligned"
-          instr_name pc_relative_offset symbol_name;
+          instr_name pc_relative_offset target_key;
       let imm26 = pc_relative_offset / 4 in
       if imm26 < -0x2000000 || imm26 > 0x1FFFFFF
       then
         Misc.fatal_errorf
           "%s offset %d to symbol '%s' out of range (max ±128MB)" instr_name
-          pc_relative_offset symbol_name;
+          pc_relative_offset target_key;
       imm26
 
 (* Helper to compute a 19-bit PC-relative offset for CBZ/CBNZ instructions *)
 let compute_branch_imm19 state ~instr_name (sym : _ Symbol.t) =
-  let symbol_name = Symbol.name sym in
+  let target_key = Relocation.target_to_string sym.target in
   match
-    Section_state.find_symbol_or_label_offset_in_bytes state symbol_name
+    Section_state.find_symbol_or_label_offset_in_bytes state target_key
   with
   | None ->
     Misc.fatal_errorf "%s references undefined symbol '%s'" instr_name
-      symbol_name
+      target_key
   | Some target_offset ->
     let pc_relative_offset =
       target_offset - Section_state.offset_in_bytes state
@@ -91,23 +93,23 @@ let compute_branch_imm19 state ~instr_name (sym : _ Symbol.t) =
     if pc_relative_offset mod 4 <> 0
     then
       Misc.fatal_errorf "%s offset %d to symbol '%s' must be 4-byte aligned"
-        instr_name pc_relative_offset symbol_name;
+        instr_name pc_relative_offset target_key;
     let imm19 = pc_relative_offset / 4 in
     if imm19 < -0x40000 || imm19 > 0x3FFFF
     then
       Misc.fatal_errorf "%s offset %d to symbol '%s' out of range (max ±1MB)"
-        instr_name pc_relative_offset symbol_name;
+        instr_name pc_relative_offset target_key;
     imm19
 
 (* Helper to compute a 14-bit PC-relative offset for TBZ/TBNZ instructions *)
 let compute_branch_imm14 state ~instr_name (sym : _ Symbol.t) =
-  let symbol_name = Symbol.name sym in
+  let target_key = Relocation.target_to_string sym.target in
   match
-    Section_state.find_symbol_or_label_offset_in_bytes state symbol_name
+    Section_state.find_symbol_or_label_offset_in_bytes state target_key
   with
   | None ->
     Misc.fatal_errorf "%s references undefined symbol '%s'" instr_name
-      symbol_name
+      target_key
   | Some target_offset ->
     let pc_relative_offset =
       target_offset - Section_state.offset_in_bytes state
@@ -115,12 +117,12 @@ let compute_branch_imm14 state ~instr_name (sym : _ Symbol.t) =
     if pc_relative_offset mod 4 <> 0
     then
       Misc.fatal_errorf "%s offset %d to symbol '%s' must be 4-byte aligned"
-        instr_name pc_relative_offset symbol_name;
+        instr_name pc_relative_offset target_key;
     let imm14 = pc_relative_offset / 4 in
     if imm14 < -0x2000 || imm14 > 0x1FFF
     then
       Misc.fatal_errorf "%s offset %d to symbol '%s' out of range (max ±32KB)"
-        instr_name pc_relative_offset symbol_name;
+        instr_name pc_relative_offset target_key;
     imm14
 
 (* Conditional branch (immediate) - C4.1.93.1

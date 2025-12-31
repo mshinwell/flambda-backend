@@ -351,15 +351,15 @@ module Directive : sig
       | Signed_int of Int64.t
       | Unsigned_int of Numbers.Uint64.t
       | This
-      | Named_thing of string
-          (** [Named_thing] covers symbols, labels and variables. (Name mangling
-          conventions have by now been applied to these entities.) *)
+      | Label of Asm_label.t
+      | Symbol of Asm_symbol.t
+      | Variable of string  (** For .set assignments (macOS only) *)
       | Add of t * t
       | Sub of t * t
 
     (** Evaluate a constant expression to a 64-bit value.
         @param this Called to get the current offset when [This] is encountered.
-        @param lookup Called to resolve [Named_thing] values (labels/symbols).
+        @param lookup Called to resolve Label/Symbol/Variable values.
         @return [Some value] if evaluation succeeds, [None] if a symbol cannot
                 be resolved. *)
     val eval :
@@ -373,8 +373,8 @@ module Directive : sig
     (** A constant together with a width indicating the number of bytes in
         the object file within which the constant is to fit.  Some validation
         is performed on values of type [t] to try to ensure that this is the
-        case, but it cannot be exhaustive, as the values of [This] and
-        [Named_thing] constructions are not known. *)
+        case, but it cannot be exhaustive, as the values of [This],
+        [Label], [Symbol], and [Variable] constructions are not known. *)
     type t
 
     val constant : t -> Constant.t

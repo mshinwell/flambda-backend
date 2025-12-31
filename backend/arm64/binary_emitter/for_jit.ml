@@ -34,11 +34,17 @@ module Relocation = struct
 
   let size = Relocation.size
 
-  let target_symbol = Relocation.target_symbol
+  (* TODO: The JIT interface uses strings. It should be updated to use typed
+     targets (Symbol.target). For now, convert between the two. *)
+  let target_symbol r = Relocation.target_to_string (Relocation.primary_target r)
 
-  let target_symbols = Relocation.target_symbols
+  let target_symbols r =
+    List.map Relocation.target_to_string (Relocation.all_targets r)
 
-  let target_symbols_with_addends = Relocation.target_symbols_with_addends
+  let target_symbols_with_addends r =
+    List.map
+      (fun (target, addend) -> Relocation.target_to_string target, addend)
+      (Relocation.all_targets_with_addends r)
 
   let is_got_reloc = Relocation.is_got_reloc
 
@@ -46,14 +52,18 @@ module Relocation = struct
 
   let compute_value (r : Relocation.t) ~place_address ~lookup_symbol
       ~read_instruction =
-    let sym = Relocation.target_symbol r in
+    let sym = target_symbol r in
     match lookup_symbol sym with
     | None -> Error (Printf.sprintf "Symbol not found: %s" sym)
     | Some sym_addr ->
       let addend = Relocation.get_addend r.kind in
       let target_addr = Int64.add sym_addr (Int64.of_int addend) in
+      (* Wrap lookup_symbol to work with Symbol.target *)
+      let lookup_target target =
+        lookup_symbol (Relocation.target_to_string target)
+      in
       Relocation.compute_value r ~target_addr ~place_address ~read_instruction
-        ~lookup_symbol
+        ~lookup_target
 end
 
 module Assembled_section = struct

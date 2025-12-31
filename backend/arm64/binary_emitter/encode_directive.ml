@@ -26,20 +26,29 @@
  ******************************************************************************)
 
 module Asm_section = Asm_targets.Asm_section
+module Asm_label = Asm_targets.Asm_label
+module Asm_symbol = Asm_targets.Asm_symbol
 module D = Asm_targets.Asm_directives
 module C = D.Directive.Constant
 module SS = Section_state
+module Symbol = Arm64_ast.Ast.Symbol
 
 let rec extract_symbol_name (cst : C.t) =
   match cst with
-  | Named_thing name -> Some name
+  | Label lbl -> Some (Asm_label.encode lbl)
+  | Symbol sym -> Some (Asm_symbol.encode sym)
+  | Variable name -> Some name
   | Add (a, _) | Sub (a, _) -> extract_symbol_name a
   | Signed_int _ | Unsigned_int _ | This -> None
 
 let extract_label_this_offset (cst : C.t) =
   match[@warning "-4"] cst with
-  | Add (Sub (Named_thing name, This), Signed_int offset) -> Some (name, offset)
-  | Sub (Named_thing name, This) -> Some (name, 0L)
+  | Add (Sub (Label lbl, This), Signed_int offset) ->
+    Some (Asm_label.encode lbl, offset)
+  | Add (Sub (Symbol sym, This), Signed_int offset) ->
+    Some (Asm_symbol.encode sym, offset)
+  | Sub (Label lbl, This) -> Some (Asm_label.encode lbl, 0L)
+  | Sub (Symbol sym, This) -> Some (Asm_symbol.encode sym, 0L)
   | _ -> None
 
 let rec eval_constant state ~all_sections const =
@@ -117,7 +126,7 @@ let is_cross_section_relative_reference state ~all_sections ~current_section c =
                 symbol and addend. The addend is the offset of the label within
                 the section plus any user-specified offset. *)
              let addend = target_offset + Int64.to_int offset_upper in
-             SS.add_relocation_at_current_offset state ~symbol_name:section_name
+             SS.add_relocation_at_current_offset state
                ~reloc_kind:(R_AARCH64_PREL32 { section_name; addend });
              true
          | None -> false
@@ -148,7 +157,7 @@ let is_cross_section_relative_reference state ~all_sections ~current_section c =
                cross-section references. *)
             let section_name = Asm_section.to_string label_section in
             let addend = target_offset + Int64.to_int offset_upper in
-            SS.add_relocation_at_current_offset state ~symbol_name:section_name
+            SS.add_relocation_at_current_offset state
               ~reloc_kind:(R_AARCH64_PREL32 { section_name; addend });
             Some 0L (* ELF RELA: addend in relocation, emit 0 in data *))
           else
@@ -183,10 +192,17 @@ let is_cross_section_relative_reference state ~all_sections ~current_section c =
                        (Int64.of_int (target_offset - plus_sym_offset))
                        (Int64.of_int (current_pos - minus_sym_offset)))
                 in
+                (* Convert string symbol names to Symbol.target.
+                   Global symbols returned by find_nearest_symbol_before. *)
+                let plus_target : Symbol.target =
+                  Symbol (Asm_symbol.create ~visibility:Global plus_symbol)
+                in
+                let minus_target : Symbol.target =
+                  Symbol (Asm_symbol.create ~visibility:Global minus_symbol)
+                in
                 SS.add_relocation_at_current_offset state
-                  ~symbol_name:plus_symbol
                   ~reloc_kind:
-                    (R_AARCH64_PREL32_PAIR { plus_symbol; minus_symbol });
+                    (R_AARCH64_PREL32_PAIR { plus_target; minus_target });
                 (* On macOS (Mach-O), the addend must be in the data. *)
                 Some addend))))
 
@@ -267,57 +283,72 @@ let resolve_local_label_for_elf ~all_sections ~sym_name ~sym_offset =
    verification against the assembler. *)
 let emit_relocs_for_all_symbol_refs = ref false
 
+(* Helper to create a Symbol.target from the Constant type *)
+let target_of_constant (cst : C.t) : Symbol.target option =
+  match cst with
+  | Label lbl -> Some (Label lbl)
+  | Symbol sym -> Some (Symbol sym)
+  | Signed_int _ | Unsigned_int _ | This | Variable _ | Add _ | Sub _ -> None
+
 (* Handle absolute symbol reference. For .8byte symbol references in object
    files, the assembler always emits relocations. We can either match that
    behavior (for verification) or resolve same-section refs at emit time (more
    efficient for JIT). *)
 let is_absolute_symbol_reference state ~all_sections ~current_section
     ~width_bytes (cst : C.t) =
-  match[@warning "-4"] cst with
-  | Named_thing name when width_bytes = 8 -> (
-    let for_jit = All_section_states.for_jit all_sections in
-    (* Check if symbol is in the same section *)
-    let is_same_section =
-      Option.is_some (SS.find_label_offset_in_bytes state name)
-      || Option.is_some (SS.find_symbol_offset_in_bytes state name)
-    in
-    if is_same_section
-    then
-      if for_jit || !emit_relocs_for_all_symbol_refs
-      then (
-        (* Emit relocation for all symbol references. Keep original symbol name
-           in relocation for JIT use. The conversion to section+offset for
-           verification is done in emit.ml *)
-        SS.add_relocation_at_current_offset state ~symbol_name:name
-          ~reloc_kind:(R_AARCH64_ABS64 { symbol = name; addend = 0 });
-        Some 0L (* Emit zero, relocation will patch *))
-      else None (* Resolve same-section refs at emit time via eval_constant *)
-    else
-      (* Cross-section reference - always needs relocation *)
-      match All_section_states.find_in_any_section all_sections name with
-      | None -> None (* Not found, will fall through to emit_unresolved *)
-      | Some (_, sym_section) ->
-        if Asm_section.equal sym_section current_section
-           && (not for_jit)
-           && not !emit_relocs_for_all_symbol_refs
-        then None (* Same section after all, resolve at emit time *)
-        else (
-          (* Keep original symbol name in relocation for JIT use. The conversion
-             to section+offset for verification is done in emit.ml *)
-          SS.add_relocation_at_current_offset state ~symbol_name:name
-            ~reloc_kind:(R_AARCH64_ABS64 { symbol = name; addend = 0 });
-          Some 0L (* Emit zero, relocation will patch *)))
-  | _ -> None
+  if width_bytes <> 8 then None
+  else
+    match target_of_constant cst with
+    | None -> None
+    | Some target ->
+      let name =
+        match target with
+        | Label lbl -> Asm_label.encode lbl
+        | Symbol sym -> Asm_symbol.encode sym
+      in
+      let for_jit = All_section_states.for_jit all_sections in
+      (* Check if symbol is in the same section *)
+      let is_same_section =
+        Option.is_some (SS.find_label_offset_in_bytes state name)
+        || Option.is_some (SS.find_symbol_offset_in_bytes state name)
+      in
+      if is_same_section
+      then
+        if for_jit || !emit_relocs_for_all_symbol_refs
+        then (
+          (* Emit relocation for all symbol references. Keep original target
+             in relocation for JIT use. The conversion to section+offset for
+             verification is done in emit.ml *)
+          SS.add_relocation_at_current_offset state
+            ~reloc_kind:(R_AARCH64_ABS64 { target; addend = 0 });
+          Some 0L (* Emit zero, relocation will patch *))
+        else None (* Resolve same-section refs at emit time via eval_constant *)
+      else
+        (* Cross-section reference - always needs relocation *)
+        match All_section_states.find_in_any_section all_sections name with
+        | None -> None (* Not found, will fall through to emit_unresolved *)
+        | Some (_, sym_section) ->
+          if Asm_section.equal sym_section current_section
+             && (not for_jit)
+             && not !emit_relocs_for_all_symbol_refs
+          then None (* Same section after all, resolve at emit time *)
+          else (
+            (* Keep original target in relocation for JIT use. The conversion
+               to section+offset for verification is done in emit.ml *)
+            SS.add_relocation_at_current_offset state
+              ~reloc_kind:(R_AARCH64_ABS64 { target; addend = 0 });
+            Some 0L (* Emit zero, relocation will patch *))
 
 (* Handle unresolved symbol reference by emitting zeros and recording a
    relocation for the linker to patch. *)
 let emit_unresolved_symbol_relocation state ~width_bytes c =
   let buf = SS.buffer state in
-  (match extract_symbol_name c with
-  | Some symbol_name when width_bytes = 8 ->
-    SS.add_relocation_at_current_offset state ~symbol_name
-      ~reloc_kind:(R_AARCH64_ABS64 { symbol = symbol_name; addend = 0 })
-  | Some symbol_name ->
+  (match target_of_constant c with
+  | Some target when width_bytes = 8 ->
+    SS.add_relocation_at_current_offset state
+      ~reloc_kind:(R_AARCH64_ABS64 { target; addend = 0 })
+  | Some _ ->
+    let symbol_name = Option.get (extract_symbol_name c) in
     Misc.fatal_errorf
       "Unresolved %d-byte reference to symbol %s (only 8-byte relocations \
        supported)"

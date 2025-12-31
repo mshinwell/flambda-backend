@@ -75,7 +75,9 @@ module Directive = struct
       | Signed_int of Int64.t
       | Unsigned_int of Uint64.t
       | This
-      | Named_thing of string
+      | Label of Asm_label.t
+      | Symbol of Asm_symbol.t
+      | Variable of string
       | Add of t * t
       | Sub of t * t
 
@@ -83,7 +85,8 @@ module Directive = struct
        comment in [print] below. *)
     let rec print_aux ~force_decimal buf t =
       match t with
-      | (Named_thing _ | Signed_int _ | Unsigned_int _ | This) as c ->
+      | (Label _ | Symbol _ | Variable _ | Signed_int _ | Unsigned_int _ | This)
+        as c ->
         print_aux_subterm ~force_decimal buf c
       | Add (c1, c2) ->
         bprintf buf "%a + %a"
@@ -104,7 +107,9 @@ module Directive = struct
         match TS.assembler () with
         | MacOS | GAS_like -> Buffer.add_string buf "."
         | MASM -> Buffer.add_string buf "THIS BYTE")
-      | Named_thing name -> Buffer.add_string buf name
+      | Label lbl -> Buffer.add_string buf (Asm_label.encode lbl)
+      | Symbol sym -> Buffer.add_string buf (Asm_symbol.encode sym)
+      | Variable name -> Buffer.add_string buf name
       | Signed_int n -> (
         match TS.assembler (), force_decimal with
         | _, true -> Buffer.add_string buf (Int64.to_string n)
@@ -149,7 +154,9 @@ module Directive = struct
       | Signed_int n -> Some n
       | Unsigned_int n -> Some (Uint64.to_int64 n)
       | This -> Some (this ())
-      | Named_thing name -> lookup name
+      | Label lbl -> lookup (Asm_label.encode lbl)
+      | Symbol sym -> lookup (Asm_symbol.encode sym)
+      | Variable name -> lookup name
       | Add (a, b) -> (
         match eval ~this ~lookup a, eval ~this ~lookup b with
         | Some va, Some vb -> Some (Int64.add va vb)
@@ -614,14 +621,15 @@ module Directive = struct
     | Sleb128 { constant; _ } -> (
       match constant with
       | Signed_int i -> offset_in_bytes + sleb128_size i
-      | Unsigned_int _ | This | Named_thing _ | Add _ | Sub _ ->
+      | Unsigned_int _ | This | Label _ | Symbol _ | Variable _ | Add _ | Sub _
+        ->
         Misc.fatal_error
           "increment_offset_in_bytes: sleb128 with non-integer constant")
     | Uleb128 { constant; _ } -> (
       match constant with
       | Signed_int i -> offset_in_bytes + uleb128_size i
       | Unsigned_int i -> offset_in_bytes + uleb128_size (Uint64.to_int64 i)
-      | This | Named_thing _ | Add _ | Sub _ ->
+      | This | Label _ | Symbol _ | Variable _ | Add _ | Sub _ ->
         Misc.fatal_error
           "increment_offset_in_bytes: uleb128 with non-integer constant")
     (* Directives that don't contribute to section size *)
@@ -653,9 +661,9 @@ let rec lower_expr (cst : expr) : Directive.Constant.t =
   | Signed_int n -> Signed_int n
   | Unsigned_int n -> Unsigned_int n
   | This -> This
-  | Label lbl -> Named_thing (Asm_label.encode lbl)
-  | Symbol sym -> Named_thing (Asm_symbol.encode sym)
-  | Variable var -> Named_thing var
+  | Label lbl -> Label lbl
+  | Symbol sym -> Symbol sym
+  | Variable var -> Variable var
   | Add (cst1, cst2) -> Add (lower_expr cst1, lower_expr cst2)
   | Sub (cst1, cst2) -> Sub (lower_expr cst1, lower_expr cst2)
 
@@ -1254,8 +1262,5 @@ let reloc_x86_64_plt32 ~offset_from_this ~target_symbol ~rel_offset_from_next =
     (Reloc
        { offset = Sub (This, Signed_int offset_from_this);
          name = R_X86_64_PLT32;
-         expr =
-           Sub
-             ( Named_thing (Asm_symbol.encode target_symbol),
-               Signed_int rel_offset_from_next )
+         expr = Sub (Symbol target_symbol, Signed_int rel_offset_from_next)
        })

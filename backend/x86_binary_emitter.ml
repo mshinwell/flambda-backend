@@ -24,6 +24,8 @@ module String = Misc.Stdlib.String
 
 module D = Asm_targets.Asm_directives.Directive
 module C = D.Constant
+module Asm_label = Asm_targets.Asm_label
+module Asm_symbol = Asm_targets.Asm_symbol
 
 
 type section = {
@@ -200,7 +202,9 @@ let eval_const b current_pos cst =
     | C.Signed_int n -> Rint n
     | C.Unsigned_int n -> Rint (Numbers.Uint64.to_int64 n)
     | C.This -> Rabs ("", 0L)
-    | C.Named_thing lbl -> Rabs (lbl, 0L)
+    | C.Label lbl -> Rabs (Asm_label.encode lbl, 0L)
+    | C.Symbol sym -> Rabs (Asm_symbol.encode sym, 0L)
+    | C.Variable name -> Rabs (name, 0L)
     | C.Sub (c1, c2) -> (
         let c1 = eval c1 and c2 = eval c2 in
         match (c1, c2) with
@@ -1406,16 +1410,20 @@ let[@warning "+4"] constant b cst
   | C.Unsigned_int n, Sixteen -> buf_int16L b (Numbers.Uint64.to_int64 n)
   | C.Unsigned_int n, Thirty_two -> buf_int32L b (Numbers.Uint64.to_int64 n)
   | C.Unsigned_int n, Sixty_four -> buf_int64L b (Numbers.Uint64.to_int64 n)
-  | (C.This | C.Named_thing _ | C.Add _ | C.Sub _), Eight ->
+  | (C.This | C.Label _ | C.Symbol _ | C.Variable _ | C.Add _ | C.Sub _), Eight
+    ->
     record_local_reloc b (RelocConstant (cst, B8));
     buf_int8L b 0L
-  | (C.This | C.Named_thing _ | C.Add _ | C.Sub _), Sixteen ->
+  | ( (C.This | C.Label _ | C.Symbol _ | C.Variable _ | C.Add _ | C.Sub _),
+      Sixteen ) ->
     record_local_reloc b (RelocConstant (cst, B16));
     buf_int16L b 0L
-  | (C.This | C.Named_thing _ | C.Add _ | C.Sub _), Thirty_two ->
+  | ( (C.This | C.Label _ | C.Symbol _ | C.Variable _ | C.Add _ | C.Sub _),
+      Thirty_two ) ->
     record_local_reloc b (RelocConstant (cst, B32));
     buf_int32L b 0L
-  | (C.This | C.Named_thing _ | C.Add _ | C.Sub _), Sixty_four ->
+  | ( (C.This | C.Label _ | C.Symbol _ | C.Variable _ | C.Add _ | C.Sub _),
+      Sixty_four ) ->
     record_local_reloc b (RelocConstant (cst, B64));
     buf_int64L b 0L
 
@@ -1493,10 +1501,10 @@ let assemble_line b loc ins =
         done
     | Directive (D.Hidden _) | Directive D.New_line -> ()
     | Directive (D.Reloc { name = D.R_X86_64_PLT32;
-              expr = C.Sub (C.Named_thing wrap_label, C.Signed_int 4L);
+              expr = C.Sub (C.Symbol wrap_sym, C.Signed_int 4L);
               offset = C.Sub (C.This, C.Signed_int 4L);
-            })  when String.Tbl.mem local_labels wrap_label ->
-      record_local_reloc b ~offset:(-4) (RelocCall wrap_label)
+            })  when String.Tbl.mem local_labels (Asm_symbol.encode wrap_sym) ->
+      record_local_reloc b ~offset:(-4) (RelocCall (Asm_symbol.encode wrap_sym))
     | Directive (D.Reloc _)
     | Directive (D.Sleb128 _)
     | Directive (D.Uleb128 _) ->

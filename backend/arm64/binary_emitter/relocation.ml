@@ -25,34 +25,36 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
+module Symbol = Arm64_ast.Ast.Symbol
+
 module Kind = struct
-  (* Relocation with symbol name and addend. On RELA platforms (Linux ELF), the
-     addend is stored in the relocation entry. On REL platforms (macOS Mach-O),
-     the addend is encoded in the instruction/data. *)
-  type sym_with_addend =
-    { symbol : string;
+  (** Relocation with symbol/label target and addend. On RELA platforms (Linux
+      ELF), the addend is stored in the relocation entry. On REL platforms
+      (macOS Mach-O), the addend is encoded in the instruction/data. *)
+  type target_with_addend =
+    { target : Symbol.target;
       addend : int
     }
 
   type t =
-    | R_AARCH64_ADR_PREL_LO21 of sym_with_addend
-    | R_AARCH64_ADR_PREL_PG_HI21 of sym_with_addend
+    | R_AARCH64_ADR_PREL_LO21 of target_with_addend
+    | R_AARCH64_ADR_PREL_PG_HI21 of target_with_addend
     (* ADRP targeting the GOT entry page (for @GOTPAGE on macOS) *)
-    | R_AARCH64_ADR_GOT_PAGE of sym_with_addend
-    | R_AARCH64_LD64_GOT_LO12_NC of sym_with_addend
-    | R_AARCH64_ADD_ABS_LO12_NC of sym_with_addend
-    | R_AARCH64_LDST64_ABS_LO12_NC of sym_with_addend
-    | R_AARCH64_CALL26 of sym_with_addend
-    | R_AARCH64_JUMP26 of sym_with_addend
+    | R_AARCH64_ADR_GOT_PAGE of target_with_addend
+    | R_AARCH64_LD64_GOT_LO12_NC of target_with_addend
+    | R_AARCH64_ADD_ABS_LO12_NC of target_with_addend
+    | R_AARCH64_LDST64_ABS_LO12_NC of target_with_addend
+    | R_AARCH64_CALL26 of target_with_addend
+    | R_AARCH64_JUMP26 of target_with_addend
     (* Absolute 64-bit data reference (ARM64_RELOC_UNSIGNED on macOS) *)
-    | R_AARCH64_ABS64 of sym_with_addend
+    | R_AARCH64_ABS64 of target_with_addend
     (* Cross-section relative reference (SUBTRACTOR + UNSIGNED pair on macOS)
        Used for expressions like (Label - This) where Label and This are in
        different sections. The addend is stored in the data, and the linker will
        compute: addend + plus_symbol - minus_symbol *)
     | R_AARCH64_PREL32_PAIR of
-        { plus_symbol : string;
-          minus_symbol : string
+        { plus_target : Symbol.target;
+          minus_target : Symbol.target
         }
     (* ELF section-relative 32-bit PC-relative reference. Used on ELF for
        cross-section references when function sections are enabled. The
@@ -82,52 +84,56 @@ let size (r : t) : Binary_emitter_intf.data_size =
   | R_AARCH64_PREL32 _ ->
     Binary_emitter_intf.B32
 
-let target_symbol (r : t) : string =
+let primary_target (r : t) : Symbol.target =
   match r.kind with
-  | R_AARCH64_ADR_PREL_LO21 { symbol; _ }
-  | R_AARCH64_ADR_PREL_PG_HI21 { symbol; _ }
-  | R_AARCH64_ADR_GOT_PAGE { symbol; _ }
-  | R_AARCH64_LD64_GOT_LO12_NC { symbol; _ }
-  | R_AARCH64_ADD_ABS_LO12_NC { symbol; _ }
-  | R_AARCH64_LDST64_ABS_LO12_NC { symbol; _ }
-  | R_AARCH64_CALL26 { symbol; _ }
-  | R_AARCH64_JUMP26 { symbol; _ }
-  | R_AARCH64_ABS64 { symbol; _ } ->
-    symbol
-  | R_AARCH64_PREL32_PAIR { plus_symbol; _ } -> plus_symbol
-  | R_AARCH64_PREL32 { section_name; _ } -> section_name
+  | R_AARCH64_ADR_PREL_LO21 { target; _ }
+  | R_AARCH64_ADR_PREL_PG_HI21 { target; _ }
+  | R_AARCH64_ADR_GOT_PAGE { target; _ }
+  | R_AARCH64_LD64_GOT_LO12_NC { target; _ }
+  | R_AARCH64_ADD_ABS_LO12_NC { target; _ }
+  | R_AARCH64_LDST64_ABS_LO12_NC { target; _ }
+  | R_AARCH64_CALL26 { target; _ }
+  | R_AARCH64_JUMP26 { target; _ }
+  | R_AARCH64_ABS64 { target; _ } ->
+    target
+  | R_AARCH64_PREL32_PAIR { plus_target; _ } -> plus_target
+  | R_AARCH64_PREL32 { section_name; _ } ->
+    (* Section names are treated as global symbols *)
+    Symbol (Asm_targets.Asm_symbol.create ~visibility:Global section_name)
 
-let target_symbols (r : t) : string list =
+let all_targets (r : t) : Symbol.target list =
   match r.kind with
-  | R_AARCH64_ADR_PREL_LO21 { symbol; _ }
-  | R_AARCH64_ADR_PREL_PG_HI21 { symbol; _ }
-  | R_AARCH64_ADR_GOT_PAGE { symbol; _ }
-  | R_AARCH64_LD64_GOT_LO12_NC { symbol; _ }
-  | R_AARCH64_ADD_ABS_LO12_NC { symbol; _ }
-  | R_AARCH64_LDST64_ABS_LO12_NC { symbol; _ }
-  | R_AARCH64_CALL26 { symbol; _ }
-  | R_AARCH64_JUMP26 { symbol; _ }
-  | R_AARCH64_ABS64 { symbol; _ } ->
-    [symbol]
-  | R_AARCH64_PREL32_PAIR { plus_symbol; minus_symbol } ->
-    [plus_symbol; minus_symbol]
-  | R_AARCH64_PREL32 { section_name; _ } -> [section_name]
+  | R_AARCH64_ADR_PREL_LO21 { target; _ }
+  | R_AARCH64_ADR_PREL_PG_HI21 { target; _ }
+  | R_AARCH64_ADR_GOT_PAGE { target; _ }
+  | R_AARCH64_LD64_GOT_LO12_NC { target; _ }
+  | R_AARCH64_ADD_ABS_LO12_NC { target; _ }
+  | R_AARCH64_LDST64_ABS_LO12_NC { target; _ }
+  | R_AARCH64_CALL26 { target; _ }
+  | R_AARCH64_JUMP26 { target; _ }
+  | R_AARCH64_ABS64 { target; _ } ->
+    [target]
+  | R_AARCH64_PREL32_PAIR { plus_target; minus_target } ->
+    [plus_target; minus_target]
+  | R_AARCH64_PREL32 { section_name; _ } ->
+    [Symbol (Asm_targets.Asm_symbol.create ~visibility:Global section_name)]
 
-let target_symbols_with_addends (r : t) : (string * int) list =
+let all_targets_with_addends (r : t) : (Symbol.target * int) list =
   match r.kind with
-  | R_AARCH64_ADR_PREL_LO21 { symbol; addend }
-  | R_AARCH64_ADR_PREL_PG_HI21 { symbol; addend }
-  | R_AARCH64_ADR_GOT_PAGE { symbol; addend }
-  | R_AARCH64_LD64_GOT_LO12_NC { symbol; addend }
-  | R_AARCH64_ADD_ABS_LO12_NC { symbol; addend }
-  | R_AARCH64_LDST64_ABS_LO12_NC { symbol; addend }
-  | R_AARCH64_CALL26 { symbol; addend }
-  | R_AARCH64_JUMP26 { symbol; addend }
-  | R_AARCH64_ABS64 { symbol; addend } ->
-    [symbol, addend]
-  | R_AARCH64_PREL32_PAIR { plus_symbol; minus_symbol } ->
-    [plus_symbol, 0; minus_symbol, 0]
-  | R_AARCH64_PREL32 { section_name; addend } -> [section_name, addend]
+  | R_AARCH64_ADR_PREL_LO21 { target; addend }
+  | R_AARCH64_ADR_PREL_PG_HI21 { target; addend }
+  | R_AARCH64_ADR_GOT_PAGE { target; addend }
+  | R_AARCH64_LD64_GOT_LO12_NC { target; addend }
+  | R_AARCH64_ADD_ABS_LO12_NC { target; addend }
+  | R_AARCH64_LDST64_ABS_LO12_NC { target; addend }
+  | R_AARCH64_CALL26 { target; addend }
+  | R_AARCH64_JUMP26 { target; addend }
+  | R_AARCH64_ABS64 { target; addend } ->
+    [target, addend]
+  | R_AARCH64_PREL32_PAIR { plus_target; minus_target } ->
+    [plus_target, 0; minus_target, 0]
+  | R_AARCH64_PREL32 { section_name; addend } ->
+    [Symbol (Asm_targets.Asm_symbol.create ~visibility:Global section_name), addend]
 
 let is_got_reloc (r : t) =
   match r.kind with
@@ -223,8 +229,13 @@ let patch_branch26 (insn : int32) (offset : int64) : int64 =
   let insn = logor insn (of_int (imm26 land 0x03ffffff)) in
   int64_of_int32_unsigned insn
 
+let target_to_string (target : Symbol.target) : string =
+  match target with
+  | Label lbl -> Asm_targets.Asm_label.encode lbl
+  | Symbol sym -> Asm_targets.Asm_symbol.encode sym
+
 let compute_value (r : t) ~target_addr ~place_address ~read_instruction
-    ~lookup_symbol =
+    ~lookup_target =
   match r.kind with
   | R_AARCH64_ADR_PREL_LO21 _ ->
     let offset = Int64.sub target_addr place_address in
@@ -250,8 +261,11 @@ let compute_value (r : t) ~target_addr ~place_address ~read_instruction
     let insn = read_instruction () in
     Ok (patch_branch26 insn offset)
   | R_AARCH64_ABS64 _ -> Ok target_addr
-  | R_AARCH64_PREL32_PAIR { plus_symbol = _; minus_symbol } -> (
-    match lookup_symbol minus_symbol with
-    | None -> Error (Printf.sprintf "Minus symbol not found: %s" minus_symbol)
+  | R_AARCH64_PREL32_PAIR { plus_target = _; minus_target } -> (
+    match lookup_target minus_target with
+    | None ->
+      Error
+        (Printf.sprintf "Minus target not found: %s"
+           (target_to_string minus_target))
     | Some minus_addr -> Ok (Int64.sub target_addr minus_addr))
   | R_AARCH64_PREL32 _ -> Ok (Int64.sub target_addr place_address)

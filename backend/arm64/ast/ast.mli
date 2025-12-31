@@ -211,9 +211,6 @@ module Symbol : sig
   val create_symbol :
     'w same_unit_or_reloc -> ?offset:int -> Asm_targets.Asm_symbol.t -> 'w t
 
-  (** Returns the encoded name of the target (label or symbol). *)
-  val name : _ t -> string
-
   (** Returns true if the target is a label. *)
   val is_label : _ t -> bool
 

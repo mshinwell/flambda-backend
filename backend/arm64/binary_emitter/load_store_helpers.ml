@@ -198,11 +198,11 @@ let encode_load_store_gp_sized :
     (* This is encoded as "LDR (literal)" - only valid for word/doubleword *)
     if size < 0b10
     then Misc.fatal_errorf "%s does not support literal addressing" instr_name;
-    let sym_name = Symbol.name sym in
-    match Section_state.find_symbol_offset_in_bytes state sym_name with
+    let target_key = Relocation.target_to_string sym.target in
+    match Section_state.find_symbol_offset_in_bytes state target_key with
     | None ->
       Misc.fatal_errorf "%s (literal) references undefined symbol '%s' (rd=%s)"
-        instr_name sym_name (Reg.name rd)
+        instr_name target_key (Reg.name rd)
     | Some target_offset ->
       let pc_relative_offset =
         target_offset - Section_state.offset_in_bytes state
@@ -212,13 +212,13 @@ let encode_load_store_gp_sized :
       then
         Misc.fatal_errorf
           "%s (literal) offset %d to symbol '%s' must be 4-byte aligned"
-          instr_name pc_relative_offset sym_name;
+          instr_name pc_relative_offset target_key;
       let imm19_unmasked = pc_relative_offset / 4 in
       if imm19_unmasked < -0x40000 || imm19_unmasked > 0x3ffff
       then
         Misc.fatal_errorf
           "%s (literal) offset %d to symbol '%s' out of range (max ±1MB)"
-          instr_name pc_relative_offset sym_name;
+          instr_name pc_relative_offset target_key;
       let imm19 = imm19_unmasked land 0x7FFFF in
       let v = 0 in
       encode_load_literal ~opc ~v ~imm19 ~rt)
@@ -243,11 +243,8 @@ let encode_load_store_gp_sized :
     match sym.reloc with
     | Needs_reloc reloc ->
       let max_imm12 = 0xfff in
-      let sym_name = Symbol.name sym in
-      (* Keep original symbol name in relocation for JIT use. The conversion to
-         section+offset for verification is done in emit.ml *)
       let reloc_kind : Relocation.Kind.t =
-        let r = { Relocation.Kind.symbol = sym_name; addend = sym.offset } in
+        let r = { Relocation.Kind.target = sym.target; addend = sym.offset } in
         match reloc with
         | GOT_PAGE_OFF | GOT_LOWER_TWELVE -> R_AARCH64_LD64_GOT_LO12_NC r
         | PAGE_OFF | LOWER_TWELVE ->
@@ -257,8 +254,7 @@ let encode_load_store_gp_sized :
           then R_AARCH64_LDST64_ABS_LO12_NC r
           else R_AARCH64_ADD_ABS_LO12_NC r
       in
-      Section_state.add_relocation_at_current_offset state ~symbol_name:sym_name
-        ~reloc_kind;
+      Section_state.add_relocation_at_current_offset state ~reloc_kind;
       let rn = Reg.gp_encoding rn in
       (* On RELA platforms (Linux), encode 0 in instruction - addend is in
          relocation. On REL platforms (macOS), encode addend in instruction. *)
@@ -500,11 +496,11 @@ let encode_load_store_simd_fp :
       let imm9 = imm land 0x1FF in
       encode_load_store_unscaled ~size ~vr ~opc ~imm9 ~rn ~rt
   | Literal (_rn, sym) -> (
-    let sym_name = Symbol.name sym in
-    match Section_state.find_symbol_offset_in_bytes state sym_name with
+    let target_key = Relocation.target_to_string sym.target in
+    match Section_state.find_symbol_offset_in_bytes state target_key with
     | None ->
       Misc.fatal_errorf "%s (literal) references undefined symbol '%s'"
-        instr_name sym_name
+        instr_name target_key
     | Some target_offset ->
       let pc_relative_offset =
         target_offset - Section_state.offset_in_bytes state
@@ -513,13 +509,13 @@ let encode_load_store_simd_fp :
       then
         Misc.fatal_errorf
           "%s (literal) offset %d to symbol '%s' must be 4-byte aligned"
-          instr_name pc_relative_offset sym_name;
+          instr_name pc_relative_offset target_key;
       let imm19_unmasked = pc_relative_offset / 4 in
       if imm19_unmasked < -0x40000 || imm19_unmasked > 0x3ffff
       then
         Misc.fatal_errorf
           "%s (literal) offset %d to symbol '%s' out of range (max ±1MB)"
-          instr_name pc_relative_offset sym_name;
+          instr_name pc_relative_offset target_key;
       let imm19 = imm19_unmasked land 0x7FFFF in
       let opc_lit =
         match rd.reg_name with
@@ -547,11 +543,8 @@ let encode_load_store_simd_fp :
     match sym.reloc with
     | Needs_reloc reloc ->
       let max_imm12 = 0xfff in
-      let sym_name = Symbol.name sym in
-      (* Keep original symbol name in relocation for JIT use. The conversion to
-         section+offset for verification is done in emit.ml *)
       let reloc_kind : Relocation.Kind.t =
-        let r = { Relocation.Kind.symbol = sym_name; addend = sym.offset } in
+        let r = { Relocation.Kind.target = sym.target; addend = sym.offset } in
         match reloc with
         | GOT_PAGE_OFF | GOT_LOWER_TWELVE -> R_AARCH64_LD64_GOT_LO12_NC r
         | PAGE_OFF | LOWER_TWELVE ->
@@ -561,8 +554,7 @@ let encode_load_store_simd_fp :
           then R_AARCH64_LDST64_ABS_LO12_NC r
           else R_AARCH64_ADD_ABS_LO12_NC r
       in
-      Section_state.add_relocation_at_current_offset state ~symbol_name:sym_name
-        ~reloc_kind;
+      Section_state.add_relocation_at_current_offset state ~reloc_kind;
       let rn = Reg.gp_encoding rn in
       (* On RELA platforms (Linux), encode 0 in instruction - addend is in
          relocation. On REL platforms (macOS), encode addend in instruction. *)

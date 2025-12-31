@@ -33,6 +33,9 @@
 
 open! Int_replace_polymorphic_compare
 
+module Asm_label = Asm_targets.Asm_label
+module Asm_symbol = Asm_targets.Asm_symbol
+
 let check_index first last index =
   if index < first || index > last
   then Misc.fatal_errorf "Illegal register index %d" index ()
@@ -534,11 +537,6 @@ module Symbol = struct
       w t =
     { target = Symbol sym; offset; reloc }
 
-  let name t =
-    match t.target with
-    | Label lbl -> L.encode lbl
-    | Symbol sym -> S.encode sym
-
   let is_label t = match t.target with Label _ -> true | Symbol _ -> false
 
   let print_with_reloc_directive :
@@ -578,7 +576,11 @@ module Symbol = struct
 
   let print : type w. Format.formatter -> w t -> unit =
    fun ppf t ->
-    let target_name = name t in
+    let target_name =
+      match t.target with
+      | Label lbl -> Asm_label.encode lbl
+      | Symbol sym -> Asm_symbol.encode sym
+    in
     match t.reloc with
     | Same_section_and_unit ->
       Format.fprintf ppf "%s%a" target_name print_int_offset t.offset
