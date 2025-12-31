@@ -460,9 +460,7 @@ end = struct
     | Ibased (s, ofs) ->
       assert (not !Clflags.dlcode);
       (* see selection.ml *)
-      (* Symbol from addressing mode - treat as global since original info lost *)
-      emit_mem_symbol r ~reloc:(Needs_reloc LOWER_TWELVE) (S.create_global s)
-        ~offset:ofs
+      emit_mem_symbol r ~reloc:(Needs_reloc LOWER_TWELVE) s ~offset:ofs
 
   let stack (r : Reg.t) =
     match r.loc with
@@ -2243,7 +2241,7 @@ let emit_instr i =
         (* see selection_utils.ml *)
         A.ins2 ADRP
           ( DSL.reg_x reg_tmp1,
-            DSL.symbol ~offset:ofs (Needs_reloc PAGE) (S.create_global s) );
+            DSL.symbol ~offset:ofs (Needs_reloc PAGE) s );
         reg_tmp1
     in
     let default_addressing = DSL.addressing addressing_mode base in
@@ -2277,7 +2275,6 @@ let emit_instr i =
       | Ibased (s, offset) ->
         assert (not !Clflags.dlcode);
         (* see selection_utils.ml *)
-        let s = S.create_global s in
         A.ins2 ADRP (DSL.reg_x reg_tmp1, DSL.symbol ~offset (Needs_reloc PAGE) s);
         A.ins4 ADD_immediate
           ( DSL.reg_x reg_tmp1,
@@ -2300,7 +2297,7 @@ let emit_instr i =
         assert (not !Clflags.dlcode);
         A.ins2 ADRP
           ( DSL.reg_x reg_tmp1,
-            DSL.symbol ~offset:ofs (Needs_reloc PAGE) (S.create_global s) );
+            DSL.symbol ~offset:ofs (Needs_reloc PAGE) s );
         reg_tmp1
     in
     match size with
@@ -2331,7 +2328,6 @@ let emit_instr i =
       | Ibased (s, offset) ->
         assert (not !Clflags.dlcode);
         (* see selection_utils.ml *)
-        let s = S.create_global s in
         A.ins2 ADRP (DSL.reg_x reg_tmp1, DSL.symbol ~offset (Needs_reloc PAGE) s);
         A.ins4 ADD_immediate
           ( DSL.reg_x reg_tmp1,
