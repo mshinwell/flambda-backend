@@ -69,21 +69,19 @@ let rec eval_constant state ~all_sections const =
       | None -> None)
   in
   let lookup_symbol sym =
-    (* When generating PIC code (dlcode=true), global symbols should not be
-       resolved as they may be interposed at runtime. We must emit zeros and
-       let the linker handle them via relocations. *)
-    let is_global_symbol = Option.is_some (SS.find_symbol_offset_in_bytes state sym) in
-    if !Clflags.dlcode && is_global_symbol
-    then None
-    else
-      match SS.find_symbol_offset_in_bytes state sym with
-      | Some offset -> Some (Int64.of_int offset)
-      | None -> (
-        match
-          All_section_states.find_in_any_section all_sections (Symbol.Symbol sym)
-        with
-        | Some (offset, _section) -> Some (Int64.of_int offset)
-        | None -> None)
+    (* Note: We do NOT suppress global symbols here even in PIC mode (dlcode).
+       This lookup is used for evaluating constant expressions like
+       "symbol - label" which compute relative offsets at assembly time.
+       The dlcode check for absolute symbol references is handled separately
+       in is_absolute_symbol_reference. *)
+    match SS.find_symbol_offset_in_bytes state sym with
+    | Some offset -> Some (Int64.of_int offset)
+    | None -> (
+      match
+        All_section_states.find_in_any_section all_sections (Symbol.Symbol sym)
+      with
+      | Some (offset, _section) -> Some (Int64.of_int offset)
+      | None -> None)
   in
   let lookup_variable name =
     (* Check if this is a direct assignment (e.g., temp0 from .set) *)
