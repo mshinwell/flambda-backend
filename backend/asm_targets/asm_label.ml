@@ -37,15 +37,14 @@ type t =
   }
 
 let encode_label label =
-  match label with
-  | Int i -> string_of_int i
-  | String s -> s
+  match label with Int i -> string_of_int i | String s -> s
 
 include Identifiable.Make (struct
   type nonrec t = t
 
   (* Use encoded string for comparison to ensure Int 42 = String "42" *)
-  let compare t1 t2 = String.compare (encode_label t1.label) (encode_label t2.label)
+  let compare t1 t2 =
+    String.compare (encode_label t1.label) (encode_label t2.label)
 
   let equal t1 t2 = compare t1 t2 = 0
 

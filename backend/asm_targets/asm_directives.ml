@@ -252,7 +252,7 @@ module Directive = struct
     | New_label of label_or_symbol * thing_after_label
     | New_line
     | Private_extern of Asm_symbol.t
-    | Section of Asm_section.t * [ `First_occurrence | `Not_first_occurrence ]
+    | Section of Asm_section.t * [`First_occurrence | `Not_first_occurrence]
     | Size of Asm_symbol.t * Constant.t
     | Sleb128 of
         { constant : Constant.t;
@@ -403,24 +403,24 @@ module Directive = struct
     | New_label (Label lbl, _typ) -> bprintf buf "%s:" (Asm_label.encode lbl)
     | New_label (Symbol sym, _typ) -> bprintf buf "%s:" (Asm_symbol.encode sym)
     | New_line -> ()
-    | Section (section, first_occurrence) ->
+    | Section (section, first_occurrence) -> (
       let first_occurrence =
         match first_occurrence with
         | `First_occurrence -> true
         | `Not_first_occurrence -> false
       in
       let details = Asm_section.details section ~first_occurrence in
-      (match details.names with
+      match details.names with
       | [".data"] -> bprintf buf "\t.data"
       | [".text"] -> bprintf buf "\t.text"
-      | names ->
+      | names -> (
         bprintf buf "\t.section %s" (String.concat "," names);
         (match details.flags with
         | None -> ()
         | Some flags -> bprintf buf ",%S" flags);
         match details.args with
         | [] -> ()
-        | args -> bprintf buf ",%s" (String.concat "," args))
+        | args -> bprintf buf ",%s" (String.concat "," args)))
     | Space { bytes } -> (
       match TS.system () with
       | Solaris -> bprintf buf "\t.zero\t%d" bytes
@@ -439,7 +439,8 @@ module Directive = struct
     | File { file_num = Some file_num; filename } ->
       bprintf buf "\t.file\t%d\t\"%s\"" file_num
         (string_of_string_literal filename)
-    | Indirect_symbol sym -> bprintf buf "\t.indirect_symbol %s" (Asm_symbol.encode sym)
+    | Indirect_symbol sym ->
+      bprintf buf "\t.indirect_symbol %s" (Asm_symbol.encode sym)
     | Loc { file_num; line; col; discriminator } ->
       (* PR#7726: Location.none uses column -1, breaks LLVM assembler *)
       (* If we don't set the optional column field, debug_line program gets the
@@ -454,7 +455,8 @@ module Directive = struct
       in
       bprintf buf "\t.loc\t%d\t%d%a%a" file_num line print_col col
         print_discriminator discriminator
-    | Private_extern sym -> bprintf buf "\t.private_extern %s" (Asm_symbol.encode sym)
+    | Private_extern sym ->
+      bprintf buf "\t.private_extern %s" (Asm_symbol.encode sym)
     | Size (sym, c) ->
       bprintf buf "\t.size %s,%a" (Asm_symbol.encode sym) Constant.print c
       (* We use %Ld and not %Lx on Unix-like platforms to ensure that ".sleb128"
@@ -467,7 +469,8 @@ module Directive = struct
         comment
     | Type (target, typ) ->
       let typ = symbol_type_to_string typ in
-      let name = match target with
+      let name =
+        match target with
         | Label lbl -> Asm_label.encode lbl
         | Symbol sym -> Asm_symbol.encode sym
       in
@@ -874,10 +877,10 @@ let switch_to_section ?(emit_label_on_first_occurrence = false) section =
   in
   current_section_ref := Some section;
   emit (Section (section, first_occurrence));
-  (match first_occurrence with
-   | `First_occurrence when emit_label_on_first_occurrence ->
-     define_label (Asm_label.for_section section)
-   | `First_occurrence | `Not_first_occurrence -> ())
+  match first_occurrence with
+  | `First_occurrence when emit_label_on_first_occurrence ->
+    define_label (Asm_label.for_section section)
+  | `First_occurrence | `Not_first_occurrence -> ()
 
 let switch_to_section_raw ~names ~flags:_ ~args:_ ~is_delayed:_ =
   (* Convert names to Asm_section.t if possible *)

@@ -53,8 +53,7 @@ module Relocation = struct
     let target = target_symbol r in
     match lookup_target target with
     | None ->
-      Error
-        (Format.asprintf "Symbol not found: %a" Symbol.print_target target)
+      Error (Format.asprintf "Symbol not found: %a" Symbol.print_target target)
     | Some sym_addr ->
       let addend = Relocation.get_addend r.kind in
       let target_addr = Int64.add sym_addr (Int64.of_int addend) in
@@ -75,8 +74,7 @@ module Assembled_section = struct
 
   let relocations t = Section_state.relocations t
 
-  let find_symbol_offset t sym =
-    Section_state.find_symbol_offset_in_bytes t sym
+  let find_symbol_offset t sym = Section_state.find_symbol_offset_in_bytes t sym
 
   let find_label_offset t lbl = Section_state.find_label_offset_in_bytes t lbl
 

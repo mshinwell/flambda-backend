@@ -2240,8 +2240,7 @@ let emit_instr i =
         assert (not !Clflags.dlcode);
         (* see selection_utils.ml *)
         A.ins2 ADRP
-          ( DSL.reg_x reg_tmp1,
-            DSL.symbol ~offset:ofs (Needs_reloc PAGE) s );
+          (DSL.reg_x reg_tmp1, DSL.symbol ~offset:ofs (Needs_reloc PAGE) s);
         reg_tmp1
     in
     let default_addressing = DSL.addressing addressing_mode base in
@@ -2296,8 +2295,7 @@ let emit_instr i =
       | Ibased (s, ofs) ->
         assert (not !Clflags.dlcode);
         A.ins2 ADRP
-          ( DSL.reg_x reg_tmp1,
-            DSL.symbol ~offset:ofs (Needs_reloc PAGE) s );
+          (DSL.reg_x reg_tmp1, DSL.symbol ~offset:ofs (Needs_reloc PAGE) s);
         reg_tmp1
     in
     match size with

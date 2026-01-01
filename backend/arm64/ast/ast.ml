@@ -32,7 +32,6 @@
    permitted by the architecture, even though we don't yet use all of them. *)
 
 open! Int_replace_polymorphic_compare
-
 module Asm_label = Asm_targets.Asm_label
 module Asm_symbol = Asm_targets.Asm_symbol
 

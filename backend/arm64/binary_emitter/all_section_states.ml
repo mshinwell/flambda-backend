@@ -87,8 +87,8 @@ let iter_individual t ~f = Hashtbl.iter f t.individual_sections
 
 let fold_individual t ~init ~f = Hashtbl.fold f t.individual_sections init
 
-(* Search individual sections for a label or symbol. Returns (offset,
-   section) if found. *)
+(* Search individual sections for a label or symbol. Returns (offset, section)
+   if found. *)
 let find_in_any_individual_section t target =
   let result = ref None in
   Hashtbl.iter
@@ -102,8 +102,8 @@ let find_in_any_individual_section t target =
     t.individual_sections;
   !result
 
-(* Search individual sections for a label or symbol. Returns (offset,
-   section, state) if found. *)
+(* Search individual sections for a label or symbol. Returns (offset, section,
+   state) if found. *)
 let find_in_any_individual_section_with_state t target =
   let result = ref None in
   Hashtbl.iter
@@ -132,10 +132,10 @@ let find_in_any_section_with_state t target =
     t.sections;
   (* If not found in standard sections, search individual sections. *)
   (if Option.is_none !result
-   then
-     match find_in_any_individual_section_with_state t target with
-     | Some (offset, section, state) -> result := Some (offset, section, state)
-     | None -> ());
+  then
+    match find_in_any_individual_section_with_state t target with
+    | Some (offset, section, state) -> result := Some (offset, section, state)
+    | None -> ());
   !result
 
 (* Search all sections for a label or symbol. Returns (offset, section) if
@@ -152,10 +152,10 @@ let find_in_any_section t target =
     t.sections;
   (* If not found in standard sections, search individual sections. *)
   (if Option.is_none !result
-   then
-     match find_in_any_individual_section t target with
-     | Some (offset, section) -> result := Some (offset, section)
-     | None -> ());
+  then
+    match find_in_any_individual_section t target with
+    | Some (offset, section) -> result := Some (offset, section)
+    | None -> ());
   !result
 
 (* Reset all section offsets to 0 (for second pass). *)

@@ -136,7 +136,8 @@ let all_targets_with_addends (r : t) : (Symbol.target * int) list =
     [plus_target, 0; minus_target, 0]
   | R_AARCH64_PREL32 { section; addend } ->
     let section_name = Asm_targets.Asm_section.to_string section in
-    [Symbol (Asm_targets.Asm_symbol.create ~visibility:Global section_name), addend]
+    [ ( Symbol (Asm_targets.Asm_symbol.create ~visibility:Global section_name),
+        addend ) ]
 
 let is_got_reloc (r : t) =
   match r.kind with

@@ -80,8 +80,7 @@ let iter emitter ~all_sections ~on_insn ~on_directive =
       | Directive d ->
         (match[@warning "-4"] d with
         | Section (section, _) ->
-          current_state
-            := All_section_states.get_or_create all_sections section
+          current_state := All_section_states.get_or_create all_sections section
         | _ -> ());
         on_directive !current_state d;
         let offset_in_bytes = Section_state.offset_in_bytes !current_state in

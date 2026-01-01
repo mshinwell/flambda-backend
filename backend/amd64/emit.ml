@@ -263,8 +263,9 @@ let emit_jump s = I.jmp (rel_plt s)
 let domain_field f = mem64 QWORD (Domainstate.idx_of_field f * 8) (Scalar R14)
 
 let emit_cmm_symbol (s : Cmm.symbol) =
-  let sym = S.create ~visibility:(visibility_of_cmm_global s.sym_global)
-              s.sym_name in
+  let sym =
+    S.create ~visibility:(visibility_of_cmm_global s.sym_global) s.sym_name
+  in
   match (s.sym_global : Cmm.is_global) with
   | Global -> `Symbol sym
   (* This label is special in that it is not of the form "Lnumber". Instead, we
@@ -2573,8 +2574,9 @@ let fundecl fundecl =
 (* CR sspies: Share the [emit_item] code with the Arm backend in emitaux. *)
 let emit_item : Cmm.data_item -> unit = function
   | Cdefine_symbol s -> (
-    let sym = S.create ~visibility:(visibility_of_cmm_global s.sym_global)
-                s.sym_name in
+    let sym =
+      S.create ~visibility:(visibility_of_cmm_global s.sym_global) s.sym_name
+    in
     match s.sym_global with
     | Local -> D.define_label (L.create_string_unchecked Data (S.encode sym))
     | Global ->
@@ -3044,7 +3046,8 @@ let end_assembly () =
     D.comment "External functions";
     String.Set.iter
       (fun s ->
-        if not (String.Set.mem s !symbols_defined) then D.extrn (S.create_global s))
+        if not (String.Set.mem s !symbols_defined)
+        then D.extrn (S.create_global s))
       !symbols_used;
     symbols_used := String.Set.empty;
     symbols_defined := String.Set.empty);

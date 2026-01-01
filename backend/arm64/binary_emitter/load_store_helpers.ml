@@ -200,9 +200,8 @@ let encode_load_store_gp_sized :
     then Misc.fatal_errorf "%s does not support literal addressing" instr_name;
     match Section_state.find_target_offset_in_bytes state sym.target with
     | None ->
-      Misc.fatal_errorf
-        "%s (literal) references undefined symbol '%a' (rd=%s)" instr_name
-        Symbol.print_target sym.target (Reg.name rd)
+      Misc.fatal_errorf "%s (literal) references undefined symbol '%a' (rd=%s)"
+        instr_name Symbol.print_target sym.target (Reg.name rd)
     | Some target_offset ->
       let pc_relative_offset =
         target_offset - Section_state.offset_in_bytes state

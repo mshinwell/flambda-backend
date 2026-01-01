@@ -458,7 +458,7 @@ module Directive : sig
     | New_label of label_or_symbol * thing_after_label
     | New_line
     | Private_extern of Asm_symbol.t
-    | Section of Asm_section.t * [ `First_occurrence | `Not_first_occurrence ]
+    | Section of Asm_section.t * [`First_occurrence | `Not_first_occurrence]
     | Size of Asm_symbol.t * Constant.t
     | Sleb128 of
         { constant : Constant.t;

@@ -54,7 +54,8 @@ module type Relocation = sig
   (** For paired relocations, returns all symbols with their addends.
       On RELA platforms (Linux ELF), addends are stored in relocations.
       On REL platforms (macOS), addends are encoded in instructions. *)
-  val target_symbols_with_addends : t -> (Arm64_ast.Ast.Symbol.target * int) list
+  val target_symbols_with_addends :
+    t -> (Arm64_ast.Ast.Symbol.target * int) list
 
   (** Is this a GOT relocation? (JIT needs to know for GOT table building) *)
   val is_got_reloc : t -> bool

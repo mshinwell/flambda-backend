@@ -171,8 +171,7 @@ module Predef = struct
   let caml_raise_exn =
     create_without_encoding ~visibility:Global "caml_raise_exn"
 
-  let stapsdt_base =
-    create_without_encoding ~visibility:Global "_.stapsdt.base"
+  let stapsdt_base = create_without_encoding ~visibility:Global "_.stapsdt.base"
 
   let caml_probes_semaphore ~name =
     create_without_encoding ~visibility:Global ("caml_probes_semaphore_" ^ name)

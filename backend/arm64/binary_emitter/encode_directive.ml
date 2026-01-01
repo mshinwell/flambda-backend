@@ -70,10 +70,10 @@ let rec eval_constant state ~all_sections const =
   in
   let lookup_symbol sym =
     (* Note: We do NOT suppress global symbols here even in PIC mode (dlcode).
-       This lookup is used for evaluating constant expressions like
-       "symbol - label" which compute relative offsets at assembly time.
-       The dlcode check for absolute symbol references is handled separately
-       in is_absolute_symbol_reference. *)
+       This lookup is used for evaluating constant expressions like "symbol -
+       label" which compute relative offsets at assembly time. The dlcode check
+       for absolute symbol references is handled separately in
+       is_absolute_symbol_reference. *)
     match SS.find_symbol_offset_in_bytes state sym with
     | Some offset -> Some (Int64.of_int offset)
     | None -> (
@@ -305,11 +305,12 @@ let target_of_constant (cst : C.t) : Symbol.target option =
    efficient for JIT). *)
 let is_absolute_symbol_reference state ~all_sections ~current_section
     ~width_bytes (cst : C.t) =
-  if width_bytes <> 8 then None
+  if width_bytes <> 8
+  then None
   else
     match target_of_constant cst with
     | None -> None
-    | Some target ->
+    | Some target -> (
       let for_jit = All_section_states.for_jit all_sections in
       (* Check if symbol is in the same section *)
       let is_same_section =
@@ -319,8 +320,8 @@ let is_absolute_symbol_reference state ~all_sections ~current_section
       then
         if for_jit || !emit_relocs_for_all_symbol_refs
         then (
-          (* Emit relocation for all symbol references. Keep original target
-             in relocation for JIT use. The conversion to section+offset for
+          (* Emit relocation for all symbol references. Keep original target in
+             relocation for JIT use. The conversion to section+offset for
              verification is done in emit.ml *)
           SS.add_relocation_at_current_offset state
             ~reloc_kind:(R_AARCH64_ABS64 { target; addend = 0 });
@@ -336,11 +337,11 @@ let is_absolute_symbol_reference state ~all_sections ~current_section
              && not !emit_relocs_for_all_symbol_refs
           then None (* Same section after all, resolve at emit time *)
           else (
-            (* Keep original target in relocation for JIT use. The conversion
-               to section+offset for verification is done in emit.ml *)
+            (* Keep original target in relocation for JIT use. The conversion to
+               section+offset for verification is done in emit.ml *)
             SS.add_relocation_at_current_offset state
               ~reloc_kind:(R_AARCH64_ABS64 { target; addend = 0 });
-            Some 0L (* Emit zero, relocation will patch *))
+            Some 0L (* Emit zero, relocation will patch *)))
 
 (* Handle unresolved symbol reference by emitting zeros and recording a
    relocation for the linker to patch. *)
