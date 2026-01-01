@@ -82,7 +82,8 @@ let define_label t lbl =
   Asm_label.Tbl.replace t.label_offset_tbl lbl t.offset_in_bytes
 
 (* Mark a symbol as global. Called for Global and Weak directives. *)
-let mark_global t sym = t.global_symbols := Asm_symbol.Set.add sym !(t.global_symbols)
+let mark_global t sym =
+  t.global_symbols := Asm_symbol.Set.add sym !(t.global_symbols)
 
 (* Check if a symbol is explicitly global (has Global or Weak directive) *)
 let is_global t sym = Asm_symbol.Set.mem sym !(t.global_symbols)
