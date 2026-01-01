@@ -1470,7 +1470,9 @@ let assemble_line b loc ins =
       (get_symbol b (Asm_symbol.encode sym)).sy_type <- Some kind
     | Directive (D.Size (sym, cst)) -> (
         match eval_const b (Buffer.length b.buf) cst with
-        | Rint n -> (get_symbol b (Asm_symbol.encode sym)).sy_size <- Some (Int64.to_int n)
+        | Rint n ->
+            (get_symbol b (Asm_symbol.encode sym)).sy_size
+              <- Some (Int64.to_int n)
         | _ -> assert false)
     | Directive (D.Align { fill=data; bytes = n}) -> (
         (* TODO: Buffer.length = 0 => set section align *)
@@ -1717,7 +1719,8 @@ module For_jit = struct
       let target = string_to_target sym in
       match lookup_target target with
       | None ->
-        Error (Format.asprintf "Symbol not found: %a" Symbol.print_target target)
+        Error
+          (Format.asprintf "Symbol not found: %a" Symbol.print_target target)
       | Some target_addr ->
         let target_addr = Int64.add target_addr addend in
         (match r.Reloc.kind with
