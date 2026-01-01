@@ -179,7 +179,9 @@ let encode_logical_immediate_fields (x : nativeint) : int * int * int =
       (* Pattern starts with one: check if it's 1+0+1* (ones wrap around) *)
       let ones_from_lsb = count_ones pattern 0 0 in
       if ones_from_lsb = len
-      then 0, len (* All ones - shouldn't happen for valid logical immediate *)
+      then
+        (* XXX mshinwell: should this be a failure case? *)
+        0, len (* All ones - shouldn't happen for valid logical immediate *)
       else
         let first_zero = find_first_zero pattern 0 in
         let shifted_for_search =
