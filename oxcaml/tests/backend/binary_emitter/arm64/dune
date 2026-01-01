@@ -1,3 +1,0 @@
-; Tests for ARM64 binary emitter
-; Binary emitter verification is now done via OCAMLPARAM='_,verify-binary-emitter=1'
-; rather than via compare_sections.sh
