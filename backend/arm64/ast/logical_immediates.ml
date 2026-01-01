@@ -106,6 +106,7 @@ let is_logical_immediate x =
    - imms encodes both the element size and number of 1s
 
    - immr encodes the rotation amount *)
+
 (* Create a mask with [n] low bits set to 1. For n=64, shift_left 1n 64 wraps to
    1 due to modular shift on 64-bit nativeint, so we handle this case specially
    by returning -1n (all bits set). *)
@@ -203,10 +204,20 @@ let encode_logical_immediate_fields (x : nativeint) : int * int * int =
      to get the canonical form, the inverse is (len - rotation) mod len. *)
   let immr = (len - rotation) mod len in
   (* imms encoding: the highest 0 bit indicates element size, remaining bits
-     encode (ones - 1). For N=0: - 32-bit element: imms = 0xxxxx (bit 5 = 0,
-     bits 0-4 for ones) - 16-bit element: imms = 10xxxx (bits 0-3 for ones) -
-     8-bit element: imms = 110xxx (bits 0-2 for ones) - 4-bit element: imms =
-     1110xx (bits 0-1 for ones) - 2-bit element: imms = 11110x (bit 0 for ones)
+     encode (ones - 1).
+
+     For N=0:
+
+     - 32-bit element: imms = 0xxxxx (bit 5 = 0, bits 0-4 for ones)
+
+     - 16-bit element: imms = 10xxxx (bits 0-3 for ones)
+
+     - 8-bit element: imms = 110xxx (bits 0-2 for ones)
+
+     - 4-bit element: imms = 1110xx (bits 0-1 for ones)
+
+     - 2-bit element: imms = 11110x (bit 0 for ones).
+
      For N=1 (64-bit), all 6 bits encode ones. *)
   let size_encoding =
     match len with
