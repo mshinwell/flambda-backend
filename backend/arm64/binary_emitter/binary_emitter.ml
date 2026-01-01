@@ -98,10 +98,14 @@ let compute_label_offsets emitter ~all_sections =
       match directive with
       | New_label (Label lbl, _) -> Section_state.define_label state lbl
       | New_label (Symbol sym, _) -> Section_state.define_symbol state sym
-      | Global sym -> Section_state.define_symbol state sym
+      | Global sym ->
+        Section_state.define_symbol state sym;
+        Section_state.mark_global state sym
       (* Weak symbols also have symbol table entries on ELF, so track them
          too *)
-      | Weak sym -> Section_state.define_symbol state sym
+      | Weak sym ->
+        Section_state.define_symbol state sym;
+        Section_state.mark_global state sym
       | Direct_assignment (name, expr) ->
         All_section_states.add_direct_assignment all_sections name expr
       (* Directives that don't define labels or symbols *)

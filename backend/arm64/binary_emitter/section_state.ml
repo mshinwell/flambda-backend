@@ -41,6 +41,10 @@ type t =
     mutable offset_in_bytes : int;
     symbol_offset_tbl : int Asm_symbol.Tbl.t;
     label_offset_tbl : int Asm_label.Tbl.t;
+    (* Tracks symbols that are explicitly global (via Global/Weak directives).
+       These get symbol table entries in ELF. File-scope symbols defined only
+       via New_label are not in this set. *)
+    global_symbols : Asm_symbol.Set.t ref;
     mutable relocations : Relocation.t list;
     mutable patches : (int * patch_size * int64) list
   }
@@ -50,6 +54,7 @@ let create () =
     offset_in_bytes = 0;
     symbol_offset_tbl = Asm_symbol.Tbl.create 16;
     label_offset_tbl = Asm_label.Tbl.create 16;
+    global_symbols = ref Asm_symbol.Set.empty;
     relocations = [];
     patches = []
   }
@@ -75,6 +80,12 @@ let define_symbol t sym =
 
 let define_label t lbl =
   Asm_label.Tbl.replace t.label_offset_tbl lbl t.offset_in_bytes
+
+(* Mark a symbol as global. Called for Global and Weak directives. *)
+let mark_global t sym = t.global_symbols := Asm_symbol.Set.add sym !(t.global_symbols)
+
+(* Check if a symbol is explicitly global (has Global or Weak directive) *)
+let is_global t sym = Asm_symbol.Set.mem sym !(t.global_symbols)
 
 let find_symbol_offset_in_bytes t sym =
   Asm_symbol.Tbl.find_opt t.symbol_offset_tbl sym

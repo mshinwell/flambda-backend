@@ -221,10 +221,12 @@ let encode_target (target : Symbol.target) : string =
   | Label lbl -> Asm_label.encode lbl
   | Symbol sym -> Asm_symbol.encode sym
 
-(* Check if a target is a global symbol in the given state *)
+(* Check if a target is a global symbol in the given state.
+   Only symbols explicitly marked as global (via Global or Weak directives)
+   return true. File-scope symbols defined only via New_label return false. *)
 let is_global_in_state state (target : Symbol.target) : bool =
   match target with
-  | Symbol sym -> Option.is_some (SS.find_symbol_offset_in_bytes state sym)
+  | Symbol sym -> SS.is_global state sym
   | Label _ -> false
 
 (* On Linux ELF, local symbols don't have symbol table entries and the assembler

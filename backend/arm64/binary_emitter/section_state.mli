@@ -56,6 +56,14 @@ val define_symbol : t -> Asm_symbol.t -> unit
 (** Define a label at the current offset. *)
 val define_label : t -> Asm_label.t -> unit
 
+(** Mark a symbol as global (called for Global and Weak directives).
+    Global symbols get symbol table entries in ELF. *)
+val mark_global : t -> Asm_symbol.t -> unit
+
+(** Check if a symbol is explicitly global (has Global or Weak directive).
+    File-scope symbols defined only via New_label return false. *)
+val is_global : t -> Asm_symbol.t -> bool
+
 (** Find the offset of a symbol. *)
 val find_symbol_offset_in_bytes : t -> Asm_symbol.t -> int option
 

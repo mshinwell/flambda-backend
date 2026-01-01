@@ -98,9 +98,12 @@ let primary_target (r : t) : Symbol.target =
     target
   | R_AARCH64_PREL32_PAIR { plus_target; _ } -> plus_target
   | R_AARCH64_PREL32 { section; _ } ->
-    (* Section names are treated as global symbols *)
+    (* Section names are treated as global symbols. Use create_without_encoding
+       since section names from Function_text are already encoded. *)
     let section_name = Asm_targets.Asm_section.to_string section in
-    Symbol (Asm_targets.Asm_symbol.create ~visibility:Global section_name)
+    Symbol
+      (Asm_targets.Asm_symbol.create_without_encoding ~visibility:Global
+         section_name)
 
 let all_targets (r : t) : Symbol.target list =
   match r.kind with
@@ -118,7 +121,9 @@ let all_targets (r : t) : Symbol.target list =
     [plus_target; minus_target]
   | R_AARCH64_PREL32 { section; _ } ->
     let section_name = Asm_targets.Asm_section.to_string section in
-    [Symbol (Asm_targets.Asm_symbol.create ~visibility:Global section_name)]
+    [ Symbol
+        (Asm_targets.Asm_symbol.create_without_encoding ~visibility:Global
+           section_name) ]
 
 let all_targets_with_addends (r : t) : (Symbol.target * int) list =
   match r.kind with
@@ -136,7 +141,9 @@ let all_targets_with_addends (r : t) : (Symbol.target * int) list =
     [plus_target, 0; minus_target, 0]
   | R_AARCH64_PREL32 { section; addend } ->
     let section_name = Asm_targets.Asm_section.to_string section in
-    [ ( Symbol (Asm_targets.Asm_symbol.create ~visibility:Global section_name),
+    [ ( Symbol
+          (Asm_targets.Asm_symbol.create_without_encoding ~visibility:Global
+             section_name),
         addend ) ]
 
 let is_got_reloc (r : t) =
