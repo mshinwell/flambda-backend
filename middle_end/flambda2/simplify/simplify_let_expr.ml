@@ -480,20 +480,8 @@ let simplify_let0 ~simplify_expr ~simplify_function_body dacc let_expr
          be always used, leading to the free_names in their defining expressions
          to be considered as used unconditionally. *)
       let closure_info = DE.closure_info (DA.denv dacc) in
-      (* Next remember any lifted constants that were generated during the
-         simplification of the defining expression and sort them, since they may
-         be mutually recursive. Then add back in to [dacc] the
-         [prior_lifted_constants] remembered above. This results in the
-         definitions and types for all these constants being available at a
-         subsequent [Let_cont]. At such a point, [dacc] will be queried to
-         retrieve all of the constants, which are then manually transferred into
-         the computed [dacc] at the join point for subsequent simplification of
-         the continuation handler(s).
-
-         Note that no lifted constants are ever placed during the simplification
-         of the defining expression. (Not even in the case of a
-         [Set_of_closures] binding, since "let symbol" is disallowed under a
-         lambda.) *)
+      (* XXX is lifted_constants_from_defining_expr needed? From what gbury says
+         it sounds like we can avoid this. *)
       let lifted_constants_from_defining_expr = DA.get_lifted_constants dacc in
       let dacc =
         DA.add_to_lifted_constant_accumulator dacc prior_lifted_constants
