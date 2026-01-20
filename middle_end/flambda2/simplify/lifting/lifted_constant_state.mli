@@ -39,6 +39,8 @@ val all_defined_symbols : t -> Symbol.Set.t
 
 val add_to_denv : ?maybe_already_defined:unit -> DE.t -> t -> DE.t
 
-type sort_result = private { innermost_first : LC.t array }
+type sort_result = private { innermost_first : LC.t list }
 
 val sort : t -> sort_result
+
+val create_sort_result : LC.t list -> sort_result

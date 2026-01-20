@@ -47,7 +47,7 @@ let [@ocamlformat "disable"] print ppf
       %a\
       )@]"
     UE.print uenv
-    (Array.length lifted_constants.innermost_first)
+    (List.length lifted_constants.innermost_first)
     Name_occurrences.print name_occurrences
     Cost_metrics.print cost_metrics
     (Or_unknown.print Slot_offsets.print) slot_offsets

@@ -24,7 +24,9 @@ open! Simplify_import
    constant must be placed here if:
    - It defines a symbol that is being bound here, or
    - It depends on a symbol that is being bound here (and thus cannot be moved
-     earlier, as the symbol wouldn't be in scope). *)
+     earlier, as the symbol wouldn't be in scope).
+
+   Returns the definitions to place and the remaining lifted constants. *)
 let compute_definitions_to_place bound_pattern
     (lifted_constants : LCS.sort_result) =
   (* Extract the symbols bound by the pattern *)
@@ -35,26 +37,28 @@ let compute_definitions_to_place bound_pattern
       ~code_id:(fun acc _ -> acc)
   in
   if Symbol.Set.is_empty initial_needed
-  then []
+  then [], lifted_constants
   else
     (* Iterate backwards (outermost to innermost) using fold_right *)
-    Array.fold_right
-      (fun lc (needed, acc) ->
-        let defined_symbols = LC.all_defined_symbols lc in
-        let free_symbols = NO.symbols (LC.free_names_of_defining_exprs lc) in
-        let defines_needed =
-          not (Symbol.Set.disjoint defined_symbols needed)
-        in
-        let depends_on_needed =
-          not (Symbol.Set.disjoint free_symbols needed)
-        in
-        if defines_needed || depends_on_needed
-        then
-          let needed = Symbol.Set.union needed defined_symbols in
-          needed, LC.definitions lc @ acc
-        else needed, acc)
-      lifted_constants.innermost_first (initial_needed, [])
-    |> snd
+    let _needed, definitions_to_place, remaining =
+      List.fold_right
+        (fun lc (needed, to_place, remaining) ->
+          let defined_symbols = LC.all_defined_symbols lc in
+          let free_symbols = NO.symbols (LC.free_names_of_defining_exprs lc) in
+          let defines_needed =
+            not (Symbol.Set.disjoint defined_symbols needed)
+          in
+          let depends_on_needed =
+            not (Symbol.Set.disjoint free_symbols needed)
+          in
+          if defines_needed || depends_on_needed
+          then
+            let needed = Symbol.Set.union needed defined_symbols in
+            needed, LC.definitions lc @ to_place, remaining
+          else needed, to_place, lc :: remaining)
+        lifted_constants.innermost_first (initial_needed, [], [])
+    in
+    definitions_to_place, LCS.create_sort_result remaining
 
 let keep_lifted_constant_only_if_used uacc acc lifted_constant =
   let bound = LC.bound_static lifted_constant in

@@ -193,7 +193,7 @@ let remove_values_not_in_domain (m : CIS.Set.t CIS.Lmap.t) =
       CIS.Set.filter (fun value -> CIS.Set.mem value domain) values)
     m
 
-type sort_result = { innermost_first : LC.t array }
+type sort_result = { innermost_first : LC.t list }
 
 let sort0 t =
   (* The various lifted constants may exhibit recursion between themselves
@@ -217,7 +217,8 @@ let sort0 t =
     CIS.Lmap.bindings lifted_constants_dep_graph
     |> SCC_lifted_constants
        .stable_connected_components_sorted_from_roots_to_leaf
-    |> ArrayLabels.map ~f:(fun (group : SCC_lifted_constants.component) ->
+    |> Array.to_list
+    |> ListLabels.map ~f:(fun (group : SCC_lifted_constants.component) ->
         let code_id_or_symbols =
           match group with
           | No_loop code_id_or_symbol -> [code_id_or_symbol]
@@ -250,6 +251,8 @@ let sort0 t =
 
 let sort t =
   match t with
-  | Empty -> { innermost_first = [||] }
-  | Leaf const -> { innermost_first = [| const |] }
+  | Empty -> { innermost_first = [] }
+  | Leaf const -> { innermost_first = [const] }
   | Leaf_array _ | Union _ -> sort0 t
+
+let create_sort_result innermost_first = { innermost_first }
