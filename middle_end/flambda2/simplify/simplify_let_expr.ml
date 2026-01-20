@@ -85,8 +85,8 @@ let is_lifted_constant_used uacc lifted_constant =
   in
   symbols_live || code_ids_live
 
-let rebuild_let simplify_named_result removed_operations ~rewrite_id
-    ~(closure_info : Closure_info.t) ~body uacc ~after_rebuild =
+let rebuild_let simplify_named_result removed_operations ~rewrite_id ~body uacc
+    ~after_rebuild =
   let uacc = UA.notify_removed ~operation:removed_operations uacc in
   let bindings =
     Simplify_named_result.bindings_to_place simplify_named_result
@@ -320,34 +320,35 @@ let rebuild_let simplify_named_result removed_operations ~rewrite_id
               ) ) ->
           Misc.fatal_errorf "Prim_rewrite applied to a non-prim Named.t"))
   in
-  (* Determine which lifted constants need to be placed based on the symbols
-     being bound by these bindings. *)
-  let bound_symbols = bound_symbols_of_bindings bindings in
-  let lifted_constants_to_place, remaining_lifted_constants =
-    compute_lifted_constants_to_place ~bound_symbols
-      (UA.lifted_constants_for_placement uacc)
-  in
-  (* Filter lifted constants to keep only those that are used. This must be done
-     to stay in sync with Data_flow. We only filter when not in a closure since
-     constants inside closures will be placed at toplevel later. *)
-  let lifted_constants_to_place =
-    match Closure_info.in_or_out_of_closure closure_info with
-    | In_a_closure -> lifted_constants_to_place
-    | Not_in_a_closure ->
-      List.filter (is_lifted_constant_used uacc) lifted_constants_to_place
-  in
-  let uacc =
-    UA.with_lifted_constants_for_placement uacc remaining_lifted_constants
-  in
   (* First create the let bindings around the body *)
   let body, uacc =
     EB.make_new_let_bindings uacc ~bindings_outermost_first:bindings ~body
   in
-  (* Then place the lifted constants that need to be placed here *)
+  (* Determine which lifted constants need to be placed based on the symbols
+     being bound by these bindings. Only place constants when at toplevel; when
+     inside a closure, constants are accumulated and will be placed at toplevel
+     later. *)
   let body, uacc =
-    ListLabels.fold_left lifted_constants_to_place ~init:(body, uacc)
-      ~f:(fun (body, uacc) lifted_const ->
-        EB.create_let_symbols uacc lifted_const ~body)
+    match UA.lifted_constants uacc with
+    | In_a_closure _ -> body, uacc
+    | At_toplevel _ ->
+      let bound_symbols = bound_symbols_of_bindings bindings in
+      let lifted_constants_to_place, remaining_lifted_constants =
+        compute_lifted_constants_to_place ~bound_symbols
+          (UA.lifted_constants_for_placement uacc)
+      in
+      (* Filter lifted constants to keep only those that are used. This must be
+         done to stay in sync with Data_flow. *)
+      let lifted_constants_to_place =
+        List.filter (is_lifted_constant_used uacc) lifted_constants_to_place
+      in
+      let uacc =
+        UA.with_lifted_constants_for_placement uacc remaining_lifted_constants
+      in
+      (* Place the lifted constants that need to be placed here *)
+      ListLabels.fold_left lifted_constants_to_place ~init:(body, uacc)
+        ~f:(fun (body, uacc) lifted_const ->
+          EB.create_let_symbols uacc lifted_const ~body)
   in
   after_rebuild body uacc
 
@@ -522,8 +523,8 @@ let simplify_let0 ~simplify_expr ~simplify_function_body dacc let_expr
       let down_to_up dacc ~rebuild:rebuild_body =
         let rebuild uacc ~after_rebuild =
           let after_rebuild body uacc =
-            rebuild_let simplify_named_result removed_operations ~closure_info
-              ~body uacc ~after_rebuild ~rewrite_id
+            rebuild_let simplify_named_result removed_operations ~body uacc
+              ~after_rebuild ~rewrite_id
           in
           rebuild_body uacc ~after_rebuild
         in

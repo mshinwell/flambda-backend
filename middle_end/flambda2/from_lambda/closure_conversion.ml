@@ -3996,37 +3996,6 @@ let close_program (type mode) ~(mode : mode Flambda_features.mode)
     | Some [approx] -> approx
     | _ -> Value_approximation.Unknown Flambda_kind.value
   in
-  (* We must make sure there is always an outer [Let_symbol] binding so that
-     lifted constants not in the scope of any other [Let_symbol] binding get put
-     into the term and not dropped. Adding this extra binding, which will
-     actually be removed by the simplifier, avoids a special case. *)
-  let acc, body =
-    match Acc.declared_symbols acc with
-    | _ :: _ -> acc, body
-    | [] ->
-      (* CR vlaviron/mshinwell: Maybe this could use an empty array.
-         Furthermore, can this hack be removed? *)
-      (* This can't use [register_const] because:
-
-         - we have already called [bind_static_consts_and_code]; and
-
-         - this symbol definition must be the very first. *)
-      let acc, symbol = manufacture_symbol acc "first_const" in
-      let bound_static =
-        Bound_static.singleton (Bound_static.Pattern.block_like symbol)
-      in
-      let static_const =
-        Static_const.block Tag.Scannable.zero Immutable Value_only []
-      in
-      let defining_expr =
-        Static_const_group.create
-          [Static_const_or_code.create_static_const static_const]
-        |> Named.create_static_consts
-      in
-      Let_with_acc.create acc
-        (Bound_pattern.static bound_static)
-        defining_expr ~body
-  in
   let symbols_approximations =
     Symbol.Map.add module_symbol module_block_approximation
       (Acc.symbol_approximations acc)

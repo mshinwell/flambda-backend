@@ -122,8 +122,12 @@ let speculative_inlining dacc ~apply ~function_type ~simplify_expr ~return_arity
           UA.create ~flow_result ~compute_slot_offsets:false uenv dacc
         in
         rebuild uacc ~after_rebuild:(fun expr uacc ->
-            (* Place any remaining lifted constants *)
-            Simplify_common.place_all_remaining_lifted_constants expr uacc))
+            (* Place any remaining lifted constants, but only when at
+               toplevel *)
+            match UA.lifted_constants uacc with
+            | In_a_closure _ -> expr, uacc
+            | At_toplevel _ ->
+              Simplify_common.place_all_remaining_lifted_constants expr uacc))
   in
   UA.cost_metrics uacc
 
