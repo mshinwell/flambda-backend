@@ -35,18 +35,9 @@ val cost_metrics : t -> Cost_metrics.t
 
 val code_age_relation : t -> Code_age_relation.t
 
-(** Return the lifted constants that still need to be placed (i.e. have
-    [Let]-expressions made for them) on the upwards traversal. *)
-val lifted_constants : t -> Lifted_constant_state.t
-
-val get_and_clear_lifted_constants : t -> t * Lifted_constant_state.t
-
-(** Replace the accumulator of lifted constants. *)
-val with_lifted_constants : t -> Lifted_constant_state.t -> t
-
-val no_lifted_constants : t -> bool
-
-val add_lifted_constant : t -> Lifted_constant.t -> t
+(** Return the lifted constants that need to be placed (i.e. have
+    [Let]-expressions made for them), sorted in dependency order. *)
+val lifted_constants : t -> Lifted_constant_state.sort_result
 
 (** Map the environment component of the given upwards accumulator. *)
 val map_uenv : t -> f:(Upwards_env.t -> Upwards_env.t) -> t

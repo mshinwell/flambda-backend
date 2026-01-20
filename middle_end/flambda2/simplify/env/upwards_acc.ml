@@ -24,7 +24,7 @@ module UE = Upwards_env
 type t =
   { uenv : UE.t;
     creation_dacc : DA.t;
-    lifted_constants : LCS.t;
+    lifted_constants : LCS.sort_result;
     all_code : Exported_code.t;
     name_occurrences : Name_occurrences.t;
     cost_metrics : Cost_metrics.t;
@@ -39,7 +39,7 @@ let [@ocamlformat "disable"] print ppf
       } =
   Format.fprintf ppf "@[<hov 1>(\
       @[<hov 1>(uenv@ %a)@]@ \
-      @[<hov 1>(lifted_constants@ %a)@]@ \
+      @[<hov 1>(num_lifted_constants@ %d)@]@ \
       @[<hov 1>(name_occurrences@ %a)@]@ \
       @[<hov 1>(cost_metrics@ %a)@]@ \
       @[<hov 1>(slot_offsets@ %a@)@]@ \
@@ -47,7 +47,7 @@ let [@ocamlformat "disable"] print ppf
       %a\
       )@]"
     UE.print uenv
-    LCS.print lifted_constants
+    (Array.length lifted_constants.innermost_first)
     Name_occurrences.print name_occurrences
     Cost_metrics.print cost_metrics
     (Or_unknown.print Slot_offsets.print) slot_offsets
@@ -63,7 +63,7 @@ let create ~flow_result ~compute_slot_offsets uenv dacc =
   in
   { uenv;
     creation_dacc = dacc;
-    lifted_constants = LCS.empty;
+    lifted_constants = LCS.sort (DA.get_lifted_constants dacc);
     all_code = Exported_code.empty;
     name_occurrences = Name_occurrences.empty;
     (* [used_value_slots] must be kept separate from the normal free names
@@ -84,19 +84,9 @@ let code_age_relation t = TE.code_age_relation (DA.typing_env t.creation_dacc)
 
 let lifted_constants t = t.lifted_constants
 
-let get_and_clear_lifted_constants t =
-  { t with lifted_constants = LCS.empty }, t.lifted_constants
-
-let add_lifted_constant t const =
-  { t with lifted_constants = LCS.add t.lifted_constants const }
-
 let cost_metrics t = t.cost_metrics
 
 let are_rebuilding_terms t = DE.are_rebuilding_terms (DA.denv t.creation_dacc)
-
-let with_lifted_constants t lifted_constants = { t with lifted_constants }
-
-let no_lifted_constants t = LCS.is_empty t.lifted_constants
 
 let map_uenv t ~f = { t with uenv = f t.uenv }
 
