@@ -46,3 +46,5 @@ val sort : t -> sort_result
 val create_sort_result : LC.t list -> sort_result
 
 val sort_result_is_empty : sort_result -> bool
+
+val sort_result_to_t : sort_result -> t

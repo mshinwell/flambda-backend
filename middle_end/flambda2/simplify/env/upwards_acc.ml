@@ -24,7 +24,8 @@ module UE = Upwards_env
 type t =
   { uenv : UE.t;
     creation_dacc : DA.t;
-    lifted_constants : LCS.sort_result;
+    lifted_constants : LCS.t;
+    lifted_constants_sorted : LCS.sort_result;
     all_code : Exported_code.t;
     name_occurrences : Name_occurrences.t;
     cost_metrics : Cost_metrics.t;
@@ -34,8 +35,9 @@ type t =
   }
 
 let [@ocamlformat "disable"] print ppf
-      { uenv; creation_dacc = _; lifted_constants; name_occurrences;
-        all_code = _; cost_metrics; slot_offsets; flow_result; resimplify;
+      { uenv; creation_dacc = _; lifted_constants = _; lifted_constants_sorted;
+        name_occurrences; all_code = _; cost_metrics; slot_offsets; flow_result;
+        resimplify;
       } =
   Format.fprintf ppf "@[<hov 1>(\
       @[<hov 1>(uenv@ %a)@]@ \
@@ -47,7 +49,7 @@ let [@ocamlformat "disable"] print ppf
       %a\
       )@]"
     UE.print uenv
-    (List.length lifted_constants.innermost_first)
+    (List.length lifted_constants_sorted.innermost_first)
     Name_occurrences.print name_occurrences
     Cost_metrics.print cost_metrics
     (Or_unknown.print Slot_offsets.print) slot_offsets
@@ -61,9 +63,11 @@ let create ~flow_result ~compute_slot_offsets uenv dacc =
   let slot_offsets : _ Or_unknown.t =
     if compute_slot_offsets then Known Slot_offsets.empty else Unknown
   in
+  let lifted_constants = DA.get_lifted_constants dacc in
   { uenv;
     creation_dacc = dacc;
-    lifted_constants = LCS.sort (DA.get_lifted_constants dacc);
+    lifted_constants;
+    lifted_constants_sorted = LCS.sort lifted_constants;
     all_code = Exported_code.empty;
     name_occurrences = Name_occurrences.empty;
     (* [used_value_slots] must be kept separate from the normal free names
@@ -84,7 +88,17 @@ let code_age_relation t = TE.code_age_relation (DA.typing_env t.creation_dacc)
 
 let lifted_constants t = t.lifted_constants
 
-let with_lifted_constants t lifted_constants = { t with lifted_constants }
+let lifted_constants_sorted t = t.lifted_constants_sorted
+
+let with_lifted_constants_sorted t lifted_constants_sorted =
+  { t with lifted_constants_sorted }
+
+let add_lifted_constant t lc =
+  let lifted_constants = LCS.add t.lifted_constants lc in
+  let lifted_constants_sorted =
+    LCS.create_sort_result (lc :: t.lifted_constants_sorted.innermost_first)
+  in
+  { t with lifted_constants; lifted_constants_sorted }
 
 let cost_metrics t = t.cost_metrics
 

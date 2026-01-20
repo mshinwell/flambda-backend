@@ -325,7 +325,8 @@ let rebuild_let simplify_named_result removed_operations ~rewrite_id
      being bound by these bindings. *)
   let bound_symbols = bound_symbols_of_bindings bindings in
   let lifted_constants_to_place, remaining_lifted_constants =
-    compute_lifted_constants_to_place ~bound_symbols (UA.lifted_constants uacc)
+    compute_lifted_constants_to_place ~bound_symbols
+      (UA.lifted_constants_sorted uacc)
   in
   (* Filter lifted constants to keep only those that are used. This must be
      done to stay in sync with Data_flow. We only filter when not in a closure
@@ -336,7 +337,7 @@ let rebuild_let simplify_named_result removed_operations ~rewrite_id
     | Not_in_a_closure ->
       List.filter (is_lifted_constant_used uacc) lifted_constants_to_place
   in
-  let uacc = UA.with_lifted_constants uacc remaining_lifted_constants in
+  let uacc = UA.with_lifted_constants_sorted uacc remaining_lifted_constants in
   (* First create the let bindings around the body *)
   let body, uacc =
     EB.make_new_let_bindings uacc ~bindings_outermost_first:bindings ~body

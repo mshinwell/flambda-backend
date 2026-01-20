@@ -544,7 +544,7 @@ let prepare_to_rebuild_body (data : prepare_to_rebuild_body_data) uacc
   in
   rebuild_body uacc ~after_rebuild:(rebuild_let_cont data ~after_rebuild)
 
-let add_lets_around_handler cont at_unit_toplevel uacc handler =
+let add_lets_around_handler cont uacc handler =
   let Flow_types.Alias_result.{ continuation_parameters; _ } =
     UA.continuation_param_aliases uacc
   in
@@ -575,22 +575,6 @@ let add_lets_around_handler cont at_unit_toplevel uacc handler =
         in
         handler, uacc)
       continuation_parameters.lets_to_introduce (handler, uacc)
-  in
-  let handler, uacc =
-    (* We might need to place lifted constants now, as they could depend on
-       continuation parameters. As such we must also compute the unused
-       parameters after placing any constants! *)
-    if not at_unit_toplevel
-    then handler, uacc
-    else
-      let uacc, lifted_constants_from_body =
-        UA.get_and_clear_lifted_constants uacc
-      in
-      EB.place_lifted_constants uacc
-        ~lifted_constants_from_defining_expr:LCS.empty
-        ~lifted_constants_from_body
-        ~put_bindings_around_body:(fun uacc ~body -> body, uacc)
-        ~body:handler
   in
   let free_names = UA.name_occurrences uacc in
   let cost_metrics = UA.cost_metrics uacc in
@@ -624,7 +608,7 @@ let remove_params params free_names =
   ListLabels.fold_left (Bound_parameters.to_list params) ~init:free_names
     ~f:(fun free_names param -> NO.remove_var free_names ~var:(BP.var param))
 
-let rebuild_single_non_recursive_handler ~at_unit_toplevel
+let rebuild_single_non_recursive_handler ~at_unit_toplevel:_
     ~is_single_inlinable_use ~original_invariant_params cont
     (handler_to_rebuild : handler_to_rebuild) uacc k =
   (* Clear existing name occurrences & cost metrics *)
@@ -648,7 +632,7 @@ let rebuild_single_non_recursive_handler ~at_unit_toplevel
   in
   rebuild_handler uacc ~after_rebuild:(fun handler uacc ->
       let handler, uacc, free_names, cost_metrics =
-        add_lets_around_handler cont at_unit_toplevel uacc handler
+        add_lets_around_handler cont uacc handler
       in
       let extra_params_and_args =
         EPA.concat ~inner:extra_params_and_args
@@ -768,7 +752,7 @@ let rebuild_single_recursive_handler cont
   let uacc = UA.clear_name_occurrences (UA.clear_cost_metrics uacc) in
   handler_to_rebuild.rebuild_handler uacc ~after_rebuild:(fun handler uacc ->
       let handler, uacc, free_names, cost_metrics =
-        add_lets_around_handler cont false uacc handler
+        add_lets_around_handler cont uacc handler
       in
       let rewrite =
         match UE.find_apply_cont_rewrite (UA.uenv uacc) cont with

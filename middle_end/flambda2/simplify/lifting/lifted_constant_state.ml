@@ -259,3 +259,5 @@ let create_sort_result innermost_first = { innermost_first }
 
 let sort_result_is_empty { innermost_first } =
   match innermost_first with [] -> true | _ :: _ -> false
+
+let sort_result_to_t { innermost_first } = singleton_list_of_constants innermost_first

@@ -17,7 +17,6 @@
 open! Flambda.Import
 module BP = Bound_parameter
 module LC = Lifted_constant
-module LCS = Lifted_constant_state
 module P = Flambda_primitive
 module RE = Rebuilt_expr
 module UA = Upwards_acc
@@ -440,28 +439,6 @@ let create_let_symbols uacc lifted_constant ~body =
          created for the first time here.*)
       expr, uacc)
     symbol_projections (expr, uacc)
-
-let place_lifted_constants uacc ~lifted_constants_from_defining_expr
-    ~lifted_constants_from_body ~put_bindings_around_body ~body =
-  (* Lifted constants are placed as soon as they reach toplevel. *)
-  if not (UA.no_lifted_constants uacc)
-  then
-    Misc.fatal_errorf
-      "All lifted constants of the body should have been\n\
-      \                        removed from the uacc";
-  let place_constants uacc ~around constants =
-    let sorted = LCS.sort constants in
-    ArrayLabels.fold_left sorted.innermost_first ~init:(around, uacc)
-      ~f:(fun (body, uacc) lifted_const ->
-        create_let_symbols uacc lifted_const ~body)
-  in
-  (* Place constants whose definitions may depend on the bound name(s) of the
-     current binding(s) to be introduced by [put_bindings_around_body]. *)
-  let body, uacc =
-    place_constants uacc ~around:body lifted_constants_from_body
-  in
-  let body, uacc = put_bindings_around_body uacc ~body in
-  place_constants uacc ~around:body lifted_constants_from_defining_expr
 
 let create_switch uacc ~condition_dbg ~scrutinee ~arms =
   if Target_ocaml_int.Map.cardinal arms < 1
