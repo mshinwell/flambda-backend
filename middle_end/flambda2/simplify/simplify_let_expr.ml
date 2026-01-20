@@ -53,19 +53,6 @@ let compute_lifted_constants_to_place ~bound_symbols
     in
     to_place, LCS.create_sort_result remaining
 
-(* Extract all bound symbols from a list of bindings *)
-let bound_symbols_of_bindings bindings =
-  List.fold_left
-    (fun acc (binding : Expr_builder.binding_to_place) ->
-      match binding with
-      | Delete_binding _ -> acc
-      | Keep_binding { let_bound; _ } ->
-        Bound_pattern.fold_all_bound_names let_bound ~init:acc
-          ~var:(fun acc _ -> acc)
-          ~symbol:(fun acc sym -> Symbol.Set.add sym acc)
-          ~code_id:(fun acc _ -> acc))
-    Symbol.Set.empty bindings
-
 let is_lifted_constant_used uacc lifted_constant =
   let bound = LC.bound_static lifted_constant in
   let code_ids_live =
@@ -332,7 +319,9 @@ let rebuild_let simplify_named_result removed_operations ~rewrite_id ~body uacc
     match UA.lifted_constants uacc with
     | In_a_closure _ -> body, uacc
     | At_toplevel _ ->
-      let bound_symbols = bound_symbols_of_bindings bindings in
+      let bound_symbols =
+        Simplify_named_result.defines_symbols simplify_named_result
+      in
       let lifted_constants_to_place, remaining_lifted_constants =
         compute_lifted_constants_to_place ~bound_symbols
           (UA.lifted_constants_for_placement uacc)
