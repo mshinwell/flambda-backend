@@ -112,7 +112,12 @@ let build_run_result unit ~free_names ~final_typing_env ~all_code slot_offsets :
       }
     in
     let get_code_metadata code_id =
-      Exported_code.find_exn all_code code_id |> Code_or_metadata.code_metadata
+      match Exported_code.find all_code code_id with
+      | Some code_or_metadata -> Code_or_metadata.code_metadata code_or_metadata
+      | None ->
+        Misc.fatal_errorf "Code id %a not found in exported code during slot \
+                           offset computation"
+          Flambda2_identifiers.Code_id.print code_id
     in
     Slot_offsets.finalize_offsets slot_offsets ~get_code_metadata ~used_slots
   in
