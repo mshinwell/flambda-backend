@@ -34,4 +34,6 @@ val no_bindings : t -> bool
 
 val was_lifted_set_of_closures : t -> bool
 
+val defines_symbols : t -> (Bound_var.t * Symbol.t) list
+
 val with_dacc : dacc:Downwards_acc.t -> t -> t

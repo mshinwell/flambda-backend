@@ -61,3 +61,25 @@ let no_bindings t =
 let bindings_to_place t = t.bindings_to_place
 
 let was_lifted_set_of_closures t = t.was_lifted_set_of_closures
+
+let defines_symbols t =
+  List.concat_map
+    (fun (binding : Expr_builder.binding_to_place) ->
+      match binding with
+      | Delete_binding _ -> []
+      | Keep_binding { let_bound; simplified_defining_expr; _ } -> (
+        match let_bound with
+        | Bound_pattern.Singleton bound_var -> (
+          match simplified_defining_expr.named with
+          | Simple simple -> (
+            match Simple.must_be_symbol simple with
+            | Some (sym, _coercion) -> [bound_var, sym]
+            | None -> [])
+          | Prim _ | Set_of_closures _ | Rec_info _ -> [])
+        | Bound_pattern.Set_of_closures _bound_vars ->
+          (* TODO: handle set of closures case where closures map to symbols *)
+          []
+        | Bound_pattern.Static _ ->
+          (* Static bindings are already symbol bindings, not var-to-symbol *)
+          []))
+    t.bindings_to_place

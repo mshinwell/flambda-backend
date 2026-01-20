@@ -16,6 +16,46 @@
 
 open! Simplify_import
 
+(* Determine which lifted constant definitions need to be placed when rebuilding
+   a Let-binding that binds one or more symbols.
+
+   We need to place every symbol definition which cannot be moved earlier than
+   those of the bound symbols, because symbols might go out of scope. A lifted
+   constant must be placed here if:
+   - It defines a symbol that is being bound here, or
+   - It depends on a symbol that is being bound here (and thus cannot be moved
+     earlier, as the symbol wouldn't be in scope). *)
+let compute_definitions_to_place bound_pattern
+    (lifted_constants : LCS.sort_result) =
+  (* Extract the symbols bound by the pattern *)
+  let initial_needed =
+    Bound_pattern.fold_all_bound_names bound_pattern ~init:Symbol.Set.empty
+      ~var:(fun acc _ -> acc)
+      ~symbol:(fun acc sym -> Symbol.Set.add sym acc)
+      ~code_id:(fun acc _ -> acc)
+  in
+  if Symbol.Set.is_empty initial_needed
+  then []
+  else
+    (* Iterate backwards (outermost to innermost) using fold_right *)
+    Array.fold_right
+      (fun lc (needed, acc) ->
+        let defined_symbols = LC.all_defined_symbols lc in
+        let free_symbols = NO.symbols (LC.free_names_of_defining_exprs lc) in
+        let defines_needed =
+          not (Symbol.Set.disjoint defined_symbols needed)
+        in
+        let depends_on_needed =
+          not (Symbol.Set.disjoint free_symbols needed)
+        in
+        if defines_needed || depends_on_needed
+        then
+          let needed = Symbol.Set.union needed defined_symbols in
+          needed, LC.definitions lc @ acc
+        else needed, acc)
+      lifted_constants.innermost_first (initial_needed, [])
+    |> snd
+
 let keep_lifted_constant_only_if_used uacc acc lifted_constant =
   let bound = LC.bound_static lifted_constant in
   let code_ids_live =
