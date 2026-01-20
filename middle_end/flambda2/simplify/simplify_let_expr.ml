@@ -37,7 +37,7 @@ let compute_lifted_constants_to_place ~bound_symbols
       List.fold_right
         (fun lc (needed, to_place, remaining) ->
           let defined_symbols = LC.all_defined_symbols lc in
-          let free_symbols = NO.symbols (LC.free_names_of_defining_exprs lc) in
+          let free_symbols = NO.symbols (LC.free_names lc) in
           let defines_needed =
             not (Symbol.Set.disjoint defined_symbols needed)
           in

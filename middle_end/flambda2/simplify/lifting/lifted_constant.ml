@@ -150,6 +150,10 @@ let symbol_projections t = t.symbol_projections
 let free_names_of_defining_exprs t =
   Rebuilt_static_const.Group.free_names t.defining_exprs
 
+let free_names t =
+  ListLabels.fold_left t.definitions ~init:Name_occurrences.empty
+    ~f:(fun acc def -> Name_occurrences.union acc (Definition.free_names def))
+
 let is_fully_static t = t.is_fully_static
 
 let [@ocamlformat "disable"] print ppf
