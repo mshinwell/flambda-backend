@@ -84,6 +84,8 @@ let code_age_relation t = TE.code_age_relation (DA.typing_env t.creation_dacc)
 
 let lifted_constants t = t.lifted_constants
 
+let with_lifted_constants t lifted_constants = { t with lifted_constants }
+
 let cost_metrics t = t.cost_metrics
 
 let are_rebuilding_terms t = DE.are_rebuilding_terms (DA.denv t.creation_dacc)

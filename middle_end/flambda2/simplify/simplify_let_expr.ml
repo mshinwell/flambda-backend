@@ -16,31 +16,25 @@
 
 open! Simplify_import
 
-(* Determine which lifted constant definitions need to be placed when rebuilding
-   a Let-binding that binds one or more symbols.
+(* Determine which lifted constants need to be placed when rebuilding a
+   Let-binding that binds one or more symbols.
 
-   We need to place every symbol definition which cannot be moved earlier than
+   We need to place every lifted constant which cannot be moved earlier than
    those of the bound symbols, because symbols might go out of scope. A lifted
    constant must be placed here if:
    - It defines a symbol that is being bound here, or
    - It depends on a symbol that is being bound here (and thus cannot be moved
      earlier, as the symbol wouldn't be in scope).
 
-   Returns the definitions to place and the remaining lifted constants. *)
-let compute_definitions_to_place bound_pattern
+   Returns the lifted constants to place (innermost first) and the remaining
+   lifted constants. *)
+let compute_lifted_constants_to_place ~bound_symbols
     (lifted_constants : LCS.sort_result) =
-  (* Extract the symbols bound by the pattern *)
-  let initial_needed =
-    Bound_pattern.fold_all_bound_names bound_pattern ~init:Symbol.Set.empty
-      ~var:(fun acc _ -> acc)
-      ~symbol:(fun acc sym -> Symbol.Set.add sym acc)
-      ~code_id:(fun acc _ -> acc)
-  in
-  if Symbol.Set.is_empty initial_needed
+  if Symbol.Set.is_empty bound_symbols
   then [], lifted_constants
   else
     (* Iterate backwards (outermost to innermost) using fold_right *)
-    let _needed, definitions_to_place, remaining =
+    let _needed, to_place, remaining =
       List.fold_right
         (fun lc (needed, to_place, remaining) ->
           let defined_symbols = LC.all_defined_symbols lc in
@@ -54,20 +48,31 @@ let compute_definitions_to_place bound_pattern
           if defines_needed || depends_on_needed
           then
             let needed = Symbol.Set.union needed defined_symbols in
-            needed, LC.definitions lc @ to_place, remaining
+            needed, lc :: to_place, remaining
           else needed, to_place, lc :: remaining)
-        lifted_constants.innermost_first (initial_needed, [], [])
+        lifted_constants.innermost_first (bound_symbols, [], [])
     in
-    definitions_to_place, LCS.create_sort_result remaining
+    to_place, LCS.create_sort_result remaining
 
-let keep_lifted_constant_only_if_used uacc acc lifted_constant =
+(* Extract all bound symbols from a list of bindings *)
+let bound_symbols_of_bindings bindings =
+  List.fold_left
+    (fun acc (binding : Expr_builder.binding_to_place) ->
+      match binding with
+      | Delete_binding _ -> acc
+      | Keep_binding { let_bound; _ } ->
+        Bound_pattern.fold_all_bound_names let_bound ~init:acc
+          ~var:(fun acc _ -> acc)
+          ~symbol:(fun acc sym -> Symbol.Set.add sym acc)
+          ~code_id:(fun acc _ -> acc))
+    Symbol.Set.empty bindings
+
+let is_lifted_constant_used uacc lifted_constant =
   let bound = LC.bound_static lifted_constant in
   let code_ids_live =
     match UA.reachable_code_ids uacc with
     | Unknown -> Bound_static.binds_code bound
     | Known { live_code_ids = _; ancestors_of_live_code_ids } ->
-      (* CR bclement for gbury: This is likely no longer needed now that the
-         code age relation join has been removed. *)
       not
         (Code_id.Set.disjoint
            (Bound_static.code_being_defined bound)
@@ -79,43 +84,10 @@ let keep_lifted_constant_only_if_used uacc acc lifted_constant =
          (Name.set_of_symbol_set (Bound_static.symbols_being_defined bound))
          (UA.required_names uacc))
   in
-  if symbols_live || code_ids_live then LCS.add acc lifted_constant else acc
+  symbols_live || code_ids_live
 
 let rebuild_let simplify_named_result removed_operations ~rewrite_id
-    ~lifted_constants_from_defining_expr ~at_unit_toplevel
     ~(closure_info : Closure_info.t) ~body uacc ~after_rebuild =
-  let lifted_constants_from_defining_expr =
-    match Closure_info.in_or_out_of_closure closure_info with
-    | In_a_closure ->
-      (* See the comment in [simplify_let], below; this case is analogous. *)
-      lifted_constants_from_defining_expr
-    | Not_in_a_closure ->
-      (* We must filter even if not rebuilding terms, otherwise the free names
-         of the terms might get out of sync with [Data_flow]. *)
-      LCS.fold lifted_constants_from_defining_expr ~init:LCS.empty
-        ~f:(keep_lifted_constant_only_if_used uacc)
-  in
-  (* At this point, the free names in [uacc] are the free names of [body], plus
-     all used value slots seen in the whole compilation unit. *)
-  let no_constants_from_defining_expr =
-    LCS.is_empty lifted_constants_from_defining_expr
-  in
-  (* The lifted constants present in [uacc] are the ones arising from the
-     simplification of [body] which still have to be placed. We augment these
-     with any constants arising from the simplification of the defining
-     expression. Then we either place all of them, if we are at toplevel, or
-     else return them in [uacc] for an outer [Let]-binding to deal with.
-
-     It may be surprising that lifted constants can arise from the
-     simplification of the body in the case where they have also arisen from the
-     defining expression (since the latter implies that we must be at toplevel).
-     However this can happen in the case of recursive continuations, in which
-     constants cannot be placed. *)
-  (* CR mshinwell: We don't actually have to have this logic for placing lifted
-     constants here; it could be done before any other kind of expression. *)
-  let no_constants_to_place =
-    no_constants_from_defining_expr && UA.no_lifted_constants uacc
-  in
   let uacc = UA.notify_removed ~operation:removed_operations uacc in
   let bindings =
     Simplify_named_result.bindings_to_place simplify_named_result
@@ -349,35 +321,33 @@ let rebuild_let simplify_named_result removed_operations ~rewrite_id
               ) ) ->
           Misc.fatal_errorf "Prim_rewrite applied to a non-prim Named.t"))
   in
-  (* Return as quickly as possible if there is nothing to do. In this case, all
-     constants get floated up to an outer binding. *)
-  if no_constants_to_place || not at_unit_toplevel
-  then
-    let uacc =
-      (* Avoid re-allocating [uacc] unless necessary. *)
-      if no_constants_from_defining_expr
-      then uacc
-      else
-        let lifted_constants_from_body = UA.lifted_constants uacc in
-        LCS.union lifted_constants_from_body lifted_constants_from_defining_expr
-        |> UA.with_lifted_constants uacc
-    in
-    let body, uacc =
-      EB.make_new_let_bindings uacc ~bindings_outermost_first:bindings ~body
-    in
-    after_rebuild body uacc
-  else
-    let uacc, lifted_constants_from_body =
-      UA.get_and_clear_lifted_constants uacc
-    in
-    let body, uacc =
-      EB.place_lifted_constants uacc ~lifted_constants_from_defining_expr
-        ~lifted_constants_from_body
-        ~put_bindings_around_body:(fun uacc ~body ->
-          EB.make_new_let_bindings uacc ~bindings_outermost_first:bindings ~body)
-        ~body
-    in
-    after_rebuild body uacc
+  (* Determine which lifted constants need to be placed based on the symbols
+     being bound by these bindings. *)
+  let bound_symbols = bound_symbols_of_bindings bindings in
+  let lifted_constants_to_place, remaining_lifted_constants =
+    compute_lifted_constants_to_place ~bound_symbols (UA.lifted_constants uacc)
+  in
+  (* Filter lifted constants to keep only those that are used. This must be
+     done to stay in sync with Data_flow. We only filter when not in a closure
+     since constants inside closures will be placed at toplevel later. *)
+  let lifted_constants_to_place =
+    match Closure_info.in_or_out_of_closure closure_info with
+    | In_a_closure -> lifted_constants_to_place
+    | Not_in_a_closure ->
+      List.filter (is_lifted_constant_used uacc) lifted_constants_to_place
+  in
+  let uacc = UA.with_lifted_constants uacc remaining_lifted_constants in
+  (* First create the let bindings around the body *)
+  let body, uacc =
+    EB.make_new_let_bindings uacc ~bindings_outermost_first:bindings ~body
+  in
+  (* Then place the lifted constants that need to be placed here *)
+  let body, uacc =
+    ListLabels.fold_left lifted_constants_to_place ~init:(body, uacc)
+      ~f:(fun (body, uacc) lifted_const ->
+        EB.create_let_symbols uacc lifted_const ~body)
+  in
+  after_rebuild body uacc
 
 let record_one_value_slot_for_data_flow symbol value_slot simple data_flow =
   Flow.Acc.record_value_slot (Name.symbol symbol) value_slot
@@ -543,7 +513,6 @@ let simplify_let0 ~simplify_expr ~simplify_function_body dacc let_expr
             (update_data_flow dacc closure_info ~rewrite_id
                ~lifted_constants_from_defining_expr simplify_named_result)
       in
-      let at_unit_toplevel = DE.at_unit_toplevel (DA.denv dacc) in
       (* Simplify the body of the let-expression and make the new [Let] bindings
          around the simplified body. [Simplify_named] will already have prepared
          [dacc] with the necessary bindings for the simplification of the
@@ -551,9 +520,8 @@ let simplify_let0 ~simplify_expr ~simplify_function_body dacc let_expr
       let down_to_up dacc ~rebuild:rebuild_body =
         let rebuild uacc ~after_rebuild =
           let after_rebuild body uacc =
-            rebuild_let simplify_named_result removed_operations
-              ~lifted_constants_from_defining_expr ~at_unit_toplevel
-              ~closure_info ~body uacc ~after_rebuild ~rewrite_id
+            rebuild_let simplify_named_result removed_operations ~closure_info
+              ~body uacc ~after_rebuild ~rewrite_id
           in
           rebuild_body uacc ~after_rebuild
         in

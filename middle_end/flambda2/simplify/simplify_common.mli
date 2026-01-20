@@ -171,3 +171,9 @@ val add_symbol_projection :
   projection_bound_to:Bound_var.t ->
   kind:Flambda_kind.With_subkind.t ->
   Downwards_acc.t
+
+(** Place all remaining lifted constants in the accumulator around the given
+    expression. Used at the end of simplification to ensure all lifted constants
+    are placed. *)
+val place_all_remaining_lifted_constants :
+  Rebuilt_expr.t -> Upwards_acc.t -> Rebuilt_expr.t * Upwards_acc.t

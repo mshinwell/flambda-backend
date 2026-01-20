@@ -463,3 +463,13 @@ let add_symbol_projection dacc ~projected_from projection ~projection_bound_to
         let var = Bound_var.var projection_bound_to in
         DA.map_denv dacc ~f:(fun denv -> DE.add_symbol_projection denv var proj))
       ~var:(fun _ ~coercion:_ -> dacc)
+
+let place_all_remaining_lifted_constants expr uacc =
+  let lifted_constants = UA.lifted_constants uacc in
+  let expr, uacc =
+    ListLabels.fold_left lifted_constants.innermost_first ~init:(expr, uacc)
+      ~f:(fun (body, uacc) lifted_const ->
+        EB.create_let_symbols uacc lifted_const ~body)
+  in
+  let uacc = UA.with_lifted_constants uacc (LCS.create_sort_result []) in
+  expr, uacc

@@ -39,6 +39,9 @@ val code_age_relation : t -> Code_age_relation.t
     [Let]-expressions made for them), sorted in dependency order. *)
 val lifted_constants : t -> Lifted_constant_state.sort_result
 
+(** Replace the lifted constants in the accumulator. *)
+val with_lifted_constants : t -> Lifted_constant_state.sort_result -> t
+
 (** Map the environment component of the given upwards accumulator. *)
 val map_uenv : t -> f:(Upwards_env.t -> Upwards_env.t) -> t
 

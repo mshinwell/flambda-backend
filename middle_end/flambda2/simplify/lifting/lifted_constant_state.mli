@@ -44,3 +44,5 @@ type sort_result = private { innermost_first : LC.t list }
 val sort : t -> sort_result
 
 val create_sort_result : LC.t list -> sort_result
+
+val sort_result_is_empty : sort_result -> bool

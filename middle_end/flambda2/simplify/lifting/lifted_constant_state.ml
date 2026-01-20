@@ -256,3 +256,6 @@ let sort t =
   | Leaf_array _ | Union _ -> sort0 t
 
 let create_sort_result innermost_first = { innermost_first }
+
+let sort_result_is_empty { innermost_first } =
+  match innermost_first with [] -> true | _ :: _ -> false

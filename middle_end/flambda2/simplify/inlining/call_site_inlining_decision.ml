@@ -15,8 +15,8 @@
 (**************************************************************************)
 
 open! Flambda.Import
-module DE = Downwards_env
 module DA = Downwards_acc
+module DE = Downwards_env
 module T = Flambda2_types
 module TE = T.Typing_env
 module UA = Upwards_acc
@@ -121,7 +121,9 @@ let speculative_inlining dacc ~apply ~function_type ~simplify_expr ~return_arity
         let uacc =
           UA.create ~flow_result ~compute_slot_offsets:false uenv dacc
         in
-        rebuild uacc ~after_rebuild:(fun expr uacc -> expr, uacc))
+        rebuild uacc ~after_rebuild:(fun expr uacc ->
+            (* Place any remaining lifted constants *)
+            Simplify_common.place_all_remaining_lifted_constants expr uacc))
   in
   UA.cost_metrics uacc
 
