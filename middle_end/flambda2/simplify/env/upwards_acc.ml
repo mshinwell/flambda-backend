@@ -42,15 +42,16 @@ let [@ocamlformat "disable"] print ppf
         name_occurrences; all_code = _; cost_metrics; slot_offsets; flow_result;
         resimplify;
       } =
-  let num_lifted_constants =
+  let print_lifted_constants ppf lifted_constants =
     match lifted_constants with
-    | At_toplevel sort_result -> List.length sort_result.innermost_first
+    | At_toplevel sort_result ->
+      Format.fprintf ppf "(at_toplevel@ %d)" (List.length sort_result.innermost_first)
     | In_a_closure lcs ->
-      LCS.fold lcs ~init:0 ~f:(fun count _ -> count + 1)
+      Format.fprintf ppf "(in_a_closure@ %a)" LCS.print lcs
   in
   Format.fprintf ppf "@[<hov 1>(\
       @[<hov 1>(uenv@ %a)@]@ \
-      @[<hov 1>(num_lifted_constants@ %d)@]@ \
+      @[<hov 1>(lifted_constants@ %a)@]@ \
       @[<hov 1>(name_occurrences@ %a)@]@ \
       @[<hov 1>(cost_metrics@ %a)@]@ \
       @[<hov 1>(slot_offsets@ %a@)@]@ \
@@ -58,7 +59,7 @@ let [@ocamlformat "disable"] print ppf
       %a\
       )@]"
     UE.print uenv
-    num_lifted_constants
+    print_lifted_constants lifted_constants
     Name_occurrences.print name_occurrences
     Cost_metrics.print cost_metrics
     (Or_unknown.print Slot_offsets.print) slot_offsets
