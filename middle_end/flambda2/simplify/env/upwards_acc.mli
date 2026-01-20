@@ -35,18 +35,31 @@ val cost_metrics : t -> Cost_metrics.t
 
 val code_age_relation : t -> Code_age_relation.t
 
-(** Return the lifted constants (unsorted). *)
-val lifted_constants : t -> Lifted_constant_state.t
+(** The lifted constants accumulator has two states depending on whether we are
+    at toplevel or inside a closure. At toplevel, constants are sorted and can
+    be placed. Inside a closure, constants are accumulated unsorted and will be
+    moved to the outer downwards accumulator. *)
+type lifted_constants =
+  | At_toplevel of Lifted_constant_state.sort_result
+  | In_a_closure of Lifted_constant_state.t
 
-(** Return the lifted constants that need to be placed (i.e. have
-    [Let]-expressions made for them), sorted in dependency order. *)
-val lifted_constants_sorted : t -> Lifted_constant_state.sort_result
+(** Return the lifted constants state. *)
+val lifted_constants : t -> lifted_constants
 
-(** Replace the sorted lifted constants in the accumulator. *)
-val with_lifted_constants_sorted : t -> Lifted_constant_state.sort_result -> t
+(** Return the sorted lifted constants for placement. Only valid when at
+    toplevel; raises if inside a closure. *)
+val lifted_constants_for_placement : t -> Lifted_constant_state.sort_result
 
-(** Add a lifted constant to the accumulator. The constant is added at the
-    beginning (innermost position) of the sorted list. *)
+(** Return the lifted constants as [Lifted_constant_state.t]. Works in both
+    cases: returns the unsorted state directly when in a closure, or converts
+    the sorted state back when at toplevel. *)
+val lifted_constants_as_lcs : t -> Lifted_constant_state.t
+
+(** Replace the lifted constants for placement. Only valid when at toplevel. *)
+val with_lifted_constants_for_placement :
+  t -> Lifted_constant_state.sort_result -> t
+
+(** Add a lifted constant to the accumulator. Works in both states. *)
 val add_lifted_constant : t -> Lifted_constant.t -> t
 
 (** Map the environment component of the given upwards accumulator. *)

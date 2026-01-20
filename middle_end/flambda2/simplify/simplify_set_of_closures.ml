@@ -130,7 +130,7 @@ let extract_accumulators_from_function outer_dacc ~dacc_after_body
        point where the downwards traversal turns into an upwards traversal is in
        such a context, not all of the constants may currently be present in
        [DA]. *)
-    UA.lifted_constants uacc_after_upwards_traversal
+    UA.lifted_constants_as_lcs uacc_after_upwards_traversal
   in
   let code_ids_to_remember = DA.code_ids_to_remember dacc_after_body in
   let code_ids_to_never_delete = DA.code_ids_to_never_delete dacc_after_body in

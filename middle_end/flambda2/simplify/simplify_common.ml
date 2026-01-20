@@ -465,11 +465,13 @@ let add_symbol_projection dacc ~projected_from projection ~projection_bound_to
       ~var:(fun _ ~coercion:_ -> dacc)
 
 let place_all_remaining_lifted_constants expr uacc =
-  let lifted_constants = UA.lifted_constants_sorted uacc in
+  let lifted_constants = UA.lifted_constants_for_placement uacc in
   let expr, uacc =
     ListLabels.fold_left lifted_constants.innermost_first ~init:(expr, uacc)
       ~f:(fun (body, uacc) lifted_const ->
         EB.create_let_symbols uacc lifted_const ~body)
   in
-  let uacc = UA.with_lifted_constants_sorted uacc (LCS.create_sort_result []) in
+  let uacc =
+    UA.with_lifted_constants_for_placement uacc (LCS.create_sort_result [])
+  in
   expr, uacc

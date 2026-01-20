@@ -61,7 +61,7 @@ let run ~cmx_loader ~machine_width ~round ~code_slot_offsets unit =
                term:@ %a"
               Variable.print var Expr.print body)
         ~symbol:(fun _symbol -> ()));
-  if not (LCS.sort_result_is_empty (UA.lifted_constants_sorted uacc))
+  if not (LCS.sort_result_is_empty (UA.lifted_constants_for_placement uacc))
   then
     Misc.fatal_errorf "Lifted constants accumulator should be empty:@ %a"
       UA.print uacc;

@@ -21,10 +21,9 @@ open! Simplify_import
 
    We need to place every lifted constant which cannot be moved earlier than
    those of the bound symbols, because symbols might go out of scope. A lifted
-   constant must be placed here if:
-   - It defines a symbol that is being bound here, or
-   - It depends on a symbol that is being bound here (and thus cannot be moved
-     earlier, as the symbol wouldn't be in scope).
+   constant must be placed here if: - It defines a symbol that is being bound
+   here, or - It depends on a symbol that is being bound here (and thus cannot
+   be moved earlier, as the symbol wouldn't be in scope).
 
    Returns the lifted constants to place (innermost first) and the remaining
    lifted constants. *)
@@ -326,18 +325,20 @@ let rebuild_let simplify_named_result removed_operations ~rewrite_id
   let bound_symbols = bound_symbols_of_bindings bindings in
   let lifted_constants_to_place, remaining_lifted_constants =
     compute_lifted_constants_to_place ~bound_symbols
-      (UA.lifted_constants_sorted uacc)
+      (UA.lifted_constants_for_placement uacc)
   in
-  (* Filter lifted constants to keep only those that are used. This must be
-     done to stay in sync with Data_flow. We only filter when not in a closure
-     since constants inside closures will be placed at toplevel later. *)
+  (* Filter lifted constants to keep only those that are used. This must be done
+     to stay in sync with Data_flow. We only filter when not in a closure since
+     constants inside closures will be placed at toplevel later. *)
   let lifted_constants_to_place =
     match Closure_info.in_or_out_of_closure closure_info with
     | In_a_closure -> lifted_constants_to_place
     | Not_in_a_closure ->
       List.filter (is_lifted_constant_used uacc) lifted_constants_to_place
   in
-  let uacc = UA.with_lifted_constants_sorted uacc remaining_lifted_constants in
+  let uacc =
+    UA.with_lifted_constants_for_placement uacc remaining_lifted_constants
+  in
   (* First create the let bindings around the body *)
   let body, uacc =
     EB.make_new_let_bindings uacc ~bindings_outermost_first:bindings ~body
