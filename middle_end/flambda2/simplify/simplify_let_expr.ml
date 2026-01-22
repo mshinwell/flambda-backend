@@ -32,24 +32,49 @@ let compute_lifted_constants_to_place ~bound_symbols
   if Symbol.Set.is_empty bound_symbols
   then [], lifted_constants
   else
-    (* Iterate backwards (outermost to innermost) using fold_right *)
-    let _needed, to_place, remaining =
+    (* Iterate backwards (outermost to innermost) using fold_right.
+       We track both needed symbols and needed code_ids because:
+       - Closures define symbols and reference code_ids
+       - Code defines code_ids but not symbols
+       When we decide to place a closure, we must also place any code it
+       references. *)
+    let _needed_symbols, _needed_code_ids, to_place, remaining =
       List.fold_right
-        (fun lc (needed, to_place, remaining) ->
+        (fun lc (needed_symbols, needed_code_ids, to_place, remaining) ->
           let defined_symbols = LC.all_defined_symbols lc in
-          let free_symbols = NO.symbols (LC.free_names lc) in
-          let defines_needed =
-            not (Symbol.Set.disjoint defined_symbols needed)
+          let defined_code_ids =
+            LC.bound_static lc |> Bound_static.code_being_defined
           in
-          let depends_on_needed =
-            not (Symbol.Set.disjoint free_symbols needed)
+          let free_names = LC.free_names lc in
+          let free_symbols = NO.symbols free_names in
+          let free_code_ids =
+            NO.code_ids_and_newer_version_of_code_ids free_names
           in
-          if defines_needed || depends_on_needed
+          let defines_needed_symbol =
+            not (Symbol.Set.disjoint defined_symbols needed_symbols)
+          in
+          let defines_needed_code_id =
+            not (Code_id.Set.disjoint defined_code_ids needed_code_ids)
+          in
+          let depends_on_needed_symbol =
+            not (Symbol.Set.disjoint free_symbols needed_symbols)
+          in
+          if defines_needed_symbol || defines_needed_code_id
+             || depends_on_needed_symbol
           then
-            let needed = Symbol.Set.union needed defined_symbols in
-            needed, lc :: to_place, remaining
-          else needed, to_place, lc :: remaining)
-        lifted_constants.innermost_first (bound_symbols, [], [])
+            (* Place this constant. Add its defined symbols and free code_ids
+               to the needed sets so that any constants they depend on will
+               also be placed. *)
+            let needed_symbols =
+              Symbol.Set.union needed_symbols defined_symbols
+            in
+            let needed_code_ids =
+              Code_id.Set.union needed_code_ids free_code_ids
+            in
+            needed_symbols, needed_code_ids, lc :: to_place, remaining
+          else needed_symbols, needed_code_ids, to_place, lc :: remaining)
+        lifted_constants.innermost_first
+        (bound_symbols, Code_id.Set.empty, [], [])
     in
     to_place, LCS.create_sort_result remaining
 
