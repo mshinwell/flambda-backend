@@ -25,6 +25,8 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
+(* CR mshinwell: This file has not yet been code reviewed *)
+
 open Arm64_ast.Ast
 module Section_state = Section_state
 

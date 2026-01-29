@@ -25,4 +25,6 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
+(* CR mshinwell: This file has not yet been code reviewed *)
+
 val encode_nop : unit -> int32

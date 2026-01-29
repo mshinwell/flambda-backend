@@ -25,6 +25,8 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
+(* CR mshinwell: This file has not yet been code reviewed *)
+
 open Arm64_ast.Ast
 
 let split_21bit_immediate (imm21 : int) : int * int =

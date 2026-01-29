@@ -25,6 +25,8 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
+(* CR mshinwell: This file has not yet been code reviewed *)
+
 (* For_jit module implementing Binary_emitter_intf.S *)
 
 module Symbol = Arm64_ast.Ast.Symbol

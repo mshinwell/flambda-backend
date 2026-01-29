@@ -25,6 +25,8 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
+(* CR mshinwell: This file has not yet been code reviewed *)
+
 open Arm64_ast.Ast
 
 (** Extract ftype from scalar precision: S=0, D=1. Only valid for S and D scalar

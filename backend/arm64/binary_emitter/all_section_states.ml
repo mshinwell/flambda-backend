@@ -25,6 +25,8 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
+(* CR mshinwell: This file has not yet been code reviewed *)
+
 (* Collection of section states for all sections in an assembly unit. *)
 
 module Asm_label = Asm_targets.Asm_label

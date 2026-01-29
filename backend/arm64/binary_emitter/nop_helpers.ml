@@ -25,5 +25,7 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
+(* CR mshinwell: This file has not yet been code reviewed *)
+
 (* NOP encoding: 1101 0101 0000 0011 0010 0000 000 11111 = 0xD503201F *)
 let encode_nop () = Int32.of_int 0xD503201F

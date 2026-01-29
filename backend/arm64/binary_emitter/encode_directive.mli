@@ -25,6 +25,8 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
+(* CR mshinwell: This file has not yet been code reviewed *)
+
 module Asm_section = Asm_targets.Asm_section
 module D = Asm_targets.Asm_directives
 module Symbol = Arm64_ast.Ast.Symbol

@@ -25,6 +25,8 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
+(* CR mshinwell: This file has not yet been code reviewed *)
+
 open Arm64_ast.Ast
 
 val encode_load_literal : opc:int -> v:int -> imm19:int -> rt:int -> int32

@@ -25,6 +25,8 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
+(* CR mshinwell: This file has not yet been code reviewed *)
+
 open Arm64_ast.Ast
 
 (* Bitfield encoding - C4.1.92.8 Used for SBFM, BFM, UBFM *)

@@ -25,6 +25,8 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
+(* CR mshinwell: This file has not yet been code reviewed *)
+
 module Kind : sig
   (** Relocation with symbol/label target and addend. On RELA platforms (Linux
       ELF), the addend is stored in the relocation entry. On REL platforms

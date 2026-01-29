@@ -25,5 +25,7 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
+(* CR mshinwell: This file has not yet been code reviewed *)
+
 (* YIELD encoding: 1101 0101 0000 0011 0010 0000 001 11111 = 0xD503203F *)
 let encode_yield () = Int32.of_int 0xD503203F
