@@ -573,6 +573,7 @@
   cmmgen_state
   CSE
   dsl_helpers
+  binary_emitter_helpers
   emit
   emitaux
   fdo_info

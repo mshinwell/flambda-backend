@@ -25,30 +25,22 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-(** JIT backend dispatch - architecture-independent interface for JIT. This
-    module allows jit.ml to register a callback without knowing about
-    architecture-specific emitters. *)
+(** Hooks for connecting the ARM64 binary emitter to the emit process.
+    This module handles JIT compilation and binary section saving for
+    verification.
 
-module String_map : Map.S with type key = string
+    CR mshinwell: Adapt the binary sections saving to x86 in due course. *)
 
-(** Packed sections with their Binary_emitter.S module, hiding the
-    architecture-specific types using an existential. *)
-type packed_sections =
-  | Packed :
-      { emitter :
-          (module Binary_emitter_intf.S
-             with type Assembled_section.t = 'a
-              and type Relocation.t = 'r);
-        sections : 'a String_map.t
-      }
-      -> packed_sections
+(** Returns true if the binary emitter should be enabled for this compilation
+    (either for JIT or for saving binary sections for verification). *)
+val should_use_binary_emitter : unit -> bool
 
-type callback = packed_sections -> unit
+(** Initialize the binary emitter if needed. Call this at the start of
+    assembly. Returns a directive emission callback that should be passed
+    to the Asm_directives initialization. *)
+val begin_emission : unit -> (Asm_targets.Asm_directives.Directive.t -> unit)
 
-(** Register a JIT callback. When code is generated, the callback will be
-    invoked with the assembled sections packed with their emitter module. This
-    handles architecture dispatch internally. *)
-val register : callback -> unit
-
-(** Unregister the JIT callback and restore previous state. *)
-val unregister : unit -> unit
+(** Finalize the binary emitter if it was enabled. This handles section
+    aggregation, file saving for verification, and JIT hook invocation.
+    Call this at the end of assembly. *)
+val end_emission : unit -> unit

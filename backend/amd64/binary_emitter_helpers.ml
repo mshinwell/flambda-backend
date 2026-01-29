@@ -25,30 +25,11 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-(** JIT backend dispatch - architecture-independent interface for JIT. This
-    module allows jit.ml to register a callback without knowing about
-    architecture-specific emitters. *)
+(** CR mshinwell: Implement binary sections saving for x86 to match ARM64.
+    Currently this module provides stub implementations. *)
 
-module String_map : Map.S with type key = string
+let should_use_binary_emitter () = false
 
-(** Packed sections with their Binary_emitter.S module, hiding the
-    architecture-specific types using an existential. *)
-type packed_sections =
-  | Packed :
-      { emitter :
-          (module Binary_emitter_intf.S
-             with type Assembled_section.t = 'a
-              and type Relocation.t = 'r);
-        sections : 'a String_map.t
-      }
-      -> packed_sections
+let begin_emission () = fun _ -> ()
 
-type callback = packed_sections -> unit
-
-(** Register a JIT callback. When code is generated, the callback will be
-    invoked with the assembled sections packed with their emitter module. This
-    handles architecture dispatch internally. *)
-val register : callback -> unit
-
-(** Unregister the JIT callback and restore previous state. *)
-val unregister : unit -> unit
+let end_emission () = ()
