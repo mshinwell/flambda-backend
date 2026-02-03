@@ -3,8 +3,6 @@ ROOTDIR = .
 include Makefile.config_if_required
 export ARCH
 
-dune = $(opam_exec) $(DUNE)
-
 boot_ocamlc = main_native.exe
 boot_ocamlopt = boot_ocamlopt.exe
 boot_ocamlj = boot_ocamlj.exe
@@ -280,7 +278,7 @@ build_and_test_upstream: build_upstream
 .PHONY: coverage
 coverage: boot-runtest
 	set -eu; rm -rf _coverage
-	$(opam_exec) bisect-ppx-report html --tree -o _coverage \
+	bisect-ppx-report html --tree -o _coverage \
 	  --coverage-path=_build/default \
 		--source-path=. \
 	  --source-path=_build/default
