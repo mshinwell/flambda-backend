@@ -416,6 +416,11 @@ let mk_ddissector_inputs f =
     Arg.String f,
     "<file>  Write dissector input analysis to <file>" )
 
+let mk_ddissector_linker_script f =
+  ( "-ddissector-linker-script",
+    Arg.Unit f,
+    " Print path to linker script (implies -ddissector-partitions)" )
+
 let mk_gc_timings f =
   ("-dgc-timings", Arg.Unit f, "Output information about time spent in the GC")
 
@@ -1167,6 +1172,7 @@ module type Oxcaml_options = sig
   val ddissector_verbose : unit -> unit
   val ddissector_partitions : unit -> unit
   val ddissector_inputs : string -> unit
+  val ddissector_linker_script : unit -> unit
   val gc_timings : unit -> unit
   val no_mach_ir : unit -> unit
   val dllvmir : unit -> unit
@@ -1325,6 +1331,7 @@ module Make_oxcaml_options (F : Oxcaml_options) = struct
       mk_ddissector_verbose F.ddissector_verbose;
       mk_ddissector_partitions F.ddissector_partitions;
       mk_ddissector_inputs F.ddissector_inputs;
+      mk_ddissector_linker_script F.ddissector_linker_script;
       mk_gc_timings F.gc_timings;
       mk_no_mach_ir F.no_mach_ir;
       mk_dllvmir F.dllvmir;
@@ -1574,6 +1581,11 @@ module Oxcaml_options_impl = struct
   let ddissector_verbose = set' Clflags.ddissector_verbose
   let ddissector_partitions = set' Clflags.ddissector_partitions
   let ddissector_inputs f = Clflags.ddissector_inputs := Some f
+
+  let ddissector_linker_script () =
+    Clflags.ddissector_linker_script := true;
+    Clflags.ddissector_partitions := true
+
   let gc_timings = set' Oxcaml_flags.gc_timings
   let no_mach_ir () = ()
   let dllvmir () = set' Oxcaml_flags.dump_llvmir ()
@@ -2244,6 +2256,10 @@ module Extra_params = struct
     | "ddissector-partitions" -> set' Clflags.ddissector_partitions
     | "ddissector-inputs" ->
         Clflags.ddissector_inputs := Some v;
+        true
+    | "ddissector-linker-script" ->
+        Clflags.ddissector_linker_script := true;
+        Clflags.ddissector_partitions := true;
         true
     | _ -> false
 end
