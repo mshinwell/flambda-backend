@@ -474,7 +474,8 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
     match new_closure_alloc_mode_and_first_complex_local_param with
     | Bottom ->
       ( Expr.create_invalid
-          (Partial_application_mode_mismatch (apply, callee's_code_metadata)),
+          (Partial_application_mode_mismatch (apply, callee's_code_metadata))
+          ~dbg:(Apply_expr.dbg apply),
         dacc )
     | Ok (new_closure_alloc_mode, first_complex_local_param) ->
       (match closure_alloc_mode_from_type with
@@ -806,10 +807,10 @@ let simplify_direct_over_application ~simplify_expr dacc apply ~down_to_up
   in
   simplify_expr dacc expr ~down_to_up
 
-let replace_apply_by_invalid dacc ~down_to_up reason =
+let replace_apply_by_invalid dacc ~down_to_up ~dbg reason =
   down_to_up dacc ~rebuild:(fun uacc ~after_rebuild ->
       let uacc = UA.notify_removed ~operation:Removed_operations.call uacc in
-      EB.rebuild_invalid uacc reason ~after_rebuild)
+      EB.rebuild_invalid uacc reason ~dbg ~after_rebuild)
 
 let arity_mismatch ~(params_arity : [`Complex] Flambda_arity.t)
     ~(args_arity : [`Complex] Flambda_arity.t) =
@@ -858,7 +859,8 @@ let simplify_direct_function_call ~simplify_expr dacc apply
   in
   match callee's_code_ids with
   | Bottom ->
-    replace_apply_by_invalid dacc ~down_to_up (Closure_type_was_invalid apply)
+    replace_apply_by_invalid dacc ~down_to_up ~dbg:(Apply.dbg apply)
+      (Closure_type_was_invalid apply)
   | Ok callee's_code_ids ->
     let callee's_code_id =
       (* XXX: go to indirect_known_arity if there are multiple code ids even
@@ -901,7 +903,7 @@ let simplify_direct_function_call ~simplify_expr dacc apply
           Flambda_arity.print params_arity Flambda_arity.print args_arity
           Apply.print apply
       else
-        replace_apply_by_invalid dacc ~down_to_up
+        replace_apply_by_invalid dacc ~down_to_up ~dbg:(Apply.dbg apply)
           (Direct_application_parameter_kind_mismatch
              { params_arity; args_arity; apply })
     else
@@ -934,7 +936,7 @@ let simplify_direct_function_call ~simplify_expr dacc apply
               Flambda_arity.print result_arity Flambda_arity.print
               result_arity_of_application Apply.print apply
           else
-            replace_apply_by_invalid dacc ~down_to_up
+            replace_apply_by_invalid dacc ~down_to_up ~dbg:(Apply.dbg apply)
               (Application_result_kind_mismatch (result_arity, apply))
         else
           simplify_direct_full_application ~simplify_expr dacc apply
@@ -1152,7 +1154,8 @@ let simplify_function_call ~simplify_expr dacc apply ~callee_ty
     | Invalid ->
       let rebuild uacc ~after_rebuild =
         let uacc = UA.notify_removed ~operation:Removed_operations.call uacc in
-        EB.rebuild_invalid uacc (Closure_type_was_invalid apply) ~after_rebuild
+        EB.rebuild_invalid uacc (Closure_type_was_invalid apply)
+          ~dbg:(Apply.dbg apply) ~after_rebuild
       in
       down_to_up dacc ~rebuild)
 
@@ -1331,7 +1334,8 @@ let simplify_c_call ~simplify_expr dacc apply ~callee_ty ~arg_types ~down_to_up
     down_to_up dacc
       ~rebuild:(rebuild_non_ocaml_function_call apply ~use_id ~exn_cont_use_id)
   | Invalid ->
-    replace_apply_by_invalid dacc ~down_to_up (Closure_type_was_invalid apply)
+    replace_apply_by_invalid dacc ~down_to_up ~dbg:(Apply.dbg apply)
+      (Closure_type_was_invalid apply)
 
 let simplify_effect_op dacc apply (op : Call_kind.Effect.t) ~down_to_up =
   fail_if_probe apply;
@@ -1396,7 +1400,7 @@ let simplify_effect_op dacc apply (op : Call_kind.Effect.t) ~down_to_up =
 let simplify_apply ~simplify_expr dacc apply ~down_to_up =
   match simplify_apply_shared dacc apply with
   | Invalid args_arity ->
-    replace_apply_by_invalid dacc ~down_to_up
+    replace_apply_by_invalid dacc ~down_to_up ~dbg:(Apply.dbg apply)
       (Application_argument_kind_mismatch (args_arity, apply))
   | Ok (dacc, callee_ty, apply, arg_types) -> (
     match Apply.call_kind apply with

@@ -892,7 +892,8 @@ let make_apply_wrapper env
                  (Message
                     (Format.asprintf "Function call to %a never returns"
                        Simple.print
-                       (Option.get (Apply.callee apply)))))
+                       (Option.get (Apply.callee apply))))
+                 ~dbg:(Apply.dbg apply))
             ~free_names:Name_occurrences.empty
         in
         let cont_handler =
@@ -1037,7 +1038,8 @@ let rebuild_apply env apply =
         (Expr.create_invalid
            (Message
               (Format.asprintf "Callee %a has no source" Simple.print
-                 (Option.get (Apply.callee apply)))))
+                 (Option.get (Apply.callee apply))))
+           ~dbg:(Apply.dbg apply))
       ~free_names:Name_occurrences.empty
   else
     (* CR ncourant: we never rewrite alloc_mode. This is currently ok because we
@@ -1082,7 +1084,8 @@ let rebuild_apply env apply =
                (Message
                   (Format.asprintf
                      "Unboxed callee %a cannot actually be a function"
-                     Simple.print callee)))
+                     Simple.print callee))
+               ~dbg:(Apply.dbg apply))
           ~free_names:Name_occurrences.empty
       | None | Some _ ->
         (* Format.eprintf "NOT CHANGING CALLING CONVENTION %a@." Apply.print
@@ -1748,7 +1751,8 @@ and rebuild_let_expr_holed (env : env) res ~(bound_pattern : Bound_pattern.t)
           (Expr.create_invalid
              (Message
                 (Format.asprintf "Dead variable in bound pattern: %a"
-                   Bound_pattern.print bound_pattern)))
+                   Bound_pattern.print bound_pattern))
+             ~dbg:Debuginfo.none)
         ~free_names:Name_occurrences.empty,
       res )
   else
@@ -1801,7 +1805,7 @@ and rebuild_holed (env : env) res (rev_expr : Rev_expr.rev_expr_holed)
                 dead_vars
             in
             ( RE.from_expr
-                ~expr:(Expr.create_invalid (Message msg))
+                ~expr:(Expr.create_invalid (Message msg) ~dbg:Debuginfo.none)
                 ~free_names:Name_occurrences.empty,
               res )
         in
@@ -1860,7 +1864,7 @@ and rebuild_expr (env : env) (res : rebuild_result)
     match expr with
     | Invalid { message } ->
       RE.from_expr
-        ~expr:(Expr.create_invalid (Message message))
+        ~expr:(Expr.create_invalid (Message message) ~dbg:Debuginfo.none)
         ~free_names:Name_occurrences.empty
     | Apply_cont ac -> (
       match rewrite_apply_cont_expr env ac with
@@ -1870,7 +1874,8 @@ and rebuild_expr (env : env) (res : rebuild_result)
             (Expr.create_invalid
                (Message
                   (Format.asprintf "Dead variable in apply cont: %a"
-                     Apply_cont_expr.print ac)))
+                     Apply_cont_expr.print ac))
+               ~dbg:(Apply_cont_expr.debuginfo ac))
           ~free_names:Name_occurrences.empty
       | Some ac ->
         let expr = Expr.create_apply_cont ac in
@@ -1885,7 +1890,9 @@ and rebuild_expr (env : env) (res : rebuild_result)
       if Target_ocaml_int.Map.is_empty arms
       then
         RE.from_expr
-          ~expr:(Expr.create_invalid Zero_switch_arms)
+          ~expr:
+            (Expr.create_invalid Zero_switch_arms
+               ~dbg:(Switch_expr.condition_dbg switch))
           ~free_names:Name_occurrences.empty
       else
         let switch =
@@ -1963,7 +1970,7 @@ and rebuild_function_params_and_body (env : env) res code_metadata
           dead_vars
       in
       ( RE.from_expr
-          ~expr:(Expr.create_invalid (Message msg))
+          ~expr:(Expr.create_invalid (Message msg) ~dbg:Debuginfo.none)
           ~free_names:Name_occurrences.empty,
         res )
   in

@@ -136,7 +136,7 @@ let inline dacc ~apply ~unroll_to ~was_inline_always function_decl =
     ( dacc,
       Expr.create_invalid
         (Flambda.Invalid.Calling_local_returning_closure_with_normal_apply apply)
-    )
+        ~dbg:(Apply.dbg apply) )
   | Local _, Alloc_heap (* This is allowed by subtyping *)
   | Local _, Alloc_local
   | Heap, Alloc_heap ->

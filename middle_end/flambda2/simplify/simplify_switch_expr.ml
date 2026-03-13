@@ -529,7 +529,7 @@ let rebuild_switch ~arms ~condition_dbg ~scrutinee ~scrutinee_ty
     if TI.Map.cardinal arms < 1
     then
       let uacc = UA.notify_removed ~operation:Removed_operations.branch uacc in
-      RE.create_invalid Zero_switch_arms, uacc
+      RE.create_invalid Zero_switch_arms ~dbg:condition_dbg, uacc
     else
       let dbg = Debuginfo.none in
       let[@inline] normal_case0 uacc =

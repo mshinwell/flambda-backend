@@ -96,7 +96,7 @@ let rebuild_apply_cont apply_cont ~args ~rewrite_id uacc ~after_rebuild =
     let expr, cost_metrics, free_names =
       match rewrite_use_result with
       | Invalid { message } ->
-        ( RE.create_invalid (Message message),
+        ( RE.create_invalid (Message message) ~dbg:(AC.debuginfo apply_cont),
           Cost_metrics.zero,
           Name_occurrences.empty )
       | Apply_cont apply_cont -> apply_cont_to_expr apply_cont
@@ -138,7 +138,8 @@ let rebuild_apply_cont apply_cont ~args ~rewrite_id uacc ~after_rebuild =
       (* We allow this transformation even if there is a trap action, on the
          basis that there wouldn't be any opportunity to collect any backtrace,
          even if the [Apply_cont] were compiled as "raise". *)
-      ( RE.create_invalid (Apply_cont_of_unreachable_continuation cont),
+      ( RE.create_invalid (Apply_cont_of_unreachable_continuation cont)
+          ~dbg:(AC.debuginfo apply_cont),
         Cost_metrics.zero,
         Name_occurrences.empty )
     | Non_inlinable_zero_arity _ | Non_inlinable_non_zero_arity _

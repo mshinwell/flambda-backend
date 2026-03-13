@@ -1644,7 +1644,7 @@ let close_let acc env let_bound_ids_with_kinds user_visible defining_expr
             (Bound_pattern.static
                (Bound_static.create [Bound_static.Pattern.block_like symbol]))
             defining_expr ~body
-        | Prim (Unary (Block_load { field; _ }, block), _) -> (
+        | Prim (Unary (Block_load { field; _ }, block), prim_dbg) -> (
           match simplify_block_load acc body_env ~block ~field with
           | Unknown -> bind acc body_env
           | Not_a_block ->
@@ -1660,7 +1660,8 @@ let close_let acc env let_bound_ids_with_kinds user_visible defining_expr
             else
               ( acc,
                 Expr.create_invalid
-                  (Defining_expr_of_let (bound_pattern, defining_expr)) )
+                  (Defining_expr_of_let (bound_pattern, defining_expr))
+                  ~dbg:prim_dbg )
           | Field_contents sim ->
             let body_env = Env.add_simple_to_substitute env id sim kind in
             body acc body_env
@@ -1960,7 +1961,7 @@ let close_switch acc env ~condition_dbg scrutinee (sw : IR.switch) :
           (acc, Target_ocaml_int.Map.of_list arms)
     in
     if Target_ocaml_int.Map.is_empty arms
-    then Expr_with_acc.create_invalid acc Zero_switch_arms
+    then Expr_with_acc.create_invalid acc Zero_switch_arms ~dbg:condition_dbg
     else
       let scrutinee = Simple.var untagged_scrutinee in
       let acc, body =
@@ -1985,7 +1986,8 @@ let close_switch acc env ~condition_dbg scrutinee (sw : IR.switch) :
             match Target_ocaml_int.Map.find case arms acc with
             | acc, action -> Expr_with_acc.create_apply_cont acc action
             | exception Not_found ->
-              Expr_with_acc.create_invalid acc Zero_switch_arms))
+              Expr_with_acc.create_invalid acc Zero_switch_arms
+                ~dbg:condition_dbg))
       in
       Let_with_acc.create acc
         (Bound_pattern.singleton untagged_scrutinee')
@@ -3403,7 +3405,8 @@ let wrap_partial_application acc env apply_continuation (apply : IR.apply)
     ( acc,
       Expr.create_invalid
         (Partial_application_mode_mismatch_in_lambda
-           (Debuginfo.from_location apply.loc)) )
+           (Debuginfo.from_location apply.loc))
+        ~dbg:(Debuginfo.from_location apply.loc) )
   else
     let function_declarations =
       [ Function_decl.create ~let_rec_ident:(Some wrapper_id)

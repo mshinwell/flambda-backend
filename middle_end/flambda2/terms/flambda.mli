@@ -156,7 +156,7 @@ module Expr : sig
 
   val create_switch : Switch_expr.t -> t
 
-  val create_invalid : Invalid.t -> t
+  val create_invalid : Invalid.t -> dbg:Debuginfo.t -> t
 end
 
 module Named : sig

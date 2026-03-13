@@ -728,7 +728,9 @@ let static_consts env r ~params_and_body bound_static static_consts =
     let bt = Printexc.get_raw_backtrace () in
     (* Create a new "let symbol" with a dummy body to better print the bound
        symbols and static consts. *)
-    let dummy_body = Expr.create_invalid To_cmm_dummy_body in
+    let dummy_body =
+      Expr.create_invalid To_cmm_dummy_body ~dbg:Debuginfo.none
+    in
     let tmp_let_symbol =
       Let.create
         (Bound_pattern.static bound_static)

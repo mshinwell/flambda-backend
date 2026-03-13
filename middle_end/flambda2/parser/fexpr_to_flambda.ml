@@ -752,7 +752,8 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
         ~relative_history:Inlining_history.Relative.empty
     in
     Flambda.Expr.create_apply apply
-  | Invalid { message } -> Flambda.Expr.create_invalid (Message message)
+  | Invalid { message } ->
+    Flambda.Expr.create_invalid (Message message) ~dbg:Debuginfo.none
 
 let bind_all_code_ids env (unit : Fexpr.flambda_unit) =
   let rec go env (e : Fexpr.expr) =

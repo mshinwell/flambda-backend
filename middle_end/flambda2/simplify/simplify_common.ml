@@ -205,7 +205,9 @@ let split_direct_over_application apply ~callee's_code_id
         | Never_returns ->
           (* The whole overapplication never returns, so this point is
              unreachable. *)
-          Expr.create_invalid (Over_application_never_returns apply), NO.empty
+          ( Expr.create_invalid (Over_application_never_returns apply)
+              ~dbg:(Apply.dbg apply),
+            NO.empty )
       in
       let handler_expr =
         Let.create
@@ -266,7 +268,9 @@ let split_direct_over_application apply ~callee's_code_id
              (Flambda_arity.unarized_components full_apply_result_arity))
       in
       Continuation_handler.create params
-        ~handler:(Expr.create_invalid (Over_application_never_returns apply))
+        ~handler:
+          (Expr.create_invalid (Over_application_never_returns apply)
+             ~dbg:(Apply.dbg apply))
         ~free_names_of_handler:(Known Name_occurrences.empty)
         ~is_exn_handler:false ~is_cold:true
     else

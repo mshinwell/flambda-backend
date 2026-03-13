@@ -139,7 +139,7 @@ val create_recursive_let_cont :
 
 val create_switch : Are_rebuilding_terms.t -> Switch_expr.t -> t
 
-val create_invalid : Invalid.t -> t
+val create_invalid : Invalid.t -> dbg:Debuginfo.t -> t
 
 val bind_no_simplification :
   Are_rebuilding_terms.t ->

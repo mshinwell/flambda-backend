@@ -448,7 +448,7 @@ let place_lifted_constants uacc ~lifted_constants_from_defining_expr
 let create_switch uacc ~condition_dbg ~scrutinee ~arms =
   if Target_ocaml_int.Map.cardinal arms < 1
   then
-    ( RE.create_invalid Zero_switch_arms,
+    ( RE.create_invalid Zero_switch_arms ~dbg:condition_dbg,
       UA.notify_added ~code_size:Code_size.invalid uacc )
   else
     let change_to_apply_cont action =
@@ -512,8 +512,8 @@ let bind_let_conts uacc ~body new_handlers =
   ListLabels.fold_left new_handlers ~init:(uacc, body)
     ~f:(fun (uacc, body) new_let_cont -> bind_let_cont uacc body new_let_cont)
 
-let rebuild_invalid uacc reason ~after_rebuild =
-  after_rebuild (RE.create_invalid reason) uacc
+let rebuild_invalid uacc reason ~dbg ~after_rebuild =
+  after_rebuild (RE.create_invalid reason ~dbg) uacc
 
 type rewrite_apply_cont_result =
   | Invalid of { message : string }
@@ -732,7 +732,7 @@ let rewrite_fixed_arity_continuation uacc cont ~use_id arity ~around =
        uacc *)
     (* CR gbury: add a case to [Flambda.Invalid.t] for invalid extra args after
        unboxing ? *)
-    uacc, RE.create_invalid (Message message)
+    uacc, RE.create_invalid (Message message) ~dbg:Debuginfo.none
   | This_continuation cont -> around uacc cont
   | Apply_cont _ -> assert false
   | New_wrapper new_let_cont ->

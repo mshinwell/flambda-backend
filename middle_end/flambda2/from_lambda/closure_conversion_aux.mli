@@ -466,7 +466,7 @@ module Expr_with_acc : sig
 
   val create_switch : Acc.t -> Switch.t -> t
 
-  val create_invalid : Acc.t -> Flambda.Invalid.t -> t
+  val create_invalid : Acc.t -> Flambda.Invalid.t -> dbg:Debuginfo.t -> t
 end
 
 module Apply_cont_with_acc : sig

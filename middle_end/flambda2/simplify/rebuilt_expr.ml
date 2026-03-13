@@ -47,7 +47,7 @@ let [@ocamlformat "disable"] print are_rebuilding ppf t =
   else
     Expr.print ppf t
 
-let term_not_rebuilt = Expr.create_invalid Code_not_rebuilt
+let term_not_rebuilt = Expr.create_invalid Code_not_rebuilt ~dbg:Debuginfo.none
 
 let create_let are_rebuilding bound_vars defining_expr ~body ~free_names_of_body
     =
@@ -145,7 +145,7 @@ let create_switch are_rebuilding switch =
   then term_not_rebuilt
   else Expr.create_switch switch
 
-let create_invalid reason = Expr.create_invalid reason
+let create_invalid reason ~dbg = Expr.create_invalid reason ~dbg
 
 let bind_no_simplification are_rebuilding ~bindings ~body ~cost_metrics_of_body
     ~free_names_of_body =

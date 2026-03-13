@@ -390,7 +390,7 @@ let simplify_let0 ~simplify_expr ~simplify_function_body dacc let_expr
           let uacc = UA.notify_removed ~operation:removed_operations uacc in
           EB.rebuild_invalid uacc
             (Defining_expr_of_let (bound_pattern, defining_expr))
-            ~after_rebuild)
+            ~dbg:Debuginfo.none ~after_rebuild)
     | Ok simplify_named_result ->
       let dacc = Simplify_named_result.dacc simplify_named_result in
       (* First accumulate variable, symbol and code ID usage information. *)

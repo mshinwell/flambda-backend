@@ -1607,8 +1607,14 @@ module Expr = struct
 
   let create_switch switch = create (Switch switch)
 
-  let create_invalid reason =
-    create (Invalid { message = Invalid.to_string reason })
+  let create_invalid reason ~dbg =
+    let message =
+      let s = Invalid.to_string reason in
+      if Debuginfo.is_none dbg
+      then s
+      else Format.asprintf "%s\n(%a)" s Debuginfo.print_compact dbg
+    in
+    create (Invalid { message })
 end
 
 module Let_cont_expr = struct

@@ -105,6 +105,7 @@ val bind_let_conts :
 val rebuild_invalid :
   Upwards_acc.t ->
   Flambda.Invalid.t ->
+  dbg:Debuginfo.t ->
   after_rebuild:
     (Rebuilt_expr.t -> Upwards_acc.t -> Rebuilt_expr.t * Upwards_acc.t) ->
   Rebuilt_expr.t * Upwards_acc.t
