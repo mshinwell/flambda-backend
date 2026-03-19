@@ -4678,9 +4678,49 @@ let cexit id args trap_actions = Cmm.Cexit (Cmm.Lbl id, args, trap_actions)
 let trap_return arg trap_actions =
   Cmm.Cexit (Cmm.Return_lbl, [arg], trap_actions)
 
+(* Detect an empty for-loop and eliminate it. The pattern is:
+ *
+ * (catch rec
+ *    (exit <lbl> <initial_arg>)
+ *  with(<lbl> counter: int)
+ *    (let next (+ counter 1) ; or (- counter 1)
+ *      (if (<cmp> next stop) (exit <lbl> next) <result>)))
+ *
+ * where <result> does not reference counter or next. *)
+let is_empty_for_loop handlers body =
+  match handlers, body with
+  | ( [ { label;
+          params = [(counter_vp, _)];
+          body =
+            Clet
+              ( next_vp,
+                Cop ((Caddi | Csubi), [Cvar counter'; Cconst_int _], _),
+                Cifthenelse
+                  ( Cop (Ccmpi _, [Cvar next'; _], _),
+                    _,
+                    Cexit (Lbl loop_lbl, [Cvar next''], []),
+                    _,
+                    result,
+                    _ ) );
+          _
+        } ],
+      Cexit (Lbl entry_lbl, [_initial_arg], []) )
+    when Static_label.equal label entry_lbl
+         && Static_label.equal label loop_lbl
+         && V.same (VP.var counter_vp) counter'
+         && V.same (VP.var next_vp) next'
+         && V.same (VP.var next_vp) next'' ->
+    Some result
+  | _ -> None
+
 let create_ccatch ~rec_flag ~handlers ~body =
   let rec_flag = if rec_flag then Cmm.Recursive else Cmm.Normal in
-  Cmm.Ccatch (rec_flag, handlers, body)
+  match rec_flag with
+  | Recursive -> (
+    match is_empty_for_loop handlers body with
+    | Some result -> result
+    | None -> Ccatch (rec_flag, handlers, body))
+  | Normal | Exn_handler -> Ccatch (rec_flag, handlers, body)
 
 let unary op ~dbg x = Cop (op, [x], dbg)
 
