@@ -1612,6 +1612,28 @@ and cps_function env ~fid ~fuid ~(recursive : Recursive.t)
 and cps_for_loop acc env ccenv loc ident duid start stop
     (dir : Asttypes.direction_flag) body k k_exn =
   let dbg = Debuginfo.from_location loc in
+  (* Naked int64 scalar type — used for the loop counter to gain one extra bit
+     of range, avoiding overflow on increment/decrement. *)
+  let naked_int64_scalar : _ Scalar.Integral.t =
+    Scalar.naked
+      (Scalar.Integral.Width.Boxable (Int64 Scalar.Any_locality_mode))
+  in
+  let tagged_to_naked_int64 : L.primitive =
+    Pscalar
+      (Unary
+         (Static_cast
+            { src = Scalar.integral L.int;
+              dst = Scalar.integral naked_int64_scalar
+            }))
+  in
+  let naked_int64_to_tagged : L.primitive =
+    Pscalar
+      (Unary
+         (Static_cast
+            { src = Scalar.integral naked_int64_scalar;
+              dst = Scalar.integral L.int
+            }))
+  in
   maybe_insert_let_cont "for_result" L.layout_unit k acc env ccenv
     (fun acc env ccenv k ->
       cps_non_tail_var "for_start" acc env ccenv start
@@ -1627,12 +1649,10 @@ and cps_for_loop acc env ccenv loc ident duid start stop
               let ghost_region =
                 Option.map Env.Region_stack_element.ghost_region current_region
               in
-              let close_let_prim acc ccenv name prim args ~body =
+              let close_let_prim acc ccenv name kind prim args ~body =
                 let id = Ident.create_local name in
                 CC.close_let acc ccenv
-                  [ ( id,
-                      Flambda_debug_uid.none,
-                      Flambda_kind.With_subkind.tagged_immediate ) ]
+                  [id, Flambda_debug_uid.none, kind]
                   Not_user_visible
                   (Prim
                      { prim;
@@ -1644,6 +1664,8 @@ and cps_for_loop acc env ccenv loc ident duid start stop
                      })
                   ~body:(fun acc ccenv -> body id acc ccenv)
               in
+              let tagged_imm = Flambda_kind.With_subkind.tagged_immediate in
+              let naked_i64 = Flambda_kind.With_subkind.naked_int64 in
               let close_if acc ccenv ~cond ~if_true ~if_false =
                 let true_cont = Continuation.create () in
                 let false_cont = Continuation.create () in
@@ -1664,14 +1686,15 @@ and cps_for_loop acc env ccenv loc ident duid start stop
                       ~handler:if_true)
                   ~handler:if_false
               in
-              (* Compute first test: start <= stop for Upto, start >= stop for
-                 Downto *)
-              let first_test_prim : L.primitive =
-                match dir with
-                | Upto -> Pscalar (Binary (Icmp (L.int, Cle)))
-                | Downto -> Pscalar (Binary (Icmp (L.int, Cge)))
+              let cmp : Scalar.Integer_comparison.t =
+                match dir with Upto -> Cle | Downto -> Cge
               in
-              close_let_prim acc ccenv "first_test" first_test_prim
+              (* First test on tagged values: start <= stop (Upto) or start >=
+                 stop (Downto). If false, skip the loop. *)
+              let first_test_prim : L.primitive =
+                Pscalar (Binary (Icmp (L.int, cmp)))
+              in
+              close_let_prim acc ccenv "first_test" tagged_imm first_test_prim
                 [[IR.Var start_var]; [IR.Var stop_var]]
                 ~body:(fun first_test_var acc ccenv ->
                   close_if acc ccenv ~cond:first_test_var
@@ -1679,58 +1702,111 @@ and cps_for_loop acc env ccenv loc ident duid start stop
                       apply_cont_with_extra_args acc env ccenv ~dbg k None
                         [IR.Const L.const_unit])
                     ~if_true:(fun acc ccenv ->
-                      let loop_cont = Continuation.create () in
-                      let { Env.body_env; handler_env; extra_params } =
-                        Env.add_continuation env loop_cont
-                          ~push_to_try_stack:false ~pop_region:false Recursive
-                      in
-                      let params =
-                        ( ident,
-                          Flambda_debug_uid.of_lambda_debug_uid duid,
-                          is_user_visible env ident,
-                          Flambda_kind.With_subkind.tagged_immediate )
-                        :: List.map
-                             (fun (id, duid, kind) ->
-                               id, duid, IR.Not_user_visible, kind)
-                             extra_params
-                      in
-                      let handler acc ccenv =
-                        let ccenv = CCenv.set_not_at_toplevel ccenv in
-                        cps_non_tail_simple acc handler_env ccenv body
-                          (fun acc env ccenv _body_result _arity ->
-                            let subsequent_test_prim : L.primitive =
-                              Pscalar (Binary (Icmp (L.int, Cne)))
-                            in
-                            close_let_prim acc ccenv "subsequent_test"
-                              subsequent_test_prim
-                              [[IR.Var ident]; [IR.Var stop_var]]
-                              ~body:(fun subsequent_test_var acc ccenv ->
-                                close_if acc ccenv ~cond:subsequent_test_var
-                                  ~if_false:(fun acc ccenv ->
-                                    apply_cont_with_extra_args acc env ccenv
-                                      ~dbg k None [IR.Const L.const_unit])
-                                  ~if_true:(fun acc ccenv ->
-                                    let next_prim : L.primitive =
-                                      match dir with
-                                      | Upto ->
-                                        Pscalar (Unary (Integral (L.int, Succ)))
-                                      | Downto ->
-                                        Pscalar (Unary (Integral (L.int, Pred)))
-                                    in
-                                    close_let_prim acc ccenv "next_for"
-                                      next_prim [[IR.Var ident]]
-                                      ~body:(fun next_var acc ccenv ->
-                                        apply_cont_with_extra_args acc env ccenv
-                                          ~dbg loop_cont None [IR.Var next_var]))))
-                          k_exn
-                      in
-                      let body acc ccenv =
-                        apply_cont_with_extra_args acc body_env ccenv ~dbg
-                          loop_cont None [IR.Var start_var]
-                      in
-                      CC.close_let_cont acc ccenv ~name:loop_cont
-                        ~is_exn_handler:false ~params ~recursive:Recursive ~body
-                        ~handler)))
+                      (* Convert start and stop to naked int64 only when
+                         entering the loop, gaining one extra bit to avoid
+                         overflow on incr/decrement *)
+                      close_let_prim acc ccenv "start_naked" naked_i64
+                        tagged_to_naked_int64 [[IR.Var start_var]]
+                        ~body:(fun start_naked acc ccenv ->
+                          close_let_prim acc ccenv "stop_naked" naked_i64
+                            tagged_to_naked_int64 [[IR.Var stop_var]]
+                            ~body:(fun stop_naked acc ccenv ->
+                              let counter_naked =
+                                Ident.create_local "for_counter_naked"
+                              in
+                              let loop_cont = Continuation.create () in
+                              let { Env.body_env; handler_env; extra_params } =
+                                Env.add_continuation env loop_cont
+                                  ~push_to_try_stack:false ~pop_region:false
+                                  Recursive
+                              in
+                              let params =
+                                ( counter_naked,
+                                  Flambda_debug_uid.none,
+                                  IR.Not_user_visible,
+                                  naked_i64 )
+                                :: List.map
+                                     (fun (id, duid, kind) ->
+                                       id, duid, IR.Not_user_visible, kind)
+                                     extra_params
+                              in
+                              let handler acc ccenv =
+                                let ccenv = CCenv.set_not_at_toplevel ccenv in
+                                (* Convert naked counter to tagged for use in
+                                   body *)
+                                CC.close_let acc ccenv
+                                  [ ( ident,
+                                      Flambda_debug_uid.of_lambda_debug_uid duid,
+                                      tagged_imm ) ]
+                                  (is_user_visible env ident)
+                                  (Prim
+                                     { prim = naked_int64_to_tagged;
+                                       args = [[IR.Var counter_naked]];
+                                       loc;
+                                       exn_continuation = None;
+                                       region;
+                                       ghost_region
+                                     })
+                                  ~body:(fun acc ccenv ->
+                                    cps_non_tail_simple acc handler_env ccenv
+                                      body
+                                      (fun acc env ccenv _body_result _arity ->
+                                        (* Increment/decrement BEFORE
+                                           comparison *)
+                                        let next_prim : L.primitive =
+                                          match dir with
+                                          | Upto ->
+                                            Pscalar
+                                              (Unary
+                                                 (Integral
+                                                    (naked_int64_scalar, Succ)))
+                                          | Downto ->
+                                            Pscalar
+                                              (Unary
+                                                 (Integral
+                                                    (naked_int64_scalar, Pred)))
+                                        in
+                                        close_let_prim acc ccenv "next_for"
+                                          naked_i64 next_prim
+                                          [[IR.Var counter_naked]]
+                                          ~body:(fun next_naked acc ccenv ->
+                                            (* Continue test: next <= stop
+                                               (Upto) or next >= stop (Downto),
+                                               on naked int64. Safe from
+                                               overflow since tagged ints fit in
+                                               63 bits and we operate in 64. *)
+                                            let test_prim : L.primitive =
+                                              Pscalar
+                                                (Binary
+                                                   (Icmp
+                                                      (naked_int64_scalar, cmp)))
+                                            in
+                                            close_let_prim acc ccenv
+                                              "continue_test" tagged_imm
+                                              test_prim
+                                              [ [IR.Var next_naked];
+                                                [IR.Var stop_naked] ]
+                                              ~body:(fun test_var acc ccenv ->
+                                                close_if acc ccenv
+                                                  ~cond:test_var
+                                                  ~if_false:(fun acc ccenv ->
+                                                    apply_cont_with_extra_args
+                                                      acc env ccenv ~dbg k None
+                                                      [IR.Const L.const_unit])
+                                                  ~if_true:(fun acc ccenv ->
+                                                    apply_cont_with_extra_args
+                                                      acc env ccenv ~dbg
+                                                      loop_cont None
+                                                      [IR.Var next_naked]))))
+                                      k_exn)
+                              in
+                              let body acc ccenv =
+                                apply_cont_with_extra_args acc body_env ccenv
+                                  ~dbg loop_cont None [IR.Var start_naked]
+                              in
+                              CC.close_let_cont acc ccenv ~name:loop_cont
+                                ~is_exn_handler:false ~params
+                                ~recursive:Recursive ~body ~handler)))))
             k_exn)
         k_exn)
 
