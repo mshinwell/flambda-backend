@@ -135,11 +135,7 @@ module I = struct
     I.simd simd args
 end
 
-(** Turn a Linear label into an assembly label. The section is checked against
-    the section tracked by [D] when emitting label definitions. *)
-let label_to_asm_label (l : label) ~(section : Asm_targets.Asm_section.t) : L.t
-    =
-  L.create_int section (Label.to_int l)
+let label_to_asm_label = Emitaux.label_to_asm_label
 
 (* X86 operands for jumping to the respective label. [emit_asm_label_arg] can be
    used with [L.t] labels and [emit_label_arg] with Linear [label] arguments. *)
@@ -207,11 +203,8 @@ let phys_rcx = phys_reg Int (P RCX)
 
 let phys_xmm0v () = phys_reg Vec128 (P MM0)
 
-let file_emitter ~file_num ~file_name =
-  D.file ~file_num:(Some file_num) ~file_name
-
 let emit_debug_info ?discriminator dbg =
-  emit_debug_info_gen ?discriminator dbg file_emitter D.loc
+  emit_debug_info_gen ?discriminator dbg Emitaux.file_emitter D.loc
 
 let emit_debug_info_linear i =
   match i.fdo with
@@ -266,23 +259,16 @@ let pop r =
 
 (* Symbols *)
 
-(* Convert Cmm.is_global to Asm_symbol.visibility *)
-let visibility_of_cmm_global : Cmm.is_global -> S.visibility = function
-  | Cmm.Global -> S.Global
-  | Cmm.Local -> S.Local
+let visibility_of_cmm_global = Emitaux.visibility_of_cmm_global
 
 let emit_symbol s = S.encode (S.create_global s)
 
 (* Record symbols used and defined - at the end generate extern for those used
    but not defined *)
 
-let symbols_defined = ref String.Set.empty
+let add_def_symbol = Emitaux.add_def_symbol
 
-let symbols_used = ref String.Set.empty
-
-let add_def_symbol s = symbols_defined := String.Set.add s !symbols_defined
-
-let add_used_symbol s = symbols_used := String.Set.add s !symbols_used
+let add_used_symbol = Emitaux.add_used_symbol
 
 let imp_table = Hashtbl.create 16
 
@@ -1033,33 +1019,13 @@ let emit_vec512_constant
   D.float64_from_bits word6;
   D.float64_from_bits word7
 
-let global_maybe_protected (sym : S.t) =
-  D.global sym;
-  if !Oxcaml_flags.symbol_visibility_protected
-  then
-    (* CR sspies: This match should probably moved into asm directives. Check
-       what Arm does. *)
-    match system with
-    | S_macosx | S_win32 | S_win64 | S_mingw64 | S_cygwin | S_mingw | S_unknown
-      ->
-      ()
-    | S_gnu | S_solaris | S_linux_elf | S_bsd_elf | S_beos | S_linux | S_freebsd
-    | S_netbsd | S_openbsd ->
-      (* Global symbols can be marked as being protected. Unlike in C we don't
-         want them to be preempted as we're doing a lot of cross module
-         inlining. *)
-      D.protected sym
+let global_maybe_protected = Emitaux.global_maybe_protected
 
-(* CR sspies: The naming of these functions is confusing. *)
 let emit_global_label_for_symbol ~section lbl =
-  add_def_symbol lbl;
-  let lbl = S.create_global lbl in
-  global_maybe_protected lbl;
-  D.define_symbol_label ~section lbl
+  ignore (Emitaux.define_global_symbol ~section lbl)
 
 let emit_global_label ~section s =
-  let lbl = Cmm_helpers.make_symbol s in
-  emit_global_label_for_symbol ~section lbl
+  emit_global_label_for_symbol ~section (Cmm_helpers.make_symbol s)
 
 let movd src dst =
   let open Simd_instrs in
@@ -2689,68 +2655,7 @@ let fundecl fundecl =
 
 (* Emission of data *)
 
-(* CR sspies: Share the [emit_item] code with the Arm backend in emitaux. *)
-let emit_item : Cmm.data_item -> unit = function
-  | Cdefine_symbol s -> (
-    let sym =
-      S.create ~visibility:(visibility_of_cmm_global s.sym_global) s.sym_name
-    in
-    match s.sym_global with
-    | Local -> D.define_label (L.create_string_unchecked Data (S.encode sym))
-    | Global ->
-      global_maybe_protected sym;
-      add_def_symbol s.sym_name;
-      (* Following the same convention as for function symbols above, we emit
-         both a label and a linker symbol for [sym]. *)
-      D.define_joint_label_and_symbol ~section:Data sym)
-  | Cint8 n -> D.int8 (Numbers.Int8.of_int_exn n)
-  | Cint16 n -> D.int16 (Numbers.Int16.of_int_exn n)
-  | Cint32 n -> D.int32 (Numbers.Int64.to_int32_exn (Int64.of_nativeint n))
-  (* CR mshinwell: Add [Targetint.of_nativeint] *)
-  | Cint n -> D.targetint (Targetint.of_int64 (Int64.of_nativeint n))
-  | Csingle f -> D.float32 f
-  | Cdouble f -> D.float64 f
-  (* SIMD vectors respect little-endian byte order *)
-  | Cvec128 { word0; word1 } ->
-    (* Least significant *)
-    D.float64_from_bits word0;
-    D.float64_from_bits word1
-  | Cvec256 { word0; word1; word2; word3 } ->
-    (* Least significant *)
-    D.float64_from_bits word0;
-    D.float64_from_bits word1;
-    D.float64_from_bits word2;
-    D.float64_from_bits word3
-  | Cvec512 { word0; word1; word2; word3; word4; word5; word6; word7 } ->
-    (* Least significant *)
-    D.float64_from_bits word0;
-    D.float64_from_bits word1;
-    D.float64_from_bits word2;
-    D.float64_from_bits word3;
-    D.float64_from_bits word4;
-    D.float64_from_bits word5;
-    D.float64_from_bits word6;
-    D.float64_from_bits word7
-  | Csymbol_address s -> (
-    add_used_symbol s.sym_name;
-    match emit_cmm_symbol s with
-    | `Symbol s -> D.symbol s
-    | `Label l -> D.label l)
-  | Csymbol_offset (s, o) -> (
-    add_used_symbol s.sym_name;
-    match emit_cmm_symbol s with
-    | `Symbol s ->
-      D.symbol_plus_offset s ~offset_in_bytes:(Targetint.of_int_exn o)
-    | `Label l ->
-      D.label_plus_offset l ~offset_in_bytes:(Targetint.of_int_exn o))
-  | Cstring s -> D.string s
-  | Cskip n -> D.space ~bytes:n
-  | Calign n -> D.align ~fill:Zero ~bytes:n
-
-let data l =
-  D.data ();
-  D.align ~fill:Zero ~bytes:8;
-  List.iter emit_item l
+let data l = Emitaux.data l
 
 (* Beginning / end of an assembly file *)
 
@@ -2776,9 +2681,6 @@ let begin_assembly unix =
     ~emit_assembly_comments:!Oxcaml_flags.dasm_comments
       (* As a first step, we emit by calling the corresponding x86 emit
          directives. *) ~emit:(fun d -> directive (Directive d));
-  let code_begin = Cmm_helpers.make_symbol "code_begin" in
-  let code_end = Cmm_helpers.make_symbol "code_end" in
-  Emitaux.Dwarf_helpers.begin_dwarf ~code_begin ~code_end ~file_emitter;
   if is_win64 system
   then (
     D.extrn S.Predef.caml_call_gc;
@@ -2826,11 +2728,8 @@ let begin_assembly unix =
       S.Predef.caml_absf32_mask;
     D.int64 0xFFFFFFFF7FFFFFFFL;
     D.int64 0xFFFFFFFFFFFFFFFFL);
-  D.data ();
-  emit_global_label ~section:Data "data_begin";
-  emit_named_text_section code_begin;
-  emit_global_label_for_symbol ~section:Text code_begin;
-  if is_macosx system then I.nop ();
+  Emitaux.emit_begin_assembly_symbols ~emit_named_text_section
+    ~emit_macos_padding:(fun () -> I.nop ());
   (* PR#4690 *)
   Regs.Save_simd_regs.all
   |> List.iter (fun simd ->
@@ -3104,57 +3003,10 @@ let end_assembly () =
   emit_named_text_section code_end;
   if is_macosx system then I.nop ();
   (* suppress "ld warning: atom sorting error" *)
-  emit_global_label_for_symbol ~section:Text code_end;
+  ignore (Emitaux.define_global_symbol ~section:Text code_end);
   emit_imp_table ~section:Text ();
-  D.data ();
-  D.int64 0L;
-  (* PR#6329 *)
-  emit_global_label ~section:Data "data_end";
-  D.int64 0L;
-  D.text ();
-  (* We align to 8 bytes before the frame table. Perhaps somewhat
-     counterintuitively, we use [~fill:Zero] even though we are now in the text
-     section. The reason is that the additional padding will never be executed,
-     so there is no need to pad it with nops in the X86 binary emitter. *)
-  (* CR sspies: We should just determine the filling based on the current
-     section for the binary emitter and then remove the argument [fill]. This is
-     the only place, where it does not seem to match the current section, and it
-     seems it does not matter whether we pad with zeros or nops here. *)
-  D.align ~fill:Zero ~bytes:8;
-  (* PR#7591 *)
-  emit_global_label ~section:Text "frametable";
-  (* CR sspies: Share the [emit_frames] code with the Arm backend. *)
-  emit_frames
-    { efa_code_label =
-        (fun l ->
-          let l = label_to_asm_label ~section:Text l in
-          D.label l);
-      efa_data_label =
-        (fun l ->
-          let l = label_to_asm_label ~section:Data l in
-          D.label l);
-      efa_i8 = (fun n -> D.int8 n);
-      efa_i16 = (fun n -> D.int16 n);
-      efa_i32 = (fun n -> D.int32 n);
-      efa_u8 = (fun n -> D.uint8 n);
-      efa_u16 = (fun n -> D.uint16 n);
-      efa_u32 = (fun n -> D.uint32 n);
-      efa_word = (fun n -> D.targetint (Targetint.of_int_exn n));
-      efa_align = (fun n -> D.align ~fill:Zero ~bytes:n);
-      efa_label_rel =
-        (fun lbl ofs ->
-          let lbl = label_to_asm_label ~section:Text lbl in
-          let ofs = Targetint.of_int32 ofs in
-          D.between_this_and_label_offset_32bit_expr ~upper:lbl
-            ~offset_upper:ofs);
-      efa_def_label =
-        (fun l ->
-          let lbl = label_to_asm_label ~section:Text l in
-          D.define_label lbl);
-      efa_string = (fun s -> D.string (s ^ "\000"))
-    };
-  let frametable_sym = S.create_global (Cmm_helpers.make_symbol "frametable") in
-  D.size frametable_sym;
+  Emitaux.emit_end_assembly_data_and_frametable ~frametable_section:Text
+    ~emit_type_labels:false;
   D.data ();
   Probe_emission.emit_probe_notes ~add_def_symbol;
   emit_trap_notes ();
@@ -3165,11 +3017,10 @@ let end_assembly () =
     D.comment "External functions";
     String.Set.iter
       (fun s ->
-        if not (String.Set.mem s !symbols_defined)
+        if not (String.Set.mem s (Emitaux.defined_symbols ()))
         then D.extrn (S.create_global s))
-      !symbols_used;
-    symbols_used := String.Set.empty;
-    symbols_defined := String.Set.empty);
+      (Emitaux.used_symbols ());
+    Emitaux.reset_symbol_tracking ());
   let asm =
     if !X86_proc.create_asm_file
     then

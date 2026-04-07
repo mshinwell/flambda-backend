@@ -159,3 +159,63 @@ val emit_elf_note :
   typ:int32 ->
   emit_desc:(unit -> unit) ->
   unit
+
+(** {1 Shared helpers for emit backends} *)
+
+val visibility_of_cmm_global :
+  Cmm.is_global -> Asm_targets.Asm_symbol.visibility
+
+val symbol_of_cmm_symbol : Cmm.symbol -> Asm_targets.Asm_symbol.t
+
+val nativeint_to_int32 : nativeint -> int32
+
+val label_to_asm_label :
+  Label.t -> section:Asm_targets.Asm_section.t -> Asm_targets.Asm_label.t
+
+val file_emitter : file_num:int -> file_name:string -> unit
+
+val global_maybe_protected : Asm_targets.Asm_symbol.t -> unit
+
+(** {2 Symbol tracking} *)
+
+val add_def_symbol : string -> unit
+
+val add_used_symbol : string -> unit
+
+val defined_symbols : unit -> Misc.Stdlib.String.Set.t
+
+val used_symbols : unit -> Misc.Stdlib.String.Set.t
+
+val reset_symbol_tracking : unit -> unit
+
+(** Define a global symbol: marks it as defined, emits global + protected
+    visibility, and defines the symbol label. Returns the symbol. *)
+val define_global_symbol :
+  section:Asm_targets.Asm_section.t -> string -> Asm_targets.Asm_symbol.t
+
+(** {2 Data emission} *)
+
+val emit_item : Cmm.data_item -> unit
+
+val data : Cmm.data_item list -> unit
+
+val make_asm_directives_frame_actions :
+  emit_type_labels:bool ->
+  frametable_section:Asm_targets.Asm_section.t ->
+  emit_frame_actions
+
+(** {2 Shared assembly file structure} *)
+
+(** Emit data_begin, code_begin symbols, macOS padding, and initialize DWARF.
+    Called by each backend's [begin_assembly] after platform-specific
+    initialization. *)
+val emit_begin_assembly_symbols :
+  emit_named_text_section:(string -> unit) ->
+  emit_macos_padding:(unit -> unit) ->
+  unit
+
+(** Emit data_end symbol (with padding), switch to frametable section, emit
+    frametable symbol, frame descriptors, and symbol size info. Called by each
+    backend's [end_assembly] after emitting code_end. *)
+val emit_end_assembly_data_and_frametable :
+  frametable_section:Asm_targets.Asm_section.t -> emit_type_labels:bool -> unit

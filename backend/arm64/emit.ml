@@ -246,14 +246,7 @@ end
 (* CR mshinwell: maybe the following two functions should move to a new
    Cmm.Symbol module, which would include Cmm.symbol as the type "t"? *)
 
-(* Convert Cmm.is_global to Asm_symbol.visibility *)
-let visibility_of_cmm_global : Cmm.is_global -> S.visibility = function
-  | Cmm.Global -> S.Global
-  | Cmm.Local -> S.Local
-
-(* Create symbol from Cmm.symbol, preserving visibility *)
-let symbol_of_cmm_symbol (s : Cmm.symbol) : S.t =
-  S.create ~visibility:(visibility_of_cmm_global s.sym_global) s.sym_name
+let symbol_of_cmm_symbol = Emitaux.symbol_of_cmm_symbol
 
 (* Scratch FP/SIMD register 7 in various widths. - S7: used for float32
    load/store conversions - D7, V8B_7, B7: used for popcnt emulation when CSSC
@@ -293,19 +286,9 @@ let reg_stack_arg_begin = H.reg_x (phys_reg Int X20)
 
 let reg_stack_arg_end = H.reg_x (phys_reg Int X21)
 
-(** Turn a Linear label into an assembly label. The section is checked against
-    the section tracked by [D] when emitting label definitions. *)
-let label_to_asm_label (l : label) ~(section : Asm_targets.Asm_section.t) : L.t
-    =
-  L.create_int section (Label.to_int l)
+let label_to_asm_label = Emitaux.label_to_asm_label
 
-(* Mark a symbol as global, with protected visibility on ELF if enabled.
-   Protected visibility prevents symbol interposition, which allows direct
-   addressing to be used safely. This matches amd64 behavior. *)
-let global_maybe_protected sym =
-  D.global sym;
-  if (not macosx) && !Oxcaml_flags.symbol_visibility_protected
-  then D.protected sym
+let global_maybe_protected = Emitaux.global_maybe_protected
 
 (* Convenience functions for symbols and labels *)
 let symbol ?offset reloc s = O.symbol (Ast.Symbol.create_symbol reloc ?offset s)
@@ -748,11 +731,8 @@ let record_frame env live dbg =
 
 (* Misc debug info emission helpers *)
 
-let file_emitter ~file_num ~file_name =
-  D.file ~file_num:(Some file_num) ~file_name
-
 let emit_debug_info ?discriminator dbg =
-  Emitaux.emit_debug_info_gen ?discriminator dbg file_emitter D.loc
+  Emitaux.emit_debug_info_gen ?discriminator dbg Emitaux.file_emitter D.loc
 
 (* Record calls to the GC -- we've moved them out of the way *)
 
@@ -2109,63 +2089,7 @@ let fundecl fundecl =
 
 (* Emission of data *)
 
-let nativeint_to_int32 n =
-  if
-    Nativeint.compare n (Nativeint.of_int32 Int32.min_int) < 0
-    || Nativeint.compare n (Nativeint.of_int32 Int32.max_int) > 0
-  then Misc.fatal_errorf "nativeint_to_int32: value %nd out of int32 range" n;
-  Nativeint.to_int32 n
-
-(* CR sspies: Share the [emit_item] code with the x86 backend in emitaux. *)
-let emit_item (d : Cmm.data_item) =
-  match d with
-  | Cdefine_symbol s -> (
-    let sym = symbol_of_cmm_symbol s in
-    match s.sym_global with
-    | Local ->
-      (* Use a label rather than a linker symbol for local definitions. This
-         avoids visibility issues on ELF (symbols that "may bind externally"
-         can't use PC-relative relocations in shared objects). *)
-      D.define_label (L.create_string_unchecked Data (S.encode sym))
-    | Global ->
-      global_maybe_protected sym;
-      (* Define both a label and a linker symbol, so the symbol can be
-         referenced either way. This matches amd64 behaviour. *)
-      D.define_joint_label_and_symbol ~section:Data sym)
-  | Cint8 n -> D.int8 (Numbers.Int8.of_int_exn n)
-  | Cint16 n -> D.int16 (Numbers.Int16.of_int_exn n)
-  | Cint32 n -> D.int32 (nativeint_to_int32 n)
-  (* CR mshinwell: Add [Targetint.of_nativeint] *)
-  | Cint n -> D.targetint (Targetint.of_int64 (Int64.of_nativeint n))
-  | Csingle f -> D.float32 f
-  | Cdouble f -> D.float64 f
-  | Cvec128 { word0; word1 } ->
-    D.float64_from_bits word1;
-    D.float64_from_bits word0
-  | Cvec256 _ | Cvec512 _ -> Misc.fatal_error "arm64: got 256/512 bit vector"
-  | Csymbol_address s -> (
-    let sym = symbol_of_cmm_symbol s in
-    match s.sym_global with
-    | Global -> D.symbol sym
-    | Local -> D.label (L.create_string_unchecked Data (S.encode sym)))
-  | Csymbol_offset (s, o) -> (
-    let sym = symbol_of_cmm_symbol s in
-    match s.sym_global with
-    | Global -> D.symbol_plus_offset ~offset_in_bytes:(Targetint.of_int o) sym
-    | Local ->
-      D.label_plus_offset ~offset_in_bytes:(Targetint.of_int o)
-        (L.create_string_unchecked Data (S.encode sym)))
-  | Cstring s -> D.string s
-  | Cskip n -> D.space ~bytes:n
-  | Calign n -> D.align ~fill:Zero ~bytes:n
-
-let data l =
-  D.data ();
-  D.align ~fill:Zero ~bytes:8;
-  List.iter emit_item l
-
-let file_emitter ~file_num ~file_name =
-  D.file ~file_num:(Some file_num) ~file_name
+let data l = Emitaux.data l
 
 (* Beginning / end of an assembly file *)
 
@@ -2190,89 +2114,23 @@ let begin_assembly _unix =
       Emitaux.emit_buffer asm_line_buffer);
   D.file ~file_num:None ~file_name:"";
   (* PR#7037 *)
-  let data_begin = Cmm_helpers.make_symbol "data_begin" in
-  let data_begin_sym = S.create_global data_begin in
-  D.data ();
-  global_maybe_protected data_begin_sym;
-  D.define_symbol_label ~section:Data data_begin_sym;
-  let code_begin = Cmm_helpers.make_symbol "code_begin" in
-  let code_begin_sym = S.create_global code_begin in
-  emit_named_text_section code_begin;
-  global_maybe_protected code_begin_sym;
-  D.define_symbol_label ~section:Text code_begin_sym;
-  (* we need to pad here to avoid collision for the unwind test between the
-     code_begin symbol and the first function. (See also #4690) Alignment is
-     needed to avoid linker warnings for shared_startup__code_{begin,end} (e.g.
-     tests/lib-dynlink-pr4839). *)
-  if macosx
-  then (
-    A.ins0 NOP;
-    D.align ~fill:Nop ~bytes:8);
-  let code_end = Cmm_helpers.make_symbol "code_end" in
-  Emitaux.Dwarf_helpers.begin_dwarf ~code_begin ~code_end ~file_emitter
+  Emitaux.emit_begin_assembly_symbols ~emit_named_text_section
+    ~emit_macos_padding:(fun () ->
+      A.ins0 NOP;
+      D.align ~fill:Nop ~bytes:8)
 
 (* Not implemented for arm64 *)
 let register_expect_asm_callback (_ : string -> unit) = ()
 
 let end_assembly () =
   let code_end = Cmm_helpers.make_symbol "code_end" in
-  let code_end_sym = S.create_global code_end in
   emit_named_text_section code_end;
-  global_maybe_protected code_end_sym;
-  D.define_symbol_label ~section:Text code_end_sym;
-  let data_end = Cmm_helpers.make_symbol "data_end" in
-  let data_end_sym = S.create_global data_end in
-  D.data ();
-  D.int64 0L;
-  (* PR#6329 *)
-  global_maybe_protected data_end_sym;
-  D.define_symbol_label ~section:Data data_end_sym;
-  D.int64 0L;
-  D.align ~fill:Zero ~bytes:8;
-  (* #7887 *)
-  let frametable = Cmm_helpers.make_symbol "frametable" in
-  let frametable_sym = S.create_global frametable in
-  global_maybe_protected frametable_sym;
-  D.define_symbol_label ~section:Data frametable_sym;
-  (* CR sspies: Share the [emit_frames] code with the x86 backend. *)
-  emit_frames
-    { efa_code_label =
-        (fun lbl ->
-          let lbl = label_to_asm_label ~section:Text lbl in
-          D.type_label ~ty:Function lbl;
-          D.label lbl);
-      efa_data_label =
-        (fun lbl ->
-          let lbl = label_to_asm_label ~section:Data lbl in
-          D.type_label ~ty:Object lbl;
-          D.label lbl);
-      efa_i8 = (fun n -> D.int8 n);
-      efa_i16 = (fun n -> D.int16 n);
-      efa_i32 = (fun n -> D.int32 n);
-      efa_u8 = (fun n -> D.uint8 n);
-      efa_u16 = (fun n -> D.uint16 n);
-      efa_u32 = (fun n -> D.uint32 n);
-      efa_word = (fun n -> D.targetint (Targetint.of_int_exn n));
-      efa_align = (fun n -> D.align ~fill:Zero ~bytes:n);
-      efa_label_rel =
-        (fun lbl ofs ->
-          let lbl = label_to_asm_label ~section:Data lbl in
-          D.between_this_and_label_offset_32bit_expr ~upper:lbl
-            ~offset_upper:(Targetint.of_int32 ofs));
-      efa_def_label =
-        (fun lbl ->
-          (* CR sspies: The frametable lives in the [.data] section on Arm, but
-             in the [.text] section on x86. The frametable should move to the
-             text section on Arm as well. *)
-          let lbl = label_to_asm_label ~section:Data lbl in
-          D.define_label lbl);
-      efa_string = (fun s -> D.string (s ^ "\000"))
-    };
-  D.type_symbol ~ty:Object frametable_sym;
-  D.size frametable_sym;
+  ignore (Emitaux.define_global_symbol ~section:Text code_end);
+  Emitaux.emit_end_assembly_data_and_frametable ~frametable_section:Data
+    ~emit_type_labels:true;
   if not !Oxcaml_flags.internal_assembler
   then Emitaux.Dwarf_helpers.emit_dwarf ();
-  Probe_emission.emit_probe_notes ~add_def_symbol:(fun _ -> ());
+  Probe_emission.emit_probe_notes ~add_def_symbol:Emitaux.add_def_symbol;
   D.mark_stack_non_executable ();
   (* Finalize binary emitter if enabled *)
   Binary_emitter_helpers.end_emission ()

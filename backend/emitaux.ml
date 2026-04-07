@@ -644,7 +644,187 @@ let emit_elf_note ~section ~owner ~typ ~emit_desc =
   D.define_label d;
   D.align ~fill:Zero ~bytes
 
+(* Shared helpers for emit backends *)
+
+module D = Asm_targets.Asm_directives
+module S = Asm_targets.Asm_symbol
+module L = Asm_targets.Asm_label
+
+let visibility_of_cmm_global : Cmm.is_global -> S.visibility = function
+  | Cmm.Global -> S.Global
+  | Cmm.Local -> S.Local
+
+let symbol_of_cmm_symbol (s : Cmm.symbol) : S.t =
+  S.create ~visibility:(visibility_of_cmm_global s.sym_global) s.sym_name
+
+let nativeint_to_int32 n = Numbers.Int64.to_int32_exn (Int64.of_nativeint n)
+
+let label_to_asm_label (l : Label.t) ~(section : Asm_targets.Asm_section.t) :
+    L.t =
+  L.create_int section (Label.to_int l)
+
+let file_emitter ~file_num ~file_name =
+  D.file ~file_num:(Some file_num) ~file_name
+
+let global_maybe_protected sym =
+  D.global sym;
+  if !Oxcaml_flags.symbol_visibility_protected
+  then
+    match Target_system.system () with
+    | Linux | FreeBSD | NetBSD | OpenBSD | Generic_BSD | Solaris | Dragonfly
+    | GNU | BeOS ->
+      D.protected sym
+    | MacOS_like | Windows _ | Unknown -> ()
+
+(* Symbol tracking (used for Win64 extern declarations) *)
+
+let symbols_defined = ref Misc.Stdlib.String.Set.empty
+
+let symbols_used = ref Misc.Stdlib.String.Set.empty
+
+let add_def_symbol s =
+  symbols_defined := Misc.Stdlib.String.Set.add s !symbols_defined
+
+let add_used_symbol s =
+  symbols_used := Misc.Stdlib.String.Set.add s !symbols_used
+
+let defined_symbols () = !symbols_defined
+
+let used_symbols () = !symbols_used
+
+let reset_symbol_tracking () =
+  symbols_used := Misc.Stdlib.String.Set.empty;
+  symbols_defined := Misc.Stdlib.String.Set.empty
+
+(* Define a global symbol with protected visibility and tracking. *)
+let define_global_symbol ~section name =
+  add_def_symbol name;
+  let sym = S.create_global name in
+  global_maybe_protected sym;
+  D.define_symbol_label ~section sym;
+  sym
+
+(* Emit a vector's words in memory order. On little-endian, least significant
+   word first; on big-endian, most significant word first. *)
+let emit_vec_words words =
+  let words = if Arch.big_endian then List.rev words else words in
+  List.iter D.float64_from_bits words
+
+let emit_item (d : Cmm.data_item) =
+  match d with
+  | Cdefine_symbol s -> (
+    let sym = symbol_of_cmm_symbol s in
+    match s.sym_global with
+    | Local -> D.define_label (L.create_string_unchecked Data (S.encode sym))
+    | Global ->
+      add_def_symbol s.sym_name;
+      global_maybe_protected sym;
+      D.define_joint_label_and_symbol ~section:Data sym)
+  | Cint8 n -> D.int8 (Numbers.Int8.of_int_exn n)
+  | Cint16 n -> D.int16 (Numbers.Int16.of_int_exn n)
+  | Cint32 n -> D.int32 (nativeint_to_int32 n)
+  | Cint n -> D.targetint (Targetint.of_int64 (Int64.of_nativeint n))
+  | Csingle f -> D.float32 f
+  | Cdouble f -> D.float64 f
+  | Cvec128 { word0; word1 } -> emit_vec_words [word0; word1]
+  | Cvec256 { word0; word1; word2; word3 } ->
+    emit_vec_words [word0; word1; word2; word3]
+  | Cvec512 { word0; word1; word2; word3; word4; word5; word6; word7 } ->
+    emit_vec_words [word0; word1; word2; word3; word4; word5; word6; word7]
+  | Csymbol_address s -> (
+    add_used_symbol s.sym_name;
+    let sym = symbol_of_cmm_symbol s in
+    match s.sym_global with
+    | Global -> D.symbol sym
+    | Local -> D.label (L.create_string_unchecked Data (S.encode sym)))
+  | Csymbol_offset (s, o) -> (
+    add_used_symbol s.sym_name;
+    let sym = symbol_of_cmm_symbol s in
+    let offset = Targetint.of_int_exn o in
+    match s.sym_global with
+    | Global -> D.symbol_plus_offset ~offset_in_bytes:offset sym
+    | Local ->
+      D.label_plus_offset ~offset_in_bytes:offset
+        (L.create_string_unchecked Data (S.encode sym)))
+  | Cstring s -> D.string s
+  | Cskip n -> D.space ~bytes:n
+  | Calign n -> D.align ~fill:Zero ~bytes:n
+
+let data l =
+  D.data ();
+  D.align ~fill:Zero ~bytes:8;
+  List.iter emit_item l
+
+let make_asm_directives_frame_actions ~emit_type_labels ~frametable_section =
+  { efa_code_label =
+      (fun lbl ->
+        let lbl = label_to_asm_label ~section:Text lbl in
+        if emit_type_labels then D.type_label lbl ~ty:Function;
+        D.label lbl);
+    efa_data_label =
+      (fun lbl ->
+        let lbl = label_to_asm_label ~section:Data lbl in
+        if emit_type_labels then D.type_label lbl ~ty:Object;
+        D.label lbl);
+    efa_i8 = (fun n -> D.int8 n);
+    efa_i16 = (fun n -> D.int16 n);
+    efa_i32 = (fun n -> D.int32 n);
+    efa_u8 = (fun n -> D.uint8 n);
+    efa_u16 = (fun n -> D.uint16 n);
+    efa_u32 = (fun n -> D.uint32 n);
+    efa_word = (fun n -> D.targetint (Targetint.of_int_exn n));
+    efa_align = (fun n -> D.align ~fill:Zero ~bytes:n);
+    efa_label_rel =
+      (fun lbl ofs ->
+        let lbl = label_to_asm_label ~section:frametable_section lbl in
+        D.between_this_and_label_offset_32bit_expr ~upper:lbl
+          ~offset_upper:(Targetint.of_int32 ofs));
+    efa_def_label =
+      (fun lbl ->
+        let lbl = label_to_asm_label ~section:frametable_section lbl in
+        D.define_label lbl);
+    efa_string = (fun s -> D.string (s ^ "\000"))
+  }
+
+(* Shared assembly file structure *)
+
+let emit_begin_assembly_symbols ~emit_named_text_section ~emit_macos_padding =
+  let data_begin = Cmm_helpers.make_symbol "data_begin" in
+  D.data ();
+  ignore (define_global_symbol ~section:Data data_begin);
+  let code_begin = Cmm_helpers.make_symbol "code_begin" in
+  emit_named_text_section code_begin;
+  ignore (define_global_symbol ~section:Text code_begin);
+  if Target_system.is_macos () then emit_macos_padding ();
+  let code_end = Cmm_helpers.make_symbol "code_end" in
+  Dwarf_helpers.begin_dwarf ~code_begin ~code_end ~file_emitter
+
+let emit_end_assembly_data_and_frametable ~frametable_section ~emit_type_labels
+    =
+  (* data_end *)
+  let data_end = Cmm_helpers.make_symbol "data_end" in
+  D.data ();
+  D.int64 0L;
+  ignore (define_global_symbol ~section:Data data_end);
+  D.int64 0L;
+  (* frametable *)
+  (match[@ocaml.warning "-4"]
+     (frametable_section : Asm_targets.Asm_section.t)
+   with
+  | Text -> D.text ()
+  | _ -> ());
+  D.align ~fill:Zero ~bytes:8;
+  let frametable = Cmm_helpers.make_symbol "frametable" in
+  let frametable_sym =
+    define_global_symbol ~section:frametable_section frametable
+  in
+  emit_frames
+    (make_asm_directives_frame_actions ~emit_type_labels ~frametable_section);
+  if emit_type_labels then D.type_symbol ~ty:Object frametable_sym;
+  D.size frametable_sym
+
 let reset () =
   reset_debug_info ();
   frame_descriptors := [];
-  stapsdt_base_emitted := false
+  stapsdt_base_emitted := false;
+  reset_symbol_tracking ()
