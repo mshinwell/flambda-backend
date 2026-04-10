@@ -3054,65 +3054,25 @@ let end_assembly () =
   List.iter emit_probe_handler_wrapper (Probe_emission.get_probes ());
   emit_named_text_section (Cmm_helpers.make_symbol "jump_tables");
   emit_jump_tables ();
-  let code_end = Cmm_helpers.make_symbol "code_end" in
-  emit_named_text_section code_end;
-  if is_macosx system then I.nop ();
-  (* suppress "ld warning: atom sorting error" *)
-  emit_global_label_for_symbol ~section:Text code_end;
-  emit_imp_table ~section:Text ();
-  D.data ();
-  D.int64 0L;
-  (* PR#6329 *)
-  emit_global_label ~section:Data "data_end";
-  D.int64 0L;
-  D.text ();
-  (* We align to 8 bytes before the frame table. Perhaps somewhat
-     counterintuitively, we use [~fill:Zero] even though we are now in the text
-     section. The reason is that the additional padding will never be executed,
-     so there is no need to pad it with nops in the X86 binary emitter. *)
-  (* CR sspies: We should just determine the filling based on the current
-     section for the binary emitter and then remove the argument [fill]. This is
-     the only place, where it does not seem to match the current section, and it
-     seems it does not matter whether we pad with zeros or nops here. *)
-  D.align ~fill:Zero ~bytes:8;
-  (* PR#7591 *)
-  emit_global_label ~section:Text "frametable";
-  (* CR sspies: Share the [emit_frames] code with the Arm backend. *)
-  emit_frames
-    { efa_code_label =
-        (fun l ->
-          let l = label_to_asm_label ~section:Text l in
-          D.label l);
-      efa_data_label =
-        (fun l ->
-          let l = label_to_asm_label ~section:Data l in
-          D.label l);
-      efa_i8 = (fun n -> D.int8 n);
-      efa_i16 = (fun n -> D.int16 n);
-      efa_i32 = (fun n -> D.int32 n);
-      efa_u8 = (fun n -> D.uint8 n);
-      efa_u16 = (fun n -> D.uint16 n);
-      efa_u32 = (fun n -> D.uint32 n);
-      efa_word = (fun n -> D.targetint (Targetint.of_int_exn n));
-      efa_align = (fun n -> D.align ~fill:Zero ~bytes:n);
-      efa_label_rel =
-        (fun lbl ofs ->
-          let lbl = label_to_asm_label ~section:Text lbl in
-          let ofs = Targetint.of_int32 ofs in
-          D.between_this_and_label_offset_32bit_expr ~upper:lbl
-            ~offset_upper:ofs);
-      efa_def_label =
-        (fun l ->
-          let lbl = label_to_asm_label ~section:Text l in
-          D.define_label lbl);
-      efa_string = (fun s -> D.string (s ^ "\000"))
+  Emitaux.end_assembly_common
+    { emit_named_text_section = (fun s -> emit_named_text_section s);
+      global_maybe_protected;
+      add_def_symbol;
+      before_code_end_symbol =
+        (fun () ->
+          if is_macosx system
+          then I.nop () (* suppress "ld warning: atom sorting error" *));
+      between_code_end_and_data = (fun () -> emit_imp_table ~section:Text ());
+      frametable_section = Text;
+      switch_to_frametable_section = D.text;
+      efa_code_label_extra = (fun _ -> ());
+      efa_data_label_extra = (fun _ -> ());
+      before_frametable_size = (fun _ -> ());
+      after_frametable_size = D.data;
+      emit_probe_notes =
+        (fun () -> Probe_emission.emit_probe_notes ~add_def_symbol);
+      after_probe_notes = emit_trap_notes
     };
-  let frametable_sym = S.create_global (Cmm_helpers.make_symbol "frametable") in
-  D.size frametable_sym;
-  D.data ();
-  Probe_emission.emit_probe_notes ~add_def_symbol;
-  emit_trap_notes ();
-  D.mark_stack_non_executable ();
   (* Note that [mark_stack_non_executable] switches the section on Linux. *)
   if is_win64 system
   then (

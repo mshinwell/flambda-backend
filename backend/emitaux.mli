@@ -74,6 +74,27 @@ type emit_frame_actions =
 
 val emit_frames : emit_frame_actions -> unit
 
+val label_to_asm_label :
+  Label.t -> section:Asm_targets.Asm_section.t -> Asm_targets.Asm_label.t
+
+type end_assembly_actions =
+  { emit_named_text_section : string -> unit;
+    global_maybe_protected : Asm_targets.Asm_symbol.t -> unit;
+    add_def_symbol : string -> unit;
+    before_code_end_symbol : unit -> unit;
+    between_code_end_and_data : unit -> unit;
+    frametable_section : Asm_targets.Asm_section.t;
+    switch_to_frametable_section : unit -> unit;
+    efa_code_label_extra : Asm_targets.Asm_label.t -> unit;
+    efa_data_label_extra : Asm_targets.Asm_label.t -> unit;
+    before_frametable_size : Asm_targets.Asm_symbol.t -> unit;
+    after_frametable_size : unit -> unit;
+    emit_probe_notes : unit -> unit;
+    after_probe_notes : unit -> unit
+  }
+
+val end_assembly_common : end_assembly_actions -> unit
+
 val is_generic_function : string -> bool
 
 (** Is a binary backend available. If yes, we don't need to generate the textual

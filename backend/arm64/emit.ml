@@ -2171,64 +2171,25 @@ let begin_assembly _unix =
 let register_expect_asm_callback (_ : string -> unit) = ()
 
 let end_assembly () =
-  let code_end = Cmm_helpers.make_symbol "code_end" in
-  let code_end_sym = S.create_global code_end in
-  emit_named_text_section code_end;
-  global_maybe_protected code_end_sym;
-  D.define_symbol_label ~section:Text code_end_sym;
-  let data_end = Cmm_helpers.make_symbol "data_end" in
-  let data_end_sym = S.create_global data_end in
-  D.data ();
-  D.int64 0L;
-  (* PR#6329 *)
-  global_maybe_protected data_end_sym;
-  D.define_symbol_label ~section:Data data_end_sym;
-  D.int64 0L;
-  D.align ~fill:Zero ~bytes:8;
-  (* #7887 *)
-  let frametable = Cmm_helpers.make_symbol "frametable" in
-  let frametable_sym = S.create_global frametable in
-  global_maybe_protected frametable_sym;
-  D.define_symbol_label ~section:Data frametable_sym;
-  (* CR sspies: Share the [emit_frames] code with the x86 backend. *)
-  emit_frames
-    { efa_code_label =
-        (fun lbl ->
-          let lbl = label_to_asm_label ~section:Text lbl in
-          D.type_label ~ty:Function lbl;
-          D.label lbl);
-      efa_data_label =
-        (fun lbl ->
-          let lbl = label_to_asm_label ~section:Data lbl in
-          D.type_label ~ty:Object lbl;
-          D.label lbl);
-      efa_i8 = (fun n -> D.int8 n);
-      efa_i16 = (fun n -> D.int16 n);
-      efa_i32 = (fun n -> D.int32 n);
-      efa_u8 = (fun n -> D.uint8 n);
-      efa_u16 = (fun n -> D.uint16 n);
-      efa_u32 = (fun n -> D.uint32 n);
-      efa_word = (fun n -> D.targetint (Targetint.of_int_exn n));
-      efa_align = (fun n -> D.align ~fill:Zero ~bytes:n);
-      efa_label_rel =
-        (fun lbl ofs ->
-          let lbl = label_to_asm_label ~section:Data lbl in
-          D.between_this_and_label_offset_32bit_expr ~upper:lbl
-            ~offset_upper:(Targetint.of_int32 ofs));
-      efa_def_label =
-        (fun lbl ->
-          (* CR sspies: The frametable lives in the [.data] section on Arm, but
-             in the [.text] section on x86. The frametable should move to the
-             text section on Arm as well. *)
-          let lbl = label_to_asm_label ~section:Data lbl in
-          D.define_label lbl);
-      efa_string = (fun s -> D.string (s ^ "\000"))
+  Emitaux.end_assembly_common
+    { emit_named_text_section;
+      global_maybe_protected;
+      add_def_symbol = (fun _ -> ());
+      before_code_end_symbol = (fun () -> ());
+      between_code_end_and_data = (fun () -> ());
+      frametable_section = Data;
+      switch_to_frametable_section = (fun () -> ());
+      efa_code_label_extra = (fun lbl -> D.type_label ~ty:Function lbl);
+      efa_data_label_extra = (fun lbl -> D.type_label ~ty:Object lbl);
+      before_frametable_size = (fun sym -> D.type_symbol sym ~ty:Object);
+      after_frametable_size =
+        (fun () ->
+          if not !Oxcaml_flags.internal_assembler
+          then Emitaux.Dwarf_helpers.emit_dwarf ());
+      emit_probe_notes =
+        (fun () ->
+          Probe_emission.emit_probe_notes ~add_def_symbol:(fun _ -> ()));
+      after_probe_notes = (fun () -> ())
     };
-  D.type_symbol ~ty:Object frametable_sym;
-  D.size frametable_sym;
-  if not !Oxcaml_flags.internal_assembler
-  then Emitaux.Dwarf_helpers.emit_dwarf ();
-  Probe_emission.emit_probe_notes ~add_def_symbol:(fun _ -> ());
-  D.mark_stack_non_executable ();
   (* Finalize binary emitter if enabled *)
   Binary_emitter_helpers.end_emission ()

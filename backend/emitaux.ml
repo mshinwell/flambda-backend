@@ -712,6 +712,95 @@ let emit_data_item actions (d : Cmm.data_item) =
   | Cskip n -> D.space ~bytes:n
   | Calign n -> D.align ~fill:Zero ~bytes:n
 
+let label_to_asm_label (l : Label.t) ~(section : Asm_targets.Asm_section.t) :
+    Asm_targets.Asm_label.t =
+  Asm_targets.Asm_label.create_int section (Label.to_int l)
+
+type end_assembly_actions =
+  { emit_named_text_section : string -> unit;
+    global_maybe_protected : Asm_targets.Asm_symbol.t -> unit;
+    add_def_symbol : string -> unit;
+    before_code_end_symbol : unit -> unit;
+    between_code_end_and_data : unit -> unit;
+    frametable_section : Asm_targets.Asm_section.t;
+    switch_to_frametable_section : unit -> unit;
+    efa_code_label_extra : Asm_targets.Asm_label.t -> unit;
+    efa_data_label_extra : Asm_targets.Asm_label.t -> unit;
+    before_frametable_size : Asm_targets.Asm_symbol.t -> unit;
+    after_frametable_size : unit -> unit;
+    emit_probe_notes : unit -> unit;
+    after_probe_notes : unit -> unit
+  }
+
+let end_assembly_common (actions : end_assembly_actions) =
+  let module D = Asm_targets.Asm_directives in
+  let module S = Asm_targets.Asm_symbol in
+  (* Emit code_end *)
+  let code_end = Cmm_helpers.make_symbol "code_end" in
+  let code_end_sym = S.create_global code_end in
+  actions.emit_named_text_section code_end;
+  actions.before_code_end_symbol ();
+  actions.add_def_symbol code_end;
+  actions.global_maybe_protected code_end_sym;
+  D.define_symbol_label ~section:Text code_end_sym;
+  actions.between_code_end_and_data ();
+  (* Emit data_end (PR#6329) *)
+  D.data ();
+  D.int64 0L;
+  let data_end = Cmm_helpers.make_symbol "data_end" in
+  let data_end_sym = S.create_global data_end in
+  actions.add_def_symbol data_end;
+  actions.global_maybe_protected data_end_sym;
+  D.define_symbol_label ~section:Data data_end_sym;
+  D.int64 0L;
+  (* Emit frametable *)
+  actions.switch_to_frametable_section ();
+  D.align ~fill:Zero ~bytes:8;
+  let frametable = Cmm_helpers.make_symbol "frametable" in
+  let frametable_sym = S.create_global frametable in
+  actions.add_def_symbol frametable;
+  actions.global_maybe_protected frametable_sym;
+  D.define_symbol_label ~section:actions.frametable_section frametable_sym;
+  emit_frames
+    { efa_code_label =
+        (fun l ->
+          let l = label_to_asm_label ~section:Text l in
+          actions.efa_code_label_extra l;
+          D.label l);
+      efa_data_label =
+        (fun l ->
+          let l = label_to_asm_label ~section:Data l in
+          actions.efa_data_label_extra l;
+          D.label l);
+      efa_i8 = (fun n -> D.int8 n);
+      efa_i16 = (fun n -> D.int16 n);
+      efa_i32 = (fun n -> D.int32 n);
+      efa_u8 = (fun n -> D.uint8 n);
+      efa_u16 = (fun n -> D.uint16 n);
+      efa_u32 = (fun n -> D.uint32 n);
+      efa_word = (fun n -> D.targetint (Targetint.of_int_exn n));
+      efa_align = (fun n -> D.align ~fill:Zero ~bytes:n);
+      efa_label_rel =
+        (fun lbl ofs ->
+          let lbl =
+            label_to_asm_label ~section:actions.frametable_section lbl
+          in
+          let ofs = Targetint.of_int32 ofs in
+          D.between_this_and_label_offset_32bit_expr ~upper:lbl
+            ~offset_upper:ofs);
+      efa_def_label =
+        (fun l ->
+          let lbl = label_to_asm_label ~section:actions.frametable_section l in
+          D.define_label lbl);
+      efa_string = (fun s -> D.string (s ^ "\000"))
+    };
+  actions.before_frametable_size frametable_sym;
+  D.size frametable_sym;
+  actions.after_frametable_size ();
+  actions.emit_probe_notes ();
+  actions.after_probe_notes ();
+  D.mark_stack_non_executable ()
+
 let reset () =
   reset_debug_info ();
   frame_descriptors := [];
