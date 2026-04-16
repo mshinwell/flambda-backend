@@ -87,14 +87,22 @@ let rec make_optimistic_decision ~depth ~recursive tenv ~param_type : U.decision
   else if param_kind_is_not_value
   then Do_not_unbox Not_of_kind_value
   else
-    match decide tenv param_type deciders with
+    match
+      Profile.record ~accumulate:true "number_deciders"
+        (fun () -> decide tenv param_type deciders)
+        ()
+    with
     | Some decision ->
       if unbox_numbers then decision else Do_not_unbox Incomplete_parameter_type
     | None -> (
       if depth >= Flambda_features.Expert.max_unboxing_depth ()
       then Do_not_unbox Max_depth_exceeded
       else
-        match T.prove_unique_tag_and_size tenv param_type with
+        match
+          Profile.record ~accumulate:true "prove_unique_tag_and_size"
+            (fun () -> T.prove_unique_tag_and_size tenv param_type)
+            ()
+        with
         | Proved (tag, shape, size) when unbox_blocks -> (
           let fields =
             make_optimistic_fields ~add_tag_to_name:false ~depth ~recursive tenv
@@ -104,7 +112,11 @@ let rec make_optimistic_decision ~depth ~recursive tenv ~param_type : U.decision
           | Some fields -> Unbox (Unique_tag_and_size { tag; shape; fields })
           | None -> Do_not_unbox All_fields_invalid)
         | Proved _ | Unknown -> (
-          match T.prove_variant_like tenv param_type with
+          match
+            Profile.record ~accumulate:true "prove_variant_like"
+              (fun () -> T.prove_variant_like tenv param_type)
+              ()
+          with
           | Proved { const_ctors; non_const_ctors_with_sizes }
             when unbox_variants && not recursive -> (
             let tag =
@@ -140,7 +152,11 @@ let rec make_optimistic_decision ~depth ~recursive tenv ~param_type : U.decision
               | (Zero | At_least_one _), _ ->
                 Unbox (Variant { tag; const_ctors; fields_by_tag }))
           | Proved _ | Unknown -> (
-            match T.prove_single_closures_entry tenv param_type with
+            match
+              Profile.record ~accumulate:true "prove_single_closures_entry"
+                (fun () -> T.prove_single_closures_entry tenv param_type)
+                ()
+            with
             | Proved (function_slot, _, closures_entry, _fun_decl)
               when unbox_closures && not recursive ->
               let vars_within_closure =
@@ -188,7 +204,11 @@ and make_optimistic_fields ~add_tag_to_name ~depth ~recursive tenv param_type
       (Alloc_mode.For_types.unknown ())
       ~machine_width:(TE.machine_width tenv)
   in
-  match T.meet tenv param_type shape with
+  match
+    Profile.record ~accumulate:true "make_optimistic_fields_meet"
+      (fun () -> T.meet tenv param_type shape)
+      ()
+  with
   | Bottom -> None
   | exception (Misc.Fatal_error as exn) ->
     Format.eprintf
