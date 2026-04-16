@@ -381,6 +381,8 @@ module Flambda2 = struct
       poly_compare_cost : float;
       small_function_size : int;
       large_function_size : int;
+      small_functor_size : int;
+      large_functor_size : int;
       threshold : float;
     }
 
@@ -398,6 +400,8 @@ module Flambda2 = struct
         poly_compare_cost = 10. /. cost_divisor;
         small_function_size = 10;
         large_function_size = 10;
+        small_functor_size = 10;
+        large_functor_size = 20;
         threshold = 10.;
       }
 
@@ -420,6 +424,11 @@ module Flambda2 = struct
       ref (I.default Default.default_arguments.small_function_size)
     let large_function_size =
       ref (I.default Default.default_arguments.large_function_size)
+
+    let small_functor_size =
+      ref (I.default Default.default_arguments.small_functor_size)
+    let large_functor_size =
+      ref (I.default Default.default_arguments.large_functor_size)
 
     let threshold = ref (F.default Default.default_arguments.threshold)
 
@@ -455,6 +464,12 @@ module Flambda2 = struct
       set_int large_function_size
         Default.default_arguments.large_function_size
         (Some arg.large_function_size);
+      set_int small_functor_size
+        Default.default_arguments.small_functor_size
+        (Some arg.small_functor_size);
+      set_int large_functor_size
+        Default.default_arguments.large_functor_size
+        (Some arg.large_functor_size);
       set_float threshold Default.default_arguments.threshold
         (Some arg.threshold)
 
@@ -463,6 +478,7 @@ module Flambda2 = struct
       (* We set the small and large function sizes to the same value here to
          recover "classic mode" semantics (no speculative inlining). *)
       large_function_size = Default.default_arguments.small_function_size;
+      large_functor_size = Default.default_arguments.small_functor_size;
       (* [threshold] matches the current compiler's default.  (The factor of
          8 in that default is accounted for by [cost_divisor], above.) *)
       threshold = 10.;
@@ -479,6 +495,9 @@ module Flambda2 = struct
       poly_compare_cost = 3.0 *. Default.default_arguments.poly_compare_cost;
       small_function_size = 10 * Default.default_arguments.small_function_size;
       large_function_size = 50 * Default.default_arguments.large_function_size;
+      small_functor_size = 10 * Default.default_arguments.small_function_size;
+      large_functor_size =
+        2 * 50 * Default.default_arguments.large_function_size;
       threshold = 100.;
     }
 

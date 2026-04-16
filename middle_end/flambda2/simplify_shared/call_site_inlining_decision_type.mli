@@ -18,7 +18,8 @@ type speculative_inlining_report =
   { cost_metrics : Cost_metrics.t;
     evaluated_to : float;
     threshold : float;
-    original_code_size : Code_size.t
+    original_code_size : Code_size.t;
+    is_a_functor : bool
   }
 
 (* CR-someday mshinwell: Maybe have two types, one giving the reasons why
