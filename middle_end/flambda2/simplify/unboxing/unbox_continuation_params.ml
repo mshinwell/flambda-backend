@@ -99,9 +99,12 @@ let make_decisions ~continuation_arg_types denv params params_types :
            use sites (to prevent decisions that would be detrimental), and
            compute the necessary denv. *)
         let decision =
-          Optimistic_unboxing_decision.make_optimistic_decision ~depth:0
-            ~recursive:continuation_is_recursive (DE.typing_env denv)
-            ~param_type
+          Profile.record ~accumulate:true "make_optimistic_decision"
+            (fun () ->
+              Optimistic_unboxing_decision.make_optimistic_decision ~depth:0
+                ~recursive:continuation_is_recursive (DE.typing_env denv)
+                ~param_type)
+            ()
         in
         let decision, invalids =
           if continuation_is_recursive
@@ -114,20 +117,28 @@ let make_decisions ~continuation_arg_types denv params params_types :
                be great most of the time. *)
             decision, invalids
           else
-            let machine_width = DE.machine_width denv in
-            let decision, invalids =
-              refine_decision_based_on_arg_types_at_uses ~rewrite_ids_seen:empty
-                ~rewrites_ids_known_as_invalid:invalids ~machine_width nth
-                arg_type_by_use_id ~pass:Filter decision
-            in
-            let decision =
-              Is_unboxing_beneficial.filter_non_beneficial_decisions decision
-            in
-            decision, invalids
+            Profile.record ~accumulate:true "refine_and_filter_decision"
+              (fun () ->
+                let machine_width = DE.machine_width denv in
+                let decision, invalids =
+                  refine_decision_based_on_arg_types_at_uses
+                    ~rewrite_ids_seen:empty
+                    ~rewrites_ids_known_as_invalid:invalids ~machine_width nth
+                    arg_type_by_use_id ~pass:Filter decision
+                in
+                let decision =
+                  Is_unboxing_beneficial.filter_non_beneficial_decisions
+                    decision
+                in
+                decision, invalids)
+              ()
         in
         let denv =
-          Build_unboxing_denv.denv_of_decision denv ~param_var:(BP.var param)
-            decision
+          Profile.record ~accumulate:true "denv_of_decision"
+            (fun () ->
+              Build_unboxing_denv.denv_of_decision denv
+                ~param_var:(BP.var param) decision)
+            ()
         in
         (* Compute the set of rewrite ids that have been considered when
            updating decisions, and check that all [arg_type_by_use_id]s cover
