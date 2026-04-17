@@ -1040,6 +1040,23 @@ module ConstructorSet = Set.Make(struct
   let compare c1 c2 = String.compare c1.cstr_name c2.cstr_name
 end)
 
+(* For a GADT, check whether a constructor's result type can be instantiated
+   to match the given scrutinee type. Returns false when the constructor is
+   incompatible (e.g. [B : string t] against scrutinee [int t]). *)
+let constructor_type_compatible env scrut_ty cd =
+  let snap = Btype.snapshot () in
+  let result =
+    try
+      let _, cstr_res, _ =
+        Ctype.instance_constructor Keep_existentials_flexible cd
+      in
+      (try Ctype.unify env cstr_res scrut_ty; true
+       with Ctype.Unify _ -> false)
+    with _ -> false
+  in
+  Btype.backtrack snap;
+  result
+
 (* Sends back a pattern that complements the given constructors used_constrs *)
 let complete_constrs constr used_constrs =
   let c = constr.pat_desc in
@@ -1053,6 +1070,16 @@ let complete_constrs constr used_constrs =
   let const, nonconst =
     List.partition (fun cnstr -> cnstr.cstr_constant) others in
   const @ nonconst
+
+let compatible_constructor_counts env scrut_ty cstr =
+  let constrs = get_variant_constructors env cstr.cstr_res in
+  let compat =
+    List.filter (constructor_type_compatible env scrut_ty) constrs
+  in
+  let consts, nonconsts =
+    List.partition (fun cd -> cd.cstr_constant) compat
+  in
+  (List.length consts, List.length nonconsts)
 
 let build_other_constrs env p =
   let open Patterns.Head in

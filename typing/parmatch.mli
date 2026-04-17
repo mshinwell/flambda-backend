@@ -89,6 +89,21 @@ val complete_constrs :
     constructor_description list ->
     constructor_description list
 
+(** [constructor_type_compatible env scrut_ty cd] returns [true] if the
+    constructor [cd]'s result type can be instantiated to match [scrut_ty].
+    For non-GADTs this is always true; for GADTs it filters out
+    constructors whose result type conflicts with the scrutinee. *)
+val constructor_type_compatible :
+    Env.t -> type_expr -> constructor_description -> bool
+
+(** [compatible_constructor_counts env scrut_ty cstr] returns
+    [(num_consts, num_nonconsts)] for the constructors of the variant type
+    containing [cstr] whose result type can be instantiated to match
+    [scrut_ty]. For non-GADTs this matches [cstr.cstr_consts] and
+    [cstr.cstr_nonconsts]; for GADTs it may be smaller. *)
+val compatible_constructor_counts :
+    Env.t -> type_expr -> constructor_description -> int * int
+
 (** [pats_of_type] builds a list of patterns from a given expected type,
     for explosion of wildcard patterns in Typecore.type_pat.
 

@@ -3070,8 +3070,15 @@ let complete_pats_constrs = function
       let pat_of_constr cstr =
         let open Patterns.Head in
         to_omega_pattern { constr with pat_desc = Construct cstr } in
+      (* Filter out GADT-impossible constructors: those whose declared result
+         type cannot be instantiated to match the scrutinee's refined type. *)
+      let compat cstr =
+        Parmatch.constructor_type_compatible
+          constr.pat_env constr.pat_type cstr
+      in
       List.map pat_of_constr
-        (complete_constrs constr (List.map constr_of_pat constrs))
+        (List.filter compat
+          (complete_constrs constr (List.map constr_of_pat constrs)))
   | _ -> assert false
 
 (*
@@ -3342,8 +3349,8 @@ let transl_match_on_option value_kind arg loc ~if_some ~if_none =
 let transl_match_on_or_null value_kind arg loc ~if_null ~if_this =
   Lifthenelse (Lprim (Pisnull, [ arg ], loc), if_null, if_this, value_kind)
 
-let combine_constructor value_kind loc arg pat_env pat_barrier cstr partial ctx def
-    (descr_lambda_list, total1, pats) =
+let combine_constructor value_kind loc arg pat_env pat_type pat_barrier cstr
+    partial ctx def (descr_lambda_list, total1, pats) =
   match cstr.cstr_tag with
   | Extension _ ->
       (* Special cases for extensions *)
@@ -3390,9 +3397,14 @@ let combine_constructor value_kind loc arg pat_env pat_barrier cstr partial ctx 
       in
       (lambda1, Jumps.union local_jumps total1)
   | _ ->
-      (* Regular concrete type *)
+      (* Regular concrete type. For GADTs, some constructors of the type may
+         be incompatible with the scrutinee's refined type, so exclude them
+         from the counts used to drive code generation. *)
+      let num_consts, num_nonconsts =
+        Parmatch.compatible_constructor_counts pat_env pat_type cstr
+      in
       let ncases = List.length descr_lambda_list
-      and nconstrs = cstr.cstr_consts + cstr.cstr_nonconsts in
+      and nconstrs = num_consts + num_nonconsts in
       let sig_complete = ncases = nconstrs in
       let fail_opt, fails, local_jumps =
         if sig_complete then
@@ -3434,7 +3446,7 @@ let combine_constructor value_kind loc arg pat_env pat_barrier cstr partial ctx 
             act
         | _ -> (
             match
-              (cstr.cstr_consts, cstr.cstr_nonconsts, consts, nonconsts, null)
+              (num_consts, num_nonconsts, consts, nonconsts, null)
             with
             | 1, 1, [ (0, act1) ], [ (0, act2) ], None
               when not (Clflags.is_flambda2 ()) ->
@@ -3458,7 +3470,7 @@ let combine_constructor value_kind loc arg pat_env pat_barrier cstr partial ctx 
                   match (fail_opt, nonconsts) with
                   | Some a, [] -> Some a
                   | Some _, _ ->
-                      if List.length nonconsts = cstr.cstr_nonconsts then
+                      if List.length nonconsts = num_nonconsts then
                         same_actions nonconsts
                       else
                         None
@@ -3487,9 +3499,9 @@ let combine_constructor value_kind loc arg pat_env pat_barrier cstr partial ctx 
                 | None ->
                     (* In the general case, emit a switch. *)
                     let sw =
-                      { sw_numconsts = cstr.cstr_consts;
+                      { sw_numconsts = num_consts;
                         sw_consts = consts;
-                        sw_numblocks = cstr.cstr_nonconsts;
+                        sw_numblocks = num_nonconsts;
                         sw_blocks = nonconsts;
                         sw_failaction = fail_opt
                       }
@@ -4001,7 +4013,8 @@ and do_compile_matching ~scopes value_kind repr partial ctx pmh =
           compile_test
             (compile_match ~scopes value_kind repr partial)
             partial (divide_constructor ~scopes)
-            (combine_constructor value_kind ploc arg ph.pat_env ph.pat_unique_barrier cstr partial)
+            (combine_constructor value_kind ploc arg ph.pat_env ph.pat_type
+               ph.pat_unique_barrier cstr partial)
             ctx pm
       | Array (_, elt_sort, _) ->
           let elt_sort = Jkind.Sort.default_for_transl_and_get elt_sort in
