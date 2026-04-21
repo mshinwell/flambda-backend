@@ -1067,63 +1067,79 @@ let rec print ppf t =
   | Value ty -> (
     (* Bypass [TD.print] in order to display [is_null] annotation in-line with
        the [Val] annotation. *)
-    match TD.descr ty with
+    match
+      TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_value ty
+    with
     | Ok (No_alias head) -> print_head_of_kind_value ppf head
     | Unknown | Bottom | Ok (Equals _) ->
       Format.fprintf ppf "@[<hov 1>(Val@ %a)@]"
-        (TD.print ~print_head:print_head_of_kind_value)
+        (TD.print ~apply_renaming_head:apply_renaming_head_of_kind_value
+           ~print_head:print_head_of_kind_value)
         ty)
   | Naked_immediate ty ->
     Format.fprintf ppf "@[<hov 1>(Naked_immediate@ %a)@]"
-      (TD.print ~print_head:print_head_of_kind_naked_immediate)
+      (TD.print ~apply_renaming_head:apply_renaming_head_of_kind_naked_immediate
+         ~print_head:print_head_of_kind_naked_immediate)
       ty
   | Naked_float32 ty ->
     Format.fprintf ppf "@[<hov 1>(Naked_float32@ %a)@]"
-      (TD.print ~print_head:print_head_of_kind_naked_float32)
+      (TD.print ~apply_renaming_head:apply_renaming_head_of_kind_naked_float32
+         ~print_head:print_head_of_kind_naked_float32)
       ty
   | Naked_float ty ->
     Format.fprintf ppf "@[<hov 1>(Naked_float@ %a)@]"
-      (TD.print ~print_head:print_head_of_kind_naked_float)
+      (TD.print ~apply_renaming_head:apply_renaming_head_of_kind_naked_float
+         ~print_head:print_head_of_kind_naked_float)
       ty
   | Naked_int8 ty ->
     Format.fprintf ppf "@[<hov 1>(Naked_int8@ %a)@]"
-      (TD.print ~print_head:print_head_of_kind_naked_int8)
+      (TD.print ~apply_renaming_head:apply_renaming_head_of_kind_naked_int8
+         ~print_head:print_head_of_kind_naked_int8)
       ty
   | Naked_int16 ty ->
     Format.fprintf ppf "@[<hov 1>(Naked_int16@ %a)@]"
-      (TD.print ~print_head:print_head_of_kind_naked_int16)
+      (TD.print ~apply_renaming_head:apply_renaming_head_of_kind_naked_int16
+         ~print_head:print_head_of_kind_naked_int16)
       ty
   | Naked_int32 ty ->
     Format.fprintf ppf "@[<hov 1>(Naked_int32@ %a)@]"
-      (TD.print ~print_head:print_head_of_kind_naked_int32)
+      (TD.print ~apply_renaming_head:apply_renaming_head_of_kind_naked_int32
+         ~print_head:print_head_of_kind_naked_int32)
       ty
   | Naked_int64 ty ->
     Format.fprintf ppf "@[<hov 1>(Naked_int64@ %a)@]"
-      (TD.print ~print_head:print_head_of_kind_naked_int64)
+      (TD.print ~apply_renaming_head:apply_renaming_head_of_kind_naked_int64
+         ~print_head:print_head_of_kind_naked_int64)
       ty
   | Naked_nativeint ty ->
     Format.fprintf ppf "@[<hov 1>(Naked_nativeint@ %a)@]"
-      (TD.print ~print_head:print_head_of_kind_naked_nativeint)
+      (TD.print ~apply_renaming_head:apply_renaming_head_of_kind_naked_nativeint
+         ~print_head:print_head_of_kind_naked_nativeint)
       ty
   | Naked_vec128 ty ->
     Format.fprintf ppf "@[<hov 1>(Naked_vec128@ %a)@]"
-      (TD.print ~print_head:print_head_of_kind_naked_vec128)
+      (TD.print ~apply_renaming_head:apply_renaming_head_of_kind_naked_vec128
+         ~print_head:print_head_of_kind_naked_vec128)
       ty
   | Naked_vec256 ty ->
     Format.fprintf ppf "@[<hov 1>(Naked_vec256@ %a)@]"
-      (TD.print ~print_head:print_head_of_kind_naked_vec256)
+      (TD.print ~apply_renaming_head:apply_renaming_head_of_kind_naked_vec256
+         ~print_head:print_head_of_kind_naked_vec256)
       ty
   | Naked_vec512 ty ->
     Format.fprintf ppf "@[<hov 1>(Naked_vec512@ %a)@]"
-      (TD.print ~print_head:print_head_of_kind_naked_vec512)
+      (TD.print ~apply_renaming_head:apply_renaming_head_of_kind_naked_vec512
+         ~print_head:print_head_of_kind_naked_vec512)
       ty
   | Rec_info ty ->
     Format.fprintf ppf "@[<hov 1>(Rec_info@ %a)@]"
-      (TD.print ~print_head:print_head_of_kind_rec_info)
+      (TD.print ~apply_renaming_head:apply_renaming_head_of_kind_rec_info
+         ~print_head:print_head_of_kind_rec_info)
       ty
   | Region ty ->
     Format.fprintf ppf "@[<hov 1>(Region@ %a)@]"
-      (TD.print ~print_head:print_head_of_kind_region)
+      (TD.print ~apply_renaming_head:apply_renaming_head_of_kind_region
+         ~print_head:print_head_of_kind_region)
       ty
 
 and print_head_of_kind_value ppf { non_null; is_null } =
@@ -1405,45 +1421,58 @@ and print_env_extension ppf { equations } =
 let rec ids_for_export t =
   match t with
   | Value ty ->
-    TD.ids_for_export ~ids_for_export_head:ids_for_export_head_of_kind_value ty
+    TD.ids_for_export ~apply_renaming_head:apply_renaming_head_of_kind_value
+      ~ids_for_export_head:ids_for_export_head_of_kind_value ty
   | Naked_immediate ty ->
     TD.ids_for_export
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_immediate
       ~ids_for_export_head:ids_for_export_head_of_kind_naked_immediate ty
   | Naked_float32 ty ->
     TD.ids_for_export
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_float32
       ~ids_for_export_head:ids_for_export_head_of_kind_naked_float32 ty
   | Naked_float ty ->
     TD.ids_for_export
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_float
       ~ids_for_export_head:ids_for_export_head_of_kind_naked_float ty
   | Naked_int8 ty ->
     TD.ids_for_export
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_int8
       ~ids_for_export_head:ids_for_export_head_of_kind_naked_int8 ty
   | Naked_int16 ty ->
     TD.ids_for_export
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_int16
       ~ids_for_export_head:ids_for_export_head_of_kind_naked_int16 ty
   | Naked_int32 ty ->
     TD.ids_for_export
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_int32
       ~ids_for_export_head:ids_for_export_head_of_kind_naked_int32 ty
   | Naked_int64 ty ->
     TD.ids_for_export
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_int64
       ~ids_for_export_head:ids_for_export_head_of_kind_naked_int64 ty
   | Naked_nativeint ty ->
     TD.ids_for_export
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_nativeint
       ~ids_for_export_head:ids_for_export_head_of_kind_naked_nativeint ty
   | Naked_vec128 ty ->
     TD.ids_for_export
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_vec128
       ~ids_for_export_head:ids_for_export_head_of_kind_naked_vec128 ty
   | Naked_vec256 ty ->
     TD.ids_for_export
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_vec256
       ~ids_for_export_head:ids_for_export_head_of_kind_naked_vec256 ty
   | Naked_vec512 ty ->
     TD.ids_for_export
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_vec512
       ~ids_for_export_head:ids_for_export_head_of_kind_naked_vec512 ty
   | Rec_info ty ->
-    TD.ids_for_export ~ids_for_export_head:ids_for_export_head_of_kind_rec_info
-      ty
+    TD.ids_for_export ~apply_renaming_head:apply_renaming_head_of_kind_rec_info
+      ~ids_for_export_head:ids_for_export_head_of_kind_rec_info ty
   | Region ty ->
-    TD.ids_for_export ~ids_for_export_head:ids_for_export_head_of_kind_region ty
+    TD.ids_for_export ~apply_renaming_head:apply_renaming_head_of_kind_region
+      ~ids_for_export_head:ids_for_export_head_of_kind_region ty
 
 and ids_for_export_head_of_kind_value { non_null; is_null } =
   let ids_for_export =
@@ -1653,13 +1682,14 @@ let rec apply_coercion t coercion : t Or_bottom.t =
     match t with
     | Value ty ->
       let<+ ty' =
-        TD.apply_coercion ~apply_coercion_head:apply_coercion_head_of_kind_value
-          coercion ty
+        TD.apply_coercion ~apply_renaming_head:apply_renaming_head_of_kind_value
+          ~apply_coercion_head:apply_coercion_head_of_kind_value coercion ty
       in
       if ty == ty' then t else Value ty'
     | Naked_immediate ty ->
       let<+ ty' =
         TD.apply_coercion
+          ~apply_renaming_head:apply_renaming_head_of_kind_naked_immediate
           ~apply_coercion_head:apply_coercion_head_of_kind_naked_immediate
           coercion ty
       in
@@ -1667,6 +1697,7 @@ let rec apply_coercion t coercion : t Or_bottom.t =
     | Naked_float32 ty ->
       let<+ ty' =
         TD.apply_coercion
+          ~apply_renaming_head:apply_renaming_head_of_kind_naked_float32
           ~apply_coercion_head:apply_coercion_head_of_kind_naked_float32
           coercion ty
       in
@@ -1674,6 +1705,7 @@ let rec apply_coercion t coercion : t Or_bottom.t =
     | Naked_float ty ->
       let<+ ty' =
         TD.apply_coercion
+          ~apply_renaming_head:apply_renaming_head_of_kind_naked_float
           ~apply_coercion_head:apply_coercion_head_of_kind_naked_float coercion
           ty
       in
@@ -1681,6 +1713,7 @@ let rec apply_coercion t coercion : t Or_bottom.t =
     | Naked_int8 ty ->
       let<+ ty' =
         TD.apply_coercion
+          ~apply_renaming_head:apply_renaming_head_of_kind_naked_int8
           ~apply_coercion_head:apply_coercion_head_of_kind_naked_int8 coercion
           ty
       in
@@ -1688,6 +1721,7 @@ let rec apply_coercion t coercion : t Or_bottom.t =
     | Naked_int16 ty ->
       let<+ ty' =
         TD.apply_coercion
+          ~apply_renaming_head:apply_renaming_head_of_kind_naked_int16
           ~apply_coercion_head:apply_coercion_head_of_kind_naked_int16 coercion
           ty
       in
@@ -1695,6 +1729,7 @@ let rec apply_coercion t coercion : t Or_bottom.t =
     | Naked_int32 ty ->
       let<+ ty' =
         TD.apply_coercion
+          ~apply_renaming_head:apply_renaming_head_of_kind_naked_int32
           ~apply_coercion_head:apply_coercion_head_of_kind_naked_int32 coercion
           ty
       in
@@ -1702,6 +1737,7 @@ let rec apply_coercion t coercion : t Or_bottom.t =
     | Naked_int64 ty ->
       let<+ ty' =
         TD.apply_coercion
+          ~apply_renaming_head:apply_renaming_head_of_kind_naked_int64
           ~apply_coercion_head:apply_coercion_head_of_kind_naked_int64 coercion
           ty
       in
@@ -1709,6 +1745,7 @@ let rec apply_coercion t coercion : t Or_bottom.t =
     | Naked_nativeint ty ->
       let<+ ty' =
         TD.apply_coercion
+          ~apply_renaming_head:apply_renaming_head_of_kind_naked_nativeint
           ~apply_coercion_head:apply_coercion_head_of_kind_naked_nativeint
           coercion ty
       in
@@ -1716,6 +1753,7 @@ let rec apply_coercion t coercion : t Or_bottom.t =
     | Naked_vec128 ty ->
       let<+ ty' =
         TD.apply_coercion
+          ~apply_renaming_head:apply_renaming_head_of_kind_naked_vec128
           ~apply_coercion_head:apply_coercion_head_of_kind_naked_vec128 coercion
           ty
       in
@@ -1723,6 +1761,7 @@ let rec apply_coercion t coercion : t Or_bottom.t =
     | Naked_vec256 ty ->
       let<+ ty' =
         TD.apply_coercion
+          ~apply_renaming_head:apply_renaming_head_of_kind_naked_vec256
           ~apply_coercion_head:apply_coercion_head_of_kind_naked_vec256 coercion
           ty
       in
@@ -1730,6 +1769,7 @@ let rec apply_coercion t coercion : t Or_bottom.t =
     | Naked_vec512 ty ->
       let<+ ty' =
         TD.apply_coercion
+          ~apply_renaming_head:apply_renaming_head_of_kind_naked_vec512
           ~apply_coercion_head:apply_coercion_head_of_kind_naked_vec512 coercion
           ty
       in
@@ -1737,12 +1777,14 @@ let rec apply_coercion t coercion : t Or_bottom.t =
     | Rec_info ty ->
       let<+ ty' =
         TD.apply_coercion
+          ~apply_renaming_head:apply_renaming_head_of_kind_rec_info
           ~apply_coercion_head:apply_coercion_head_of_kind_rec_info coercion ty
       in
       if ty == ty' then t else Rec_info ty'
     | Region ty ->
       let<+ ty' =
         TD.apply_coercion
+          ~apply_renaming_head:apply_renaming_head_of_kind_region
           ~apply_coercion_head:apply_coercion_head_of_kind_region coercion ty
       in
       if ty == ty' then t else Region ty'
@@ -2033,7 +2075,7 @@ let rec remove_unused_value_slots_and_shortcut_aliases t ~used_value_slots
   | Value ty ->
     let ty' =
       TD.remove_unused_value_slots_and_shortcut_aliases ty ~used_value_slots
-        ~canonicalise
+        ~canonicalise ~apply_renaming_head:apply_renaming_head_of_kind_value
         ~remove_unused_value_slots_and_shortcut_aliases_head:
           remove_unused_value_slots_and_shortcut_aliases_head_of_kind_value
     in
@@ -2042,6 +2084,7 @@ let rec remove_unused_value_slots_and_shortcut_aliases t ~used_value_slots
     let ty' =
       TD.remove_unused_value_slots_and_shortcut_aliases ty ~used_value_slots
         ~canonicalise
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_immediate
         ~remove_unused_value_slots_and_shortcut_aliases_head:
           remove_unused_value_slots_and_shortcut_aliases_head_of_kind_naked_immediate
     in
@@ -2050,6 +2093,7 @@ let rec remove_unused_value_slots_and_shortcut_aliases t ~used_value_slots
     let ty' =
       TD.remove_unused_value_slots_and_shortcut_aliases ty ~used_value_slots
         ~canonicalise
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_float32
         ~remove_unused_value_slots_and_shortcut_aliases_head:
           remove_unused_value_slots_and_shortcut_aliases_head_of_kind_naked_float32
     in
@@ -2058,6 +2102,7 @@ let rec remove_unused_value_slots_and_shortcut_aliases t ~used_value_slots
     let ty' =
       TD.remove_unused_value_slots_and_shortcut_aliases ty ~used_value_slots
         ~canonicalise
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_float
         ~remove_unused_value_slots_and_shortcut_aliases_head:
           remove_unused_value_slots_and_shortcut_aliases_head_of_kind_naked_float
     in
@@ -2066,6 +2111,7 @@ let rec remove_unused_value_slots_and_shortcut_aliases t ~used_value_slots
     let ty' =
       TD.remove_unused_value_slots_and_shortcut_aliases ty ~used_value_slots
         ~canonicalise
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_int8
         ~remove_unused_value_slots_and_shortcut_aliases_head:
           remove_unused_value_slots_and_shortcut_aliases_head_of_kind_naked_int8
     in
@@ -2074,6 +2120,7 @@ let rec remove_unused_value_slots_and_shortcut_aliases t ~used_value_slots
     let ty' =
       TD.remove_unused_value_slots_and_shortcut_aliases ty ~used_value_slots
         ~canonicalise
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_int16
         ~remove_unused_value_slots_and_shortcut_aliases_head:
           remove_unused_value_slots_and_shortcut_aliases_head_of_kind_naked_int16
     in
@@ -2082,6 +2129,7 @@ let rec remove_unused_value_slots_and_shortcut_aliases t ~used_value_slots
     let ty' =
       TD.remove_unused_value_slots_and_shortcut_aliases ty ~used_value_slots
         ~canonicalise
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_int32
         ~remove_unused_value_slots_and_shortcut_aliases_head:
           remove_unused_value_slots_and_shortcut_aliases_head_of_kind_naked_int32
     in
@@ -2090,6 +2138,7 @@ let rec remove_unused_value_slots_and_shortcut_aliases t ~used_value_slots
     let ty' =
       TD.remove_unused_value_slots_and_shortcut_aliases ty ~used_value_slots
         ~canonicalise
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_int64
         ~remove_unused_value_slots_and_shortcut_aliases_head:
           remove_unused_value_slots_and_shortcut_aliases_head_of_kind_naked_int64
     in
@@ -2098,6 +2147,7 @@ let rec remove_unused_value_slots_and_shortcut_aliases t ~used_value_slots
     let ty' =
       TD.remove_unused_value_slots_and_shortcut_aliases ty ~used_value_slots
         ~canonicalise
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_nativeint
         ~remove_unused_value_slots_and_shortcut_aliases_head:
           remove_unused_value_slots_and_shortcut_aliases_head_of_kind_naked_nativeint
     in
@@ -2106,6 +2156,7 @@ let rec remove_unused_value_slots_and_shortcut_aliases t ~used_value_slots
     let ty' =
       TD.remove_unused_value_slots_and_shortcut_aliases ty ~used_value_slots
         ~canonicalise
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_vec128
         ~remove_unused_value_slots_and_shortcut_aliases_head:
           remove_unused_value_slots_and_shortcut_aliases_head_of_kind_naked_vec128
     in
@@ -2114,6 +2165,7 @@ let rec remove_unused_value_slots_and_shortcut_aliases t ~used_value_slots
     let ty' =
       TD.remove_unused_value_slots_and_shortcut_aliases ty ~used_value_slots
         ~canonicalise
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_vec256
         ~remove_unused_value_slots_and_shortcut_aliases_head:
           remove_unused_value_slots_and_shortcut_aliases_head_of_kind_naked_vec256
     in
@@ -2122,6 +2174,7 @@ let rec remove_unused_value_slots_and_shortcut_aliases t ~used_value_slots
     let ty' =
       TD.remove_unused_value_slots_and_shortcut_aliases ty ~used_value_slots
         ~canonicalise
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_vec512
         ~remove_unused_value_slots_and_shortcut_aliases_head:
           remove_unused_value_slots_and_shortcut_aliases_head_of_kind_naked_vec512
     in
@@ -2129,7 +2182,7 @@ let rec remove_unused_value_slots_and_shortcut_aliases t ~used_value_slots
   | Rec_info ty ->
     let ty' =
       TD.remove_unused_value_slots_and_shortcut_aliases ty ~used_value_slots
-        ~canonicalise
+        ~canonicalise ~apply_renaming_head:apply_renaming_head_of_kind_rec_info
         ~remove_unused_value_slots_and_shortcut_aliases_head:
           remove_unused_value_slots_and_shortcut_aliases_head_of_kind_rec_info
     in
@@ -2137,7 +2190,7 @@ let rec remove_unused_value_slots_and_shortcut_aliases t ~used_value_slots
   | Region ty ->
     let ty' =
       TD.remove_unused_value_slots_and_shortcut_aliases ty ~used_value_slots
-        ~canonicalise
+        ~canonicalise ~apply_renaming_head:apply_renaming_head_of_kind_region
         ~remove_unused_value_slots_and_shortcut_aliases_head:
           remove_unused_value_slots_and_shortcut_aliases_head_of_kind_region
     in
@@ -2636,8 +2689,10 @@ let rec project_variables_out ~to_project ~expand t =
           Variable.print var print ty
     in
     let ty' =
-      TD.project_variables_out ~free_names_head:free_names_head_of_kind_value
-        ~to_project ~expand:expand_with_coercion
+      TD.project_variables_out
+        ~apply_renaming_head:apply_renaming_head_of_kind_value
+        ~free_names_head:free_names_head_of_kind_value ~to_project
+        ~expand:expand_with_coercion
         ~project_head:(project_head_of_kind_value ~to_project ~expand)
         ty
     in
@@ -2657,6 +2712,7 @@ let rec project_variables_out ~to_project ~expand t =
     in
     let ty' =
       TD.project_variables_out
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_immediate
         ~free_names_head:free_names_head_of_kind_naked_immediate ~to_project
         ~expand:expand_with_coercion
         ~project_head:(project_head_of_kind_naked_immediate ~to_project ~expand)
@@ -2677,6 +2733,7 @@ let rec project_variables_out ~to_project ~expand t =
     in
     let ty' =
       TD.project_variables_out
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_float32
         ~free_names_head:free_names_head_of_kind_naked_float32 ~to_project
         ~expand:expand_with_coercion
         ~project_head:(project_head_of_kind_naked_float32 ~to_project ~expand)
@@ -2697,6 +2754,7 @@ let rec project_variables_out ~to_project ~expand t =
     in
     let ty' =
       TD.project_variables_out
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_float
         ~free_names_head:free_names_head_of_kind_naked_float ~to_project
         ~expand:expand_with_coercion
         ~project_head:(project_head_of_kind_naked_float ~to_project ~expand)
@@ -2717,6 +2775,7 @@ let rec project_variables_out ~to_project ~expand t =
     in
     let ty' =
       TD.project_variables_out
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_int8
         ~free_names_head:free_names_head_of_kind_naked_int8 ~to_project
         ~expand:expand_with_coercion
         ~project_head:(project_head_of_kind_naked_int8 ~to_project ~expand)
@@ -2737,6 +2796,7 @@ let rec project_variables_out ~to_project ~expand t =
     in
     let ty' =
       TD.project_variables_out
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_int16
         ~free_names_head:free_names_head_of_kind_naked_int16 ~to_project
         ~expand:expand_with_coercion
         ~project_head:(project_head_of_kind_naked_int16 ~to_project ~expand)
@@ -2757,6 +2817,7 @@ let rec project_variables_out ~to_project ~expand t =
     in
     let ty' =
       TD.project_variables_out
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_int32
         ~free_names_head:free_names_head_of_kind_naked_int32 ~to_project
         ~expand:expand_with_coercion
         ~project_head:(project_head_of_kind_naked_int32 ~to_project ~expand)
@@ -2777,6 +2838,7 @@ let rec project_variables_out ~to_project ~expand t =
     in
     let ty' =
       TD.project_variables_out
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_int64
         ~free_names_head:free_names_head_of_kind_naked_int64 ~to_project
         ~expand:expand_with_coercion
         ~project_head:(project_head_of_kind_naked_int64 ~to_project ~expand)
@@ -2798,6 +2860,7 @@ let rec project_variables_out ~to_project ~expand t =
     in
     let ty' =
       TD.project_variables_out
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_nativeint
         ~free_names_head:free_names_head_of_kind_naked_nativeint ~to_project
         ~expand:expand_with_coercion
         ~project_head:(project_head_of_kind_naked_nativeint ~to_project ~expand)
@@ -2818,6 +2881,7 @@ let rec project_variables_out ~to_project ~expand t =
     in
     let ty' =
       TD.project_variables_out
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_vec128
         ~free_names_head:free_names_head_of_kind_naked_vec128 ~to_project
         ~expand:expand_with_coercion
         ~project_head:(project_head_of_kind_naked_vec128 ~to_project ~expand)
@@ -2838,6 +2902,7 @@ let rec project_variables_out ~to_project ~expand t =
     in
     let ty' =
       TD.project_variables_out
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_vec256
         ~free_names_head:free_names_head_of_kind_naked_vec256 ~to_project
         ~expand:expand_with_coercion
         ~project_head:(project_head_of_kind_naked_vec256 ~to_project ~expand)
@@ -2858,6 +2923,7 @@ let rec project_variables_out ~to_project ~expand t =
     in
     let ty' =
       TD.project_variables_out
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_vec512
         ~free_names_head:free_names_head_of_kind_naked_vec512 ~to_project
         ~expand:expand_with_coercion
         ~project_head:(project_head_of_kind_naked_vec512 ~to_project ~expand)
@@ -2877,8 +2943,10 @@ let rec project_variables_out ~to_project ~expand t =
           Variable.print var print ty
     in
     let ty' =
-      TD.project_variables_out ~free_names_head:free_names_head_of_kind_rec_info
-        ~to_project ~expand:expand_with_coercion
+      TD.project_variables_out
+        ~apply_renaming_head:apply_renaming_head_of_kind_rec_info
+        ~free_names_head:free_names_head_of_kind_rec_info ~to_project
+        ~expand:expand_with_coercion
         ~project_head:(project_head_of_kind_rec_info ~to_project ~expand)
         ty
     in
@@ -2896,8 +2964,10 @@ let rec project_variables_out ~to_project ~expand t =
           Variable.print var print ty
     in
     let ty' =
-      TD.project_variables_out ~free_names_head:free_names_head_of_kind_region
-        ~to_project ~expand:expand_with_coercion
+      TD.project_variables_out
+        ~apply_renaming_head:apply_renaming_head_of_kind_region
+        ~free_names_head:free_names_head_of_kind_region ~to_project
+        ~expand:expand_with_coercion
         ~project_head:(project_head_of_kind_region ~to_project ~expand)
         ty
     in
@@ -3931,7 +4001,9 @@ let box_float (t : t) alloc_mode : t =
 let tag_int8 (t : t) ~machine_width : t =
   match t with
   | Naked_int8 head -> (
-    match TD.descr head with
+    match
+      TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_int8 head
+    with
     | Bottom -> Value TD.bottom
     | Unknown | Ok (Equals _) ->
       non_null_value
@@ -3969,7 +4041,9 @@ let tag_int8 (t : t) ~machine_width : t =
 let tag_int16 (t : t) ~machine_width : t =
   match t with
   | Naked_int16 head -> (
-    match TD.descr head with
+    match
+      TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_int16 head
+    with
     | Bottom -> Value TD.bottom
     | Unknown | Ok (Equals _) ->
       non_null_value
@@ -4189,20 +4263,49 @@ end
 
 let descr t : Descr.t =
   match t with
-  | Value ty -> Value (TD.descr ty)
-  | Naked_immediate ty -> Naked_immediate (TD.descr ty)
-  | Naked_float32 ty -> Naked_float32 (TD.descr ty)
-  | Naked_float ty -> Naked_float (TD.descr ty)
-  | Naked_int8 ty -> Naked_int8 (TD.descr ty)
-  | Naked_int16 ty -> Naked_int16 (TD.descr ty)
-  | Naked_int32 ty -> Naked_int32 (TD.descr ty)
-  | Naked_int64 ty -> Naked_int64 (TD.descr ty)
-  | Naked_nativeint ty -> Naked_nativeint (TD.descr ty)
-  | Naked_vec128 ty -> Naked_vec128 (TD.descr ty)
-  | Naked_vec256 ty -> Naked_vec256 (TD.descr ty)
-  | Naked_vec512 ty -> Naked_vec512 (TD.descr ty)
-  | Rec_info ty -> Rec_info (TD.descr ty)
-  | Region ty -> Region (TD.descr ty)
+  | Value ty ->
+    Value (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_value ty)
+  | Naked_immediate ty ->
+    Naked_immediate
+      (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_immediate
+         ty)
+  | Naked_float32 ty ->
+    Naked_float32
+      (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_float32
+         ty)
+  | Naked_float ty ->
+    Naked_float
+      (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_float ty)
+  | Naked_int8 ty ->
+    Naked_int8
+      (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_int8 ty)
+  | Naked_int16 ty ->
+    Naked_int16
+      (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_int16 ty)
+  | Naked_int32 ty ->
+    Naked_int32
+      (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_int32 ty)
+  | Naked_int64 ty ->
+    Naked_int64
+      (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_int64 ty)
+  | Naked_nativeint ty ->
+    Naked_nativeint
+      (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_nativeint
+         ty)
+  | Naked_vec128 ty ->
+    Naked_vec128
+      (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_vec128 ty)
+  | Naked_vec256 ty ->
+    Naked_vec256
+      (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_vec256 ty)
+  | Naked_vec512 ty ->
+    Naked_vec512
+      (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_vec512 ty)
+  | Rec_info ty ->
+    Rec_info
+      (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_rec_info ty)
+  | Region ty ->
+    Region (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_region ty)
 
 let create_from_head_value head = Value (TD.create head)
 
@@ -4426,7 +4529,9 @@ module Head_of_kind_naked_vec512 =
 let rec must_be_singleton t ~machine_width : RWC.t option =
   match t with
   | Value ty -> (
-    match TD.descr ty with
+    match
+      TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_value ty
+    with
     | Unknown | Bottom
     (* CR vlaviron: Recover null aliases *)
     | Ok (No_alias { is_null = Maybe_null _; _ })
@@ -4479,7 +4584,10 @@ let rec must_be_singleton t ~machine_width : RWC.t option =
                   "Immediates case returned wrong kind of constant:@ %a"
                   Reg_width_const.print const)))))
   | Naked_immediate ty -> (
-    match TD.descr ty with
+    match
+      TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_immediate
+        ty
+    with
     | Unknown | Bottom | Ok (No_alias (Is_int _ | Get_tag _ | Is_null _)) ->
       None
     | Ok (Equals simple) -> Simple.must_be_const simple
@@ -4488,7 +4596,9 @@ let rec must_be_singleton t ~machine_width : RWC.t option =
       | Some i -> Some (RWC.naked_immediate i)
       | None -> None))
   | Naked_float32 ty -> (
-    match TD.descr ty with
+    match
+      TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_float32 ty
+    with
     | Unknown | Bottom -> None
     | Ok (Equals simple) -> Simple.must_be_const simple
     | Ok (No_alias fs) -> (
@@ -4496,7 +4606,9 @@ let rec must_be_singleton t ~machine_width : RWC.t option =
       | Some f -> Some (RWC.naked_float32 f)
       | None -> None))
   | Naked_float ty -> (
-    match TD.descr ty with
+    match
+      TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_float ty
+    with
     | Unknown | Bottom -> None
     | Ok (Equals simple) -> Simple.must_be_const simple
     | Ok (No_alias fs) -> (
@@ -4504,7 +4616,9 @@ let rec must_be_singleton t ~machine_width : RWC.t option =
       | Some f -> Some (RWC.naked_float f)
       | None -> None))
   | Naked_int8 ty -> (
-    match TD.descr ty with
+    match
+      TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_int8 ty
+    with
     | Unknown | Bottom -> None
     | Ok (Equals simple) -> Simple.must_be_const simple
     | Ok (No_alias is) -> (
@@ -4512,7 +4626,9 @@ let rec must_be_singleton t ~machine_width : RWC.t option =
       | Some i -> Some (RWC.naked_int8 i)
       | None -> None))
   | Naked_int16 ty -> (
-    match TD.descr ty with
+    match
+      TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_int16 ty
+    with
     | Unknown | Bottom -> None
     | Ok (Equals simple) -> Simple.must_be_const simple
     | Ok (No_alias is) -> (
@@ -4520,7 +4636,9 @@ let rec must_be_singleton t ~machine_width : RWC.t option =
       | Some i -> Some (RWC.naked_int16 i)
       | None -> None))
   | Naked_int32 ty -> (
-    match TD.descr ty with
+    match
+      TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_int32 ty
+    with
     | Unknown | Bottom -> None
     | Ok (Equals simple) -> Simple.must_be_const simple
     | Ok (No_alias is) -> (
@@ -4528,7 +4646,9 @@ let rec must_be_singleton t ~machine_width : RWC.t option =
       | Some f -> Some (RWC.naked_int32 f)
       | None -> None))
   | Naked_int64 ty -> (
-    match TD.descr ty with
+    match
+      TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_int64 ty
+    with
     | Unknown | Bottom -> None
     | Ok (Equals simple) -> Simple.must_be_const simple
     | Ok (No_alias is) -> (
@@ -4536,7 +4656,10 @@ let rec must_be_singleton t ~machine_width : RWC.t option =
       | Some f -> Some (RWC.naked_int64 f)
       | None -> None))
   | Naked_nativeint ty -> (
-    match TD.descr ty with
+    match
+      TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_nativeint
+        ty
+    with
     | Unknown | Bottom -> None
     | Ok (Equals simple) -> Simple.must_be_const simple
     | Ok (No_alias is) -> (
@@ -4544,7 +4667,9 @@ let rec must_be_singleton t ~machine_width : RWC.t option =
       | Some f -> Some (RWC.naked_nativeint f)
       | None -> None))
   | Naked_vec128 ty -> (
-    match TD.descr ty with
+    match
+      TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_vec128 ty
+    with
     | Unknown | Bottom -> None
     | Ok (Equals simple) -> Simple.must_be_const simple
     | Ok (No_alias is) -> (
@@ -4552,7 +4677,9 @@ let rec must_be_singleton t ~machine_width : RWC.t option =
       | Some f -> Some (RWC.naked_vec128 f)
       | None -> None))
   | Naked_vec256 ty -> (
-    match TD.descr ty with
+    match
+      TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_vec256 ty
+    with
     | Unknown | Bottom -> None
     | Ok (Equals simple) -> Simple.must_be_const simple
     | Ok (No_alias is) -> (
@@ -4560,7 +4687,9 @@ let rec must_be_singleton t ~machine_width : RWC.t option =
       | Some f -> Some (RWC.naked_vec256 f)
       | None -> None))
   | Naked_vec512 ty -> (
-    match TD.descr ty with
+    match
+      TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_vec512 ty
+    with
     | Unknown | Bottom -> None
     | Ok (Equals simple) -> Simple.must_be_const simple
     | Ok (No_alias is) -> (

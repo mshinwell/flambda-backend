@@ -52,7 +52,10 @@ module T : sig
 
   val unknown : _ t
 
-  val descr : 'head t -> 'head Descr.t Or_unknown_or_bottom.t
+  val descr :
+    apply_renaming_head:('head -> Renaming.t -> 'head) ->
+    'head t ->
+    'head Descr.t Or_unknown_or_bottom.t
 
   val is_obviously_bottom : _ t -> bool
 
@@ -78,6 +81,7 @@ module T : sig
     Name_occurrences.t
 
   val remove_unused_value_slots_and_shortcut_aliases :
+    apply_renaming_head:('head -> Renaming.t -> 'head) ->
     remove_unused_value_slots_and_shortcut_aliases_head:
       ('head ->
       used_value_slots:Value_slot.Set.t ->
@@ -89,6 +93,7 @@ module T : sig
     'head t
 
   val project_variables_out :
+    apply_renaming_head:('head -> Renaming.t -> 'head) ->
     free_names_head:('head -> Name_occurrences.t) ->
     to_project:Variable.Set.t ->
     expand:(Variable.t -> coercion:Coercion.t -> 'head t) ->
@@ -170,13 +175,14 @@ end = struct
 
   type 'head t = 'head WCFN.t Descr.t Or_unknown_or_bottom.t
 
-  let[@inline always] descr (t : 'head t) : 'head Descr.t Or_unknown_or_bottom.t
-      =
+  let[@inline always] descr ~apply_renaming_head (t : 'head t) :
+      'head Descr.t Or_unknown_or_bottom.t =
     match t with
     | Unknown -> Unknown
     | Bottom -> Bottom
     | Ok (Equals simple) -> Ok (Equals simple)
-    | Ok (No_alias wcfn) -> Ok (No_alias (WCFN.descr wcfn))
+    | Ok (No_alias wcfn) ->
+      Ok (No_alias (WCFN.descr ~apply_renaming_descr:apply_renaming_head wcfn))
 
   let create head : _ t = Ok (Descr.No_alias (WCFN.create head))
 
@@ -228,7 +234,7 @@ end = struct
           (WCFN.free_names_no_cache ~free_names_descr:free_names_head)
         descr
 
-  let remove_unused_value_slots_and_shortcut_aliases
+  let remove_unused_value_slots_and_shortcut_aliases ~apply_renaming_head
       ~remove_unused_value_slots_and_shortcut_aliases_head (t : _ t)
       ~used_value_slots ~canonicalise : _ t =
     match t with
@@ -238,19 +244,21 @@ end = struct
         Descr.remove_unused_value_slots_and_shortcut_aliases
           ~remove_unused_value_slots_and_shortcut_aliases_head:
             (WCFN.remove_unused_value_slots_and_shortcut_aliases
+               ~apply_renaming_descr:apply_renaming_head
                ~remove_unused_value_slots_and_shortcut_aliases_descr:
                  remove_unused_value_slots_and_shortcut_aliases_head)
           descr ~used_value_slots ~canonicalise
       in
       if descr == descr' then t else Ok descr'
 
-  let project_variables_out ~free_names_head ~to_project ~expand ~project_head
-      (t : _ t) : _ t =
+  let project_variables_out ~apply_renaming_head ~free_names_head ~to_project
+      ~expand ~project_head (t : _ t) : _ t =
     match t with
     | Unknown | Bottom -> t
     | Ok descr -> (
       let project_head wdr =
-        WCFN.project_variables_out ~free_names_descr:free_names_head ~to_project
+        WCFN.project_variables_out ~apply_renaming_descr:apply_renaming_head
+          ~free_names_descr:free_names_head ~to_project
           ~project_descr:project_head wdr
       in
       match
@@ -262,12 +270,13 @@ end
 
 include T
 
-let print ~print_head ppf t =
-  Or_unknown_or_bottom.print (Descr.print ~print_head) ppf (descr t)
+let print ~apply_renaming_head ~print_head ppf t =
+  Or_unknown_or_bottom.print (Descr.print ~print_head) ppf
+    (descr ~apply_renaming_head t)
 
-let[@inline always] apply_coercion ~apply_coercion_head coercion t :
-    _ t Or_bottom.t =
-  match descr t with
+let[@inline always] apply_coercion ~apply_renaming_head ~apply_coercion_head
+    coercion t : _ t Or_bottom.t =
+  match descr ~apply_renaming_head t with
   | Unknown | Bottom -> Ok t
   | Ok (Equals simple) -> (
     match Simple.apply_coercion simple coercion with
@@ -277,8 +286,8 @@ let[@inline always] apply_coercion ~apply_coercion_head coercion t :
     let<+ head = apply_coercion_head head coercion in
     create head
 
-let ids_for_export ~ids_for_export_head (t : _ t) =
-  match descr t with
+let ids_for_export ~apply_renaming_head ~ids_for_export_head (t : _ t) =
+  match descr ~apply_renaming_head t with
   | Unknown | Bottom -> Ids_for_export.empty
   | Ok (No_alias head) -> ids_for_export_head head
   | Ok (Equals simple) -> Ids_for_export.from_simple simple

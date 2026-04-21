@@ -27,6 +27,7 @@
 type 'head t
 
 val print :
+  apply_renaming_head:('head -> Renaming.t -> 'head) ->
   print_head:(Format.formatter -> 'head -> unit) ->
   Format.formatter ->
   'head t ->
@@ -47,6 +48,7 @@ val is_obviously_unknown : _ t -> bool
 val get_alias_exn : 'head t -> Simple.t
 
 val apply_coercion :
+  apply_renaming_head:('head -> Renaming.t -> 'head) ->
   apply_coercion_head:('head -> Coercion.t -> 'head Or_bottom.t) ->
   Coercion.t ->
   'head t ->
@@ -66,6 +68,7 @@ val free_names_no_cache :
   free_names_head:('head -> Name_occurrences.t) -> 'head t -> Name_occurrences.t
 
 val remove_unused_value_slots_and_shortcut_aliases :
+  apply_renaming_head:('head -> Renaming.t -> 'head) ->
   remove_unused_value_slots_and_shortcut_aliases_head:
     ('head ->
     used_value_slots:Value_slot.Set.t ->
@@ -77,6 +80,7 @@ val remove_unused_value_slots_and_shortcut_aliases :
   'head t
 
 val project_variables_out :
+  apply_renaming_head:('head -> Renaming.t -> 'head) ->
   free_names_head:('head -> Name_occurrences.t) ->
   to_project:Variable.Set.t ->
   expand:(Variable.t -> coercion:Coercion.t -> 'head t) ->
@@ -85,7 +89,10 @@ val project_variables_out :
   'head t
 
 val ids_for_export :
-  ids_for_export_head:('head -> Ids_for_export.t) -> 'head t -> Ids_for_export.t
+  apply_renaming_head:('head -> Renaming.t -> 'head) ->
+  ids_for_export_head:('head -> Ids_for_export.t) ->
+  'head t ->
+  Ids_for_export.t
 
 module Descr : sig
   type 'head t = private
@@ -110,4 +117,7 @@ module Descr : sig
     Name_occurrences.t
 end
 
-val descr : 'head t -> 'head Descr.t Or_unknown_or_bottom.t
+val descr :
+  apply_renaming_head:('head -> Renaming.t -> 'head) ->
+  'head t ->
+  'head Descr.t Or_unknown_or_bottom.t
