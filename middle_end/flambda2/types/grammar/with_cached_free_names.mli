@@ -14,18 +14,23 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(** Management of cached free names. *)
+(** A wrapper that caches free names and delays renamings.
 
-type 'descr t =
-  { descr : 'descr;
-    mutable free_names : Name_occurrences.t option
-  }
+    Each [t] represents a ['descr] together with a renaming that should be
+    applied to it to yield the actual value being represented. Renamings applied
+    via [apply_renaming] are accumulated lazily rather than traversing the descr
+    immediately; they are forced only when the descr is required (typically via
+    [descr]). *)
+
+type 'descr t
 
 val create : 'descr -> 'descr t
 
-val descr : 'descr t -> 'descr
+val descr :
+  apply_renaming_descr:('descr -> Renaming.t -> 'descr) -> 'descr t -> 'descr
 
 val print :
+  apply_renaming_descr:('descr -> Renaming.t -> 'descr) ->
   print_descr:(Format.formatter -> 'descr -> unit) ->
   Format.formatter ->
   'descr t ->
@@ -49,6 +54,7 @@ val free_names_no_cache :
   Name_occurrences.t
 
 val remove_unused_value_slots_and_shortcut_aliases :
+  apply_renaming_descr:('descr -> Renaming.t -> 'descr) ->
   remove_unused_value_slots_and_shortcut_aliases_descr:
     ('descr ->
     used_value_slots:Value_slot.Set.t ->
@@ -60,6 +66,7 @@ val remove_unused_value_slots_and_shortcut_aliases :
   'descr t
 
 val project_variables_out :
+  apply_renaming_descr:('descr -> Renaming.t -> 'descr) ->
   free_names_descr:('descr -> Name_occurrences.t) ->
   to_project:Variable.Set.t ->
   project_descr:('descr -> 'descr) ->

@@ -1253,10 +1253,10 @@ end = struct
   let extract_symbol_approx env symbol find_code =
     let rec type_to_approx (ty : Type_grammar.t) : _ Value_approximation.t =
       let module VA = Value_approximation in
-      match ty with
+      match Type_grammar.descr ty with
       | Value descr -> (
         let value_unknown = VA.Unknown K.value in
-        match Type_descr.descr descr with
+        match descr with
         | Unknown | Bottom -> value_unknown
         | Ok (Equals simple) ->
           Simple.pattern_match' simple
