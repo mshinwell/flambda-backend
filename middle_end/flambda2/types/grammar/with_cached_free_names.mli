@@ -29,6 +29,19 @@ val create : 'descr -> 'descr t
 val descr :
   apply_renaming_descr:('descr -> Renaming.t -> 'descr) -> 'descr t -> 'descr
 
+(** [peek_descr t] returns the underlying [descr] without forcing any delayed
+    renaming. The returned value may therefore be stale; in particular, any
+    [Simple.t] or sub-term contained within it has not yet had the delayed
+    renaming applied. This is only safe to use when the caller is looking at
+    information that is not altered by renaming (for example the top-level
+    constructor tag of a sum type). *)
+val peek_descr : 'descr t -> 'descr
+
+(** [peek_delayed_renaming t] returns the renaming that is pending on [t].
+    Together with [peek_descr], this allows manual forcing of specific fields
+    without having to provide an [apply_renaming_descr]. *)
+val peek_delayed_renaming : _ t -> Renaming.t
+
 val print :
   apply_renaming_descr:('descr -> Renaming.t -> 'descr) ->
   print_descr:(Format.formatter -> 'descr -> unit) ->

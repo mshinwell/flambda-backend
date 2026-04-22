@@ -38,6 +38,10 @@ let[@inline always] descr ~apply_renaming_descr t =
   force_renaming ~apply_renaming_descr t;
   t.descr
 
+let[@inline always] peek_descr t = t.descr
+
+let[@inline always] peek_delayed_renaming t = t.delayed_renaming
+
 let[@inline always] free_names ~free_names_descr t =
   match t.free_names with
   | Some free_names -> free_names
@@ -57,33 +61,31 @@ let[@inline always] free_names_no_cache ~free_names_descr t =
   then free_names
   else Name_occurrences.apply_renaming free_names t.delayed_renaming
 
-let apply_renaming ~apply_renaming_descr ~free_names_descr t renaming =
+let apply_renaming ~apply_renaming_descr ~free_names_descr:_ t renaming =
   if Renaming.is_identity renaming
   then t
+  else if Renaming.has_import_map renaming
+  then (
+    (* Renamings carrying an import map cannot be composed with an existing
+       delayed renaming (see [Renaming.compose]); force and apply eagerly. *)
+    force_renaming ~apply_renaming_descr t;
+    let descr = apply_renaming_descr t.descr renaming in
+    let free_names =
+      match t.free_names with
+      | None -> None
+      | Some fn -> Some (Name_occurrences.apply_renaming fn renaming)
+    in
+    { descr; free_names; delayed_renaming = Renaming.empty })
   else
-    let current_free_names = free_names ~free_names_descr t in
-    if
-      (not (Renaming.has_import_map renaming))
-      && not (Name_occurrences.affected_by_renaming current_free_names renaming)
-    then t
-    else if Renaming.has_import_map renaming
-    then (
-      (* Renamings carrying an import map cannot be composed with an existing
-         delayed renaming (see [Renaming.compose]); force and apply eagerly. *)
-      force_renaming ~apply_renaming_descr t;
-      let descr = apply_renaming_descr t.descr renaming in
-      let free_names =
-        Some (Name_occurrences.apply_renaming current_free_names renaming)
-      in
-      { descr; free_names; delayed_renaming = Renaming.empty })
-    else
-      let delayed_renaming =
-        Renaming.compose ~second:renaming ~first:t.delayed_renaming
-      in
-      let free_names =
-        Some (Name_occurrences.apply_renaming current_free_names renaming)
-      in
-      { descr = t.descr; free_names; delayed_renaming }
+    let delayed_renaming =
+      Renaming.compose ~second:renaming ~first:t.delayed_renaming
+    in
+    let free_names =
+      match t.free_names with
+      | None -> None
+      | Some fn -> Some (Name_occurrences.apply_renaming fn renaming)
+    in
+    { descr = t.descr; free_names; delayed_renaming }
 
 let remove_unused_value_slots_and_shortcut_aliases ~apply_renaming_descr
     ~remove_unused_value_slots_and_shortcut_aliases_descr t ~used_value_slots
