@@ -938,14 +938,11 @@ static intnat mark_stack_push_block(struct mark_stack* stk, value block)
     CAMLassert(offset <= Wosize_val(block)
       && offset >= Start_env_closinfo(closinfo));
 
-    /* F.1: if this closure points into unloadable code, darken its
-       Code_block via the back-pointer at [Field(block, 0) - 1]. The
-       standard mark scan then recursively darkens the Code_block's dep
-       code- and data-blocks. CR mshinwell: handle multi-function
-       closures by walking each (code, closinfo) pair in the prefix. */
-    if (Unloadable_closinfo(closinfo)) {
-      caml_darken_code_block_for_entry(Caml_state, Field(block, 0));
-    }
+    /* F.1: for each function slot in the closure prefix whose closinfo
+       has the unloadable bit set, darken the corresponding [Code_block]
+       via the back-pointer at [entry - 1]. Standard mark scan then
+       recursively darkens the Code_block's dep code- and data-blocks. */
+    caml_darken_unloadable_code_blocks_in_closure(Caml_state, block);
   }
 
   CAMLassert(Has_status_val(block, caml_global_heap_state.MARKED));
@@ -1146,11 +1143,8 @@ again:
         uintnat env_offset = Start_env_closinfo(closinfo);
         budget -= env_offset;
         me.start += env_offset;
-        /* F.1: see [mark_stack_push_block] for the equivalent injection.
-           CR mshinwell: handle multi-function closures. */
-        if (Unloadable_closinfo(closinfo)) {
-          caml_darken_code_block_for_entry(Caml_state, Field(block, 0));
-        }
+        /* F.1: see [mark_stack_push_block] for the same injection. */
+        caml_darken_unloadable_code_blocks_in_closure(Caml_state, block);
       }
     }
     else if (budget <= 0 || stk->count == 0) {
