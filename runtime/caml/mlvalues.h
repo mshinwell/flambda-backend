@@ -467,6 +467,9 @@ Caml_inline void* Ptr_val(value val)
 /* In the closure info field, the top 8 bits are the arity (signed).
    The next least significant bit is set iff the current closure is the
    last one to occur in the block.  (This is used in the compactor.)
+   The bit just below that is set iff this closure's code lives in an
+   "unloadable" compilation unit (CU), i.e. the runtime may reclaim the
+   code/data of that CU when no live reference remains.
    The low bit is set to one, to look like an integer.
    The remaining bits are the field number for the first word of the scannable
    part of the environment, or, in other words, the offset (in words) from the
@@ -476,18 +479,26 @@ Caml_inline void* Ptr_val(value val)
 /* CR ncourant: it might be cleaner to use a packed struct here */
 #ifdef ARCH_SIXTYFOUR
 #define Arity_closinfo(info) ((intnat)(info) >> 56)
-#define Start_env_closinfo(info) (((uintnat)(info) << 9) >> 10)
+#define Start_env_closinfo(info) (((uintnat)(info) << 10) >> 11)
 #define Is_last_closinfo(info) (((uintnat)(info) << 8) >> 63)
+#define Unloadable_closinfo(info) (((uintnat)(info) << 9) >> 63)
 #define Make_closinfo(arity,delta,is_last) \
   (((uintnat)(arity) << 56) + ((uintnat)(is_last) << 55) \
     + ((uintnat)(delta) << 1) + 1)
+#define Make_closinfo_unloadable(arity,delta,is_last,is_unloadable) \
+  (((uintnat)(arity) << 56) + ((uintnat)(is_last) << 55) \
+    + ((uintnat)(is_unloadable) << 54) + ((uintnat)(delta) << 1) + 1)
 #else
 #define Arity_closinfo(info) ((intnat)(info) >> 24)
-#define Start_env_closinfo(info) (((uintnat)(info) << 9) >> 10)
+#define Start_env_closinfo(info) (((uintnat)(info) << 10) >> 11)
 #define Is_last_closinfo(info) (((uintnat)(info) << 8) >> 31)
+#define Unloadable_closinfo(info) (((uintnat)(info) << 9) >> 31)
 #define Make_closinfo(arity,delta,is_last) \
   (((uintnat)(arity) << 24) + ((uintnat)(is_last) << 23) \
     + ((uintnat)(delta) << 1) + 1)
+#define Make_closinfo_unloadable(arity,delta,is_last,is_unloadable) \
+  (((uintnat)(arity) << 24) + ((uintnat)(is_last) << 23) \
+    + ((uintnat)(is_unloadable) << 22) + ((uintnat)(delta) << 1) + 1)
 #endif
 
 /* This tag is used (with Forcing_tag & Forward_tag) to implement lazy values.

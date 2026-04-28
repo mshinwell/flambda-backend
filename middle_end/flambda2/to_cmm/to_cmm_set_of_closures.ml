@@ -246,9 +246,13 @@ end = struct
         let (kind, params_ty, result_ty), closure_code_pointers, dbg =
           get_func_decl_params_arity env code_id
         in
+        let is_unloadable =
+          Env.get_code_metadata env code_id |> Code_metadata.is_unloadable
+        in
         let closure_info =
           C.closure_info' ~arity:(kind, params_ty)
             ~startenv:(startenv - slot_offset) ~is_last:last_function_slot
+            ~is_unloadable
         in
         (* We build here the **reverse** list of fields for the function slot *)
         match closure_code_pointers with
@@ -310,9 +314,13 @@ end = struct
              deleted of size %d"
             Function_slot.print function_slot size function_slot_size;
         let closure_info =
+          (* Deleted slots represent code that was eliminated; they don't
+             carry a live code pointer, so [is_unloadable] is irrelevant
+             here — pick [false] for safety. *)
           C.pack_closure_info
             ~arity:(if size = 2 then 1 else 2)
             ~startenv:(startenv - slot_offset) ~is_last:last_function_slot
+            ~is_unloadable:false
         in
         let acc, chunk_acc =
           match size with
