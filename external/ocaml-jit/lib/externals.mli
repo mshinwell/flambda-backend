@@ -27,3 +27,11 @@ val run_toplevel : Jit_unit.Entry_points.t -> Toplevel_res.t
 val get_page_size : unit -> int
 
 val dlsym : string -> Address.t option
+
+val register_unloadable_unit :
+  nativeint array (* code-block addresses *) ->
+  nativeint array (* data-block addresses *) ->
+  nativeint array (* function entries, sorted by address *) ->
+  nativeint (* code_end *) ->
+  nativeint (* frametable, or 0n if absent *) ->
+  unit

@@ -29,6 +29,10 @@
 #include "caml/alloc.h"
 #include "caml/osdeps.h"
 #include "caml/codefrag.h"
+#include "caml/fail.h"
+#ifdef CAML_RUNTIME_5
+#include "caml/unloadable.h"
+#endif
 
 #include <assert.h>
 #include <stdbool.h>
@@ -324,3 +328,91 @@ CAMLprim value jit_obj_to_addr(value obj) {
   CAMLparam1(obj);
   CAMLreturn(caml_copy_nativeint((intnat) obj));
 }
+
+#ifdef CAML_RUNTIME_5
+/* Build and register an [caml_unloadable_unit] for a JIT-emitted compilation
+ * unit. Inputs are nativeint arrays / scalars from the OCaml side:
+ *   - [code_blocks]: addresses of the unit's [Code_block] static-data items
+ *     (one per function defined in the unit).
+ *   - [data_blocks]: addresses of the unit's other static-data blocks (those
+ *     emitted with white headers per B.1).
+ *   - [function_entries]: addresses of each function's entry, sorted in
+ *     ascending order. Used to derive per-function text ranges:
+ *     [function_entries[i] .. function_entries[i+1])  (and the last entry
+ *     extends to [code_end]). Per-function fragments are necessary so that
+ *     F.2 (stack-RA scan) can recover the entry from a return address via
+ *     [caml_find_code_fragment_by_pc]->code_start.
+ *   - [code_end_addr]: address of the unit's [code_end] symbol; the upper
+ *     bound of the last function's text range.
+ *   - [frametable_addr]: address of the unit's frame table (or 0 if none).
+ *
+ * The struct and its arrays are allocated via [caml_stat_alloc_noexc]; the
+ * runtime keeps them alive until the unit is unloaded. (No [on_unload]
+ * callback is registered yet — see CR below — so the actual buffers will
+ * not be freed even if the GC determines the unit is unreachable.) */
+CAMLprim value jit_register_unloadable_unit(
+    value code_blocks, value data_blocks, value function_entries,
+    value code_end_addr, value frametable_addr) {
+  CAMLparam5(code_blocks, data_blocks, function_entries, code_end_addr,
+             frametable_addr);
+
+  uintnat n_code = Wosize_val(code_blocks);
+  uintnat n_data = Wosize_val(data_blocks);
+  uintnat n_funcs = Wosize_val(function_entries);
+
+  struct caml_unloadable_unit *u =
+      caml_stat_alloc_noexc(sizeof(struct caml_unloadable_unit));
+  if (u == NULL) caml_raise_out_of_memory();
+  u->next = NULL;
+  u->num_code_blocks = n_code;
+  u->num_data_blocks = n_data;
+  u->num_text_ranges = n_funcs;
+  u->frametable = (intnat *)Nativeint_val(frametable_addr);
+  u->on_unload = NULL;
+  u->loader_data = NULL;
+
+  u->code_blocks = caml_stat_alloc_noexc(n_code * sizeof(value));
+  if (u->code_blocks == NULL && n_code > 0) caml_raise_out_of_memory();
+  for (uintnat i = 0; i < n_code; i++) {
+    u->code_blocks[i] = (value)Nativeint_val(Field(code_blocks, i));
+  }
+
+  u->data_blocks = caml_stat_alloc_noexc(n_data * sizeof(value));
+  if (u->data_blocks == NULL && n_data > 0) caml_raise_out_of_memory();
+  for (uintnat i = 0; i < n_data; i++) {
+    u->data_blocks[i] = (value)Nativeint_val(Field(data_blocks, i));
+  }
+
+  /* Per-function text ranges: [entry_i .. entry_{i+1}); last extends to
+   * code_end. */
+  u->text_ranges = caml_stat_alloc_noexc(2 * n_funcs * sizeof(char *));
+  if (u->text_ranges == NULL && n_funcs > 0) caml_raise_out_of_memory();
+  u->text_range_fragnums = caml_stat_alloc_noexc(n_funcs * sizeof(int));
+  if (u->text_range_fragnums == NULL && n_funcs > 0) caml_raise_out_of_memory();
+  char *code_end = (char *)Nativeint_val(code_end_addr);
+  for (uintnat i = 0; i < n_funcs; i++) {
+    char *start = (char *)Nativeint_val(Field(function_entries, i));
+    char *end = (i + 1 < n_funcs)
+                    ? (char *)Nativeint_val(Field(function_entries, i + 1))
+                    : code_end;
+    u->text_ranges[2 * i] = start;
+    u->text_ranges[2 * i + 1] = end;
+  }
+
+  /* CR mshinwell: set [u->on_unload] to a callback that frees the JIT
+   * buffer (the [aligned_alloc]/[posix_memalign]'d block backing both text
+   * and data sections). The loader currently retains the buffer base in
+   * OCaml-side state; that will need to be threaded through here so the
+   * runtime can free it when the unit is unloaded. */
+
+  caml_register_unloadable_unit(u);
+  CAMLreturn(Val_unit);
+}
+#else
+CAMLprim value jit_register_unloadable_unit(value a, value b, value c, value d,
+                                            value e) {
+  /* Unloadable units require runtime 5 (concurrent marker). */
+  (void)a; (void)b; (void)c; (void)d; (void)e;
+  return Val_unit;
+}
+#endif

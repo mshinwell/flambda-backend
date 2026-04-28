@@ -195,6 +195,43 @@ let entry_points ~phrase_name symbols =
       failwithf "Toplevel phrase entry point symbol %s is not defined"
         entry_name
 
+(** Walk [local_symbols] and produce the per-unit metadata required to
+    register an unloadable compilation unit:
+      - [code_blocks]: addresses of every [_code_block] static-data symbol
+        (one per function defined in the unit).
+      - [function_entries]: addresses of the corresponding function entries
+        (the prefix of each [_code_block] name), sorted ascending so that
+        the runtime can build per-function code-fragment ranges
+        [entry_i .. entry_{i+1}).
+
+    Returns [None] if the unit has no [_code_block] symbols (nothing to
+    register). *)
+let unloadable_metadata local_symbols =
+  let suffix = "_code_block" in
+  let suffix_len = String.length suffix in
+  let code_blocks_rev, entries_rev =
+    Symbols.fold local_symbols ~init:([], [])
+      ~f:(fun (cbs, ents) name addr ->
+        let n = String.length name in
+        if n > suffix_len
+           && String.equal (String.sub name (n - suffix_len) suffix_len) suffix
+        then
+          let entry_name = String.sub name 0 (n - suffix_len) in
+          match Symbols.find local_symbols entry_name with
+          | Some entry_addr ->
+              ( Address.to_nativeint addr :: cbs,
+                Address.to_nativeint entry_addr :: ents )
+          | None -> (cbs, ents)
+        else (cbs, ents))
+  in
+  match code_blocks_rev with
+  | [] -> None
+  | _ ->
+      let code_blocks = Array.of_list (List.rev code_blocks_rev) in
+      let entries = Array.of_list (List.rev entries_rev) in
+      Array.sort Nativeint.compare entries;
+      Some (code_blocks, entries)
+
 let jit_run entry_points =
   match
     try Result (Obj.magic (Externals.run_toplevel entry_points))
@@ -261,6 +298,29 @@ let jit_load (type a r)
   load_text (module E) relocated_text;
   load_sections (module E) addressed_sections;
   let entry_points = entry_points ~phrase_name symbols in
+  (* If the compilation unit emitted any [_code_block] symbols, register the
+     unit with the runtime so the GC can detect when the unit becomes
+     unreachable and unload its text/data buffers. The [data_blocks] array is
+     left empty for now: it is only consulted during end-of-cycle
+     normalization, and as long as data blocks are reached every cycle via
+     their owning [Code_block]s, their headers stay consistent. CR
+     mshinwell: pass the unit's data-block addresses too once the compiler
+     emits a list of them. *)
+  (match unloadable_metadata local_symbols with
+  | None -> ()
+  | Some (code_blocks, function_entries) ->
+      let code_end_addr =
+        match entry_points.code_end with
+        | Some addr -> Address.to_nativeint addr
+        | None -> failwithf "code_end missing for unloadable unit"
+      in
+      let frametable_addr =
+        match entry_points.frametable with
+        | Some addr -> Address.to_nativeint addr
+        | None -> 0n
+      in
+      Externals.register_unloadable_unit code_blocks [||] function_entries
+        code_end_addr frametable_addr);
   let result = jit_run entry_points in
   outcome_ref := Some result
 
@@ -299,10 +359,31 @@ let jit_load_lambda ~phrase_name ppf (program : Lambda.program) =
     Direct_to_cmm
       (Flambda2.lambda_to_cmm ~machine_width ~keep_symbol_tables:true)
   in
-  Asmgen.compile_implementation
-    (module Unix : Compiler_owee.Unix_intf.S)
-    ~toplevel:need_symbol ~pipeline ~sourcefile:(Some filename)
-    ~prefixname:filename ~ppf_dump:ppf program;
+  (* Mark this CU as unloadable: the JIT-emitted code/data is transient and
+     the runtime should be free to reclaim it once the GC determines the
+     unit is unreachable. This drives:
+       - white (UNMARKED) headers on static data (B.1)
+       - the [is_unloadable] bit on closinfo words (A.2)
+       - [FRAME_DESCRIPTOR_UNLOADABLE] on frame descriptors (A.3)
+       - emission of [Code_block] static items (C)
+       - per-function back-pointers in [.text] (D)
+     We save and restore so any non-JIT compile after this in the same
+     process is unaffected. *)
+  let saved_unit_is_unloadable = !Clflags.unit_is_unloadable in
+  Clflags.unit_is_unloadable := true;
+  let restore () =
+    Clflags.unit_is_unloadable := saved_unit_is_unloadable
+  in
+  (match
+     Asmgen.compile_implementation
+       (module Unix : Compiler_owee.Unix_intf.S)
+       ~toplevel:need_symbol ~pipeline ~sourcefile:(Some filename)
+       ~prefixname:filename ~ppf_dump:ppf program
+   with
+  | () -> restore ()
+  | exception exn ->
+      restore ();
+      raise exn);
   match !outcome_global with
   | None -> failwith "No evaluation outcome"
   | Some res ->

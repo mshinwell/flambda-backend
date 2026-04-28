@@ -30,3 +30,11 @@ external run_toplevel : Jit_unit.Entry_points.t -> Toplevel_res.t
 external get_page_size : unit -> int = "jit_get_page_size"
 
 external dlsym : string -> Address.t option = "jit_dlsym"
+
+external register_unloadable_unit :
+  nativeint array (* code-block addresses *) ->
+  nativeint array (* data-block addresses *) ->
+  nativeint array (* function entries, sorted by address *) ->
+  nativeint (* code_end *) ->
+  nativeint (* frametable, or 0n if absent *) ->
+  unit = "jit_register_unloadable_unit"
