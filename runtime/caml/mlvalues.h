@@ -512,6 +512,14 @@ Caml_inline void* Ptr_val(value val)
  * See major_gc.c and stdlib/lazy.ml. */
 #define Forcing_tag 244
 
+/* Tag used for code-block descriptors emitted for functions in unloadable
+ * compilation units. A Code_block is a heap-shaped object holding pointers to
+ * dependency code-blocks and data blocks for one function; standard mark scan
+ * darkens its fields. The tag is used by the unload-bookkeeping pass and for
+ * safety assertions; it is not consulted by [caml_darken] beyond the standard
+ * scannable-tag treatment. */
+#define Code_block_tag 243
+
 /* Another special case: variants */
 CAMLextern value caml_hash_variant(char const * tag);
 
