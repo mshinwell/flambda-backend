@@ -48,6 +48,9 @@ val record_frame_descr :
   (* Size of stack frame *)
   live_offset:int list ->
   (* Offsets/regs of live addresses *)
+  unloadable:bool ->
+  (* Whether this frame's return address points into an unloadable
+     compilation unit *)
   frame_debuginfo ->
   (* Location, if any *)
   unit

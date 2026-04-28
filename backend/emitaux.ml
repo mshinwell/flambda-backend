@@ -45,6 +45,9 @@ type frame_descr =
   { fd_lbl : Label.t; (* Return address *)
     fd_frame_size : int; (* Size of stack frame *)
     fd_live_offset : int list; (* Offsets/regs of live addresses *)
+    fd_unloadable : bool;
+        (* Return address is in code from an unloadable CU; sets bit 2
+           (FRAME_DESCRIPTOR_UNLOADABLE = 0x4) of the frame_data word. *)
     fd_debuginfo : frame_debuginfo; (* Location, if any *)
     fd_long : bool (* Use 32 instead of 16 bit format. *)
   }
@@ -75,7 +78,7 @@ let is_long_stack_index n =
   (* allows negative reg offsets in runtime4 *)
   if is_reg n && not Config.runtime5 then false else is_long n
 
-let record_frame_descr ~label ~frame_size ~live_offset debuginfo =
+let record_frame_descr ~label ~frame_size ~live_offset ~unloadable debuginfo =
   assert (frame_size land 3 = 0);
   let fd_long =
     is_long (frame_size + get_flags debuginfo)
@@ -90,6 +93,7 @@ let record_frame_descr ~label ~frame_size ~live_offset debuginfo =
     := { fd_lbl = label;
          fd_frame_size = frame_size;
          fd_live_offset = List.sort_uniq ( - ) live_offset;
+         fd_unloadable = unloadable;
          fd_debuginfo = debuginfo;
          fd_long
        }
@@ -183,6 +187,7 @@ let emit_frames a =
   in
   let emit_frame fd =
     let flags = get_flags fd.fd_debuginfo in
+    let flags = if fd.fd_unloadable then flags lor 4 else flags in
     a.efa_label_rel fd.fd_lbl 0l;
     (* For short format, the size is guaranteed to be less than the constant
        below. *)

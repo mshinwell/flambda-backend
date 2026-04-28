@@ -462,6 +462,10 @@ let transl_regalloc_param_attrib :
 let transl_cold_attrib (cold : bool) : Cmm.codegen_option list =
   if cold then [Cmm.Cold] else []
 
+(* Translation of unloadable attribute on functions. *)
+let transl_unloadable_attrib (is_unloadable : bool) : Cmm.codegen_option list =
+  if is_unloadable then [Cmm.Unloadable] else []
+
 (* Translation of the bodies of functions. *)
 
 let params_and_body0 env res code_id ~result_arity ~fun_dbg
@@ -551,11 +555,15 @@ let params_and_body0 env res code_id ~result_arity ~fun_dbg
     Env.get_code_metadata env code_id |> Code_metadata.regalloc_param_attribute
   in
   let cold = Env.get_code_metadata env code_id |> Code_metadata.cold in
+  let is_unloadable =
+    Env.get_code_metadata env code_id |> Code_metadata.is_unloadable
+  in
   let fun_flags =
     transl_check_attrib zero_alloc_attribute
     @ transl_regalloc_attrib regalloc_attribute
     @ transl_regalloc_param_attrib regalloc_param_attribute
     @ transl_cold_attrib cold
+    @ transl_unloadable_attrib is_unloadable
     @
     if Flambda_features.optimize_for_speed () then [] else [Cmm.Reduce_code_size]
   in

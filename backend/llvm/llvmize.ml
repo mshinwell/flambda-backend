@@ -1471,7 +1471,8 @@ let fun_attrs ~has_try codegen_options =
         match (opt : Cfg.codegen_option) with
         | Cfg.Cold -> [Cold; Noinline]
         | Reduce_code_size | No_CSE | Use_linscan_regalloc | Use_regalloc _
-        | Use_regalloc_param _ | Assume_zero_alloc _ | Check_zero_alloc _ ->
+        | Use_regalloc_param _ | Unloadable | Assume_zero_alloc _
+        | Check_zero_alloc _ ->
           [] (* CR yusumez: Do these require any attributes? *))
       codegen_options
   in

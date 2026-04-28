@@ -235,6 +235,8 @@ let frame_required = ref false
 
 let contains_calls = ref false
 
+let is_unloadable = ref false
+
 let frame_size () =
   Proc.frame_size ~stack_offset:!stack_offset ~num_stack_slots
     ~contains_calls:!contains_calls
@@ -618,7 +620,7 @@ let record_frame_label live dbg =
   (* CR sspies: Consider changing [record_frame_descr] to [Asm_label.t] instead
      of Linear labels. *)
   record_frame_descr ~label:lbl ~frame_size:(frame_size ())
-    ~live_offset:!live_offset dbg;
+    ~live_offset:!live_offset ~unloadable:!is_unloadable dbg;
   label_to_asm_label ~section:Text lbl
 
 let record_frame live dbg =
@@ -2660,6 +2662,7 @@ let fundecl fundecl =
     ~to_:num_stack_slots;
   prologue_required := fundecl.fun_prologue_required;
   frame_required := fundecl.fun_frame_required;
+  is_unloadable := fundecl.fun_unloadable;
   all_functions := fundecl :: !all_functions;
   current_basic_block_section
     := Option.value fundecl.fun_section_name ~default:"";
@@ -3014,6 +3017,8 @@ let emit_probe_handler_wrapper (p : Probe_emission.probe) =
       saved_live []
   in
   record_frame_descr ~label ~frame_size:(wrapper_frame_size n) ~live_offset
+    ~unloadable:false
+      (* The wrapper function is in shared, non-unloadable code. *)
     (Dbg_other Debuginfo.none);
   D.define_label (label_to_asm_label ~section:Text label);
   (* After the probe handler has finished executing, restore all live registers

@@ -76,12 +76,15 @@ module Env : sig
     prologue_required:bool ->
     contains_calls:bool ->
     function_name:string ->
+    is_unloadable:bool ->
     tailrec_entry_point:L.t option ->
     t
 
   val copy : t -> t
 
   val fastcode_flag : t -> bool
+
+  val is_unloadable : t -> bool
 
   val stack_offset : t -> int
 
@@ -140,6 +143,7 @@ end = struct
       mutable local_realloc_sites : local_realloc_call list;
       mutable stack_realloc : stack_realloc option;
       function_name : string;
+      is_unloadable : bool;
       tailrec_entry_point : L.t option;
       float32_literals : (int32 * L.t) list ref;
       float_literals : (int64 * L.t) list ref;
@@ -147,7 +151,7 @@ end = struct
     }
 
   let create ~fastcode_flag ~num_stack_slots ~prologue_required ~contains_calls
-      ~function_name ~tailrec_entry_point =
+      ~function_name ~is_unloadable ~tailrec_entry_point =
     { fastcode_flag;
       stack_offset = 0;
       num_stack_slots = Stack_class.Tbl.copy num_stack_slots;
@@ -157,6 +161,7 @@ end = struct
       local_realloc_sites = [];
       stack_realloc = None;
       function_name;
+      is_unloadable;
       tailrec_entry_point;
       float32_literals = ref [];
       float_literals = ref [];
@@ -195,6 +200,8 @@ end = struct
   let set_stack_realloc t v = t.stack_realloc <- Some v
 
   let function_name t = t.function_name
+
+  let is_unloadable t = t.is_unloadable
 
   let tailrec_entry_point t = t.tailrec_entry_point
 
@@ -743,7 +750,7 @@ let record_frame_label env live dbg =
   (* CR sspies: Consider changing [record_frame_descr] to [Asm_label.t] instead
      of linear labels. *)
   record_frame_descr ~label:lbl ~frame_size:(Env.frame_size env)
-    ~live_offset:!live_offset dbg;
+    ~live_offset:!live_offset ~unloadable:(Env.is_unloadable env) dbg;
   label_to_asm_label ~section:Text lbl
 
 let record_frame env live dbg =
@@ -2074,6 +2081,7 @@ let fundecl fundecl =
       ~num_stack_slots:fundecl.fun_num_stack_slots
       ~prologue_required:fundecl.fun_prologue_required
       ~contains_calls:fundecl.fun_contains_calls ~function_name:fundecl.fun_name
+      ~is_unloadable:fundecl.fun_unloadable
       ~tailrec_entry_point:
         (Option.map
            (label_to_asm_label ~section:Text)
