@@ -4361,6 +4361,9 @@ let make_symbol ?compilation_unit name =
   Symbol.for_name compilation_unit name
   |> Symbol.linkage_name |> Linkage_name.to_string
 
+let code_block_symbol_name entry_linkage_name =
+  entry_linkage_name ^ "_code_block"
+
 (* Failure function for closures that should never be called indirectly *)
 
 let fail_if_called_indirectly_function () =

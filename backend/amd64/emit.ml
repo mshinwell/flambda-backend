@@ -2678,6 +2678,18 @@ let fundecl fundecl =
   D.align ~fill:Nop ~bytes:16;
   add_def_symbol fundecl.fun_name;
   let fundecl_sym = S.create_global fundecl.fun_name in
+  if fundecl.fun_unloadable
+  then (
+    (* Back-pointer at [entry - 1]: a machine-width word holding the address
+       of this function's Code_block. Read-only at runtime (lives in .text);
+       used by the GC mark phase F.1/F.2 to darken the Code_block when an
+       unloadable closure or return-address is reached. We pad to a full
+       16 bytes (8 bytes of space + 8-byte back-pointer) so the entry below
+       remains 16-byte aligned. *)
+    D.space ~bytes:8;
+    D.symbol
+      (S.create_global
+         (Cmm_helpers.code_block_symbol_name fundecl.fun_name)));
   if
     is_macosx system
     && (not !Clflags.output_c_object)

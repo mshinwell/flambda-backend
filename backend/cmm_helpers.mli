@@ -1181,6 +1181,14 @@ val cmm_arith_size : expression -> int option
 (* CR lmaurer: Return [Linkage_name.t] instead *)
 val make_symbol : ?compilation_unit:Compilation_unit.t -> string -> string
 
+(** [code_block_symbol_name entry_linkage_name] is the linkage name of the
+    [Code_block] static-data symbol associated with the function whose entry
+    has the given linkage name. The to_cmm Code_block emission pass produces
+    these symbols (when the CU is unloadable); the per-function back-pointer
+    emitted just ahead of each function entry refers to them via this naming
+    convention. *)
+val code_block_symbol_name : string -> string
+
 val machtype_of_layout : Lambda.layout -> machtype
 
 val machtype_of_layout_changing_tagged_int_to_val : Lambda.layout -> machtype
