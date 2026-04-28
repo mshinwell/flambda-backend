@@ -57,8 +57,12 @@
 #define FRAME_DESCRIPTOR_DEBUG 1
 #define FRAME_DESCRIPTOR_ALLOC 2
 #define FRAME_DESCRIPTOR_UNLOADABLE 4
-/* Bit 3 (0x8) is reserved for FRAME_DESCRIPTOR_HAS_CODE_PTR_SLOTS, to be
-   added alongside the parallel [code_ptr_live_ofs] array (A.5). */
+/* Set when the frame descriptor has a parallel [code_ptr_live_ofs] array
+   describing live Code_pointer-typed slots. Independent of
+   FRAME_DESCRIPTOR_UNLOADABLE: a non-unloadable frame can still spill an
+   unloadable code pointer across an indirect call, so we need this
+   everywhere. */
+#define FRAME_DESCRIPTOR_HAS_CODE_PTR_SLOTS 8
 #define FRAME_DESCRIPTOR_FLAGS 0xF
 #define FRAME_RETURN_TO_C 0xFFFF
 #define FRAME_LONG_MARKER 0x7FFF
@@ -145,6 +149,10 @@ Caml_inline bool frame_has_debug(frame_descr *d) {
 
 Caml_inline bool frame_is_unloadable(frame_descr *d) {
   return (frame_data(d) & FRAME_DESCRIPTOR_UNLOADABLE) != 0;
+}
+
+Caml_inline bool frame_has_code_ptr_slots(frame_descr *d) {
+  return (frame_data(d) & FRAME_DESCRIPTOR_HAS_CODE_PTR_SLOTS) != 0;
 }
 
 /* Allocation lengths are encoded reduced by one, so values 0-255 mean

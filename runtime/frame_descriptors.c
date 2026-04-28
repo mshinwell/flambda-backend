@@ -50,6 +50,18 @@ static frame_descr * next_frame_descr(frame_descr * d) {
       p = Align_to(p, uint32_t);
       p += sizeof(uint32_t) * (frame_has_allocs(d) ? num_allocs : 1);
     }
+    /* Skip parallel code_ptr_live_ofs array if present */
+    if (frame_has_code_ptr_slots(d)) {
+      if (frame_is_long(d)) {
+        p = Align_to(p, uint32_t);
+        uint32_t n = *(uint32_t *)p;
+        p += sizeof(uint32_t) * (1 + n);
+      } else {
+        p = Align_to(p, uint16_t);
+        uint16_t n = *(uint16_t *)p;
+        p += sizeof(uint16_t) * (1 + n);
+      }
+    }
     /* Align to word size */
     p = Align_to(p, void*);
     return ((frame_descr*) p);

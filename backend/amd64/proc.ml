@@ -516,12 +516,14 @@ let destroyed_at_basic (basic : Cfg_intf.S.basic) =
   | Op(Specific (Ifloatarithmem (Float32, _, _)))
   | Op(Intop_atomic _) ->
     destroyed_at_small_memory_op
-  | Op(Store( (Word_int | Word_val | Double | Onetwentyeight_aligned |
+  | Op(Store( (Word_int | Word_val | Word_code_pointer | Double
+              | Onetwentyeight_aligned |
                Onetwentyeight_unaligned | Twofiftysix_aligned |
                Twofiftysix_unaligned | Fivetwelve_aligned |
                Fivetwelve_unaligned), _, _))
   | Op(Load { memory_chunk =
-                (Word_int | Word_val | Double | Onetwentyeight_aligned |
+                (Word_int | Word_val | Word_code_pointer | Double
+                | Onetwentyeight_aligned |
                  Onetwentyeight_unaligned | Twofiftysix_aligned |
                  Twofiftysix_unaligned | Fivetwelve_aligned |
                  Fivetwelve_unaligned); _})

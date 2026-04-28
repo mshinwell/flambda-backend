@@ -114,6 +114,19 @@ val infix_header : int -> nativeint
 
 val black_custom_header : size:int -> nativeint
 
+(** [unit_*_header] variants emit white (UNMARKED) headers for static data of
+    unloadable compilation units, and black headers otherwise. The choice is
+    driven by [!Clflags.unit_is_unloadable]. Use these in to_cmm code paths
+    that emit static data for the current CU. *)
+val unit_block_header : int -> int -> nativeint
+
+val unit_mixed_block_header :
+  int -> int -> scannable_prefix_len:int -> nativeint
+
+val unit_closure_header : int -> nativeint
+
+val unit_custom_header : size:int -> nativeint
+
 val pack_closure_info :
   arity:int ->
   startenv:int ->
@@ -756,6 +769,11 @@ val cdefine_symbol : symbol -> data_item list
     for the block. [cont] must already contain the fields of the block (and may
     contain additional data items afterwards). *)
 val emit_block : symbol -> nativeint -> data_item list -> data_item list
+
+(** Like [emit_block], but uses a white header for unloadable compilation units
+    and a black header otherwise (gated by [!Clflags.unit_is_unloadable]). Use
+    this for static data belonging to the CU under compilation. *)
+val emit_unit_block : symbol -> nativeint -> data_item list -> data_item list
 
 (** Emit specific kinds of constant blocks as data items *)
 val emit_float32_constant : symbol -> float -> data_item list -> data_item list

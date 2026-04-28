@@ -588,6 +588,7 @@ let record_frame_label live dbg =
   let encode_reg_offset n = (n lsl 1) + 1 in
   let lbl = Cmm.new_label () in
   let live_offset = ref [] in
+  let code_ptr_live_offset = ref [] in
   let simd = must_save_simd_regs live in
   Reg.Set.iter
     (fun (r : Reg.t) ->
@@ -612,15 +613,22 @@ let record_frame_label live dbg =
       | { typ = Val | Valx2; loc = Unknown; _ } as r ->
         Misc.fatal_errorf "Unknown location %a" Printreg.reg r
       | { typ = Int | Float | Float32 | Vec128 | Vec256 | Vec512; _ } -> ()
-      | { typ = Code_pointer; _ } ->
-        (* TODO: record into [code_ptr_live_ofs] (frame descriptor parallel
-           array) once that piece of plumbing lands. *)
-        ())
+      | { typ = Code_pointer; loc = Reg phys_reg; _ } ->
+        let reg_offset = Regs.gc_regs_offset ~simd Val phys_reg in
+        code_ptr_live_offset
+          := encode_reg_offset reg_offset :: !code_ptr_live_offset
+      | { typ = Code_pointer; loc = Stack s; _ } as reg ->
+        code_ptr_live_offset
+          := slot_offset s (Stack_class.of_machtype reg.typ)
+             :: !code_ptr_live_offset
+      | { typ = Code_pointer; loc = Unknown; _ } as r ->
+        Misc.fatal_errorf "Unknown location %a" Printreg.reg r)
     live;
   (* CR sspies: Consider changing [record_frame_descr] to [Asm_label.t] instead
      of Linear labels. *)
   record_frame_descr ~label:lbl ~frame_size:(frame_size ())
-    ~live_offset:!live_offset ~unloadable:!is_unloadable dbg;
+    ~live_offset:!live_offset ~code_ptr_live_offset:!code_ptr_live_offset
+    ~unloadable:!is_unloadable dbg;
   label_to_asm_label ~section:Text lbl
 
 let record_frame live dbg =
@@ -2999,25 +3007,24 @@ let emit_probe_handler_wrapper (p : Probe_emission.probe) =
   emit_call (Cmm.global_symbol handler_code_sym);
   (* Record a frame description for the wrapper *)
   let label = Cmm.new_label () in
-  let live_offset =
+  let live_offset, code_ptr_live_offset =
     Array.fold_right
-      (fun (r : Reg.t) acc ->
+      (fun (r : Reg.t) (live_acc, code_ptr_acc) ->
         match (r.loc : Reg.location) with
         | Stack (Outgoing k) -> (
           match r.typ with
-          | Val -> k :: acc
-          | Int | Float | Vec128 | Vec256 | Vec512 | Float32 -> acc
-          | Code_pointer ->
-            (* TODO: record into [code_ptr_live_ofs] once plumbed. *)
-            acc
-          | Valx2 -> k :: (k + Arch.size_addr) :: acc
+          | Val -> k :: live_acc, code_ptr_acc
+          | Int | Float | Vec128 | Vec256 | Vec512 | Float32 ->
+            live_acc, code_ptr_acc
+          | Code_pointer -> live_acc, k :: code_ptr_acc
+          | Valx2 -> k :: (k + Arch.size_addr) :: live_acc, code_ptr_acc
           | Addr -> Misc.fatal_errorf "bad GC root %a" Printreg.reg r)
         | Stack (Incoming _ | Reg.Local _ | Domainstate _) | Reg _ | Unknown ->
           assert false)
-      saved_live []
+      saved_live ([], [])
   in
   record_frame_descr ~label ~frame_size:(wrapper_frame_size n) ~live_offset
-    ~unloadable:false
+    ~code_ptr_live_offset ~unloadable:false
       (* The wrapper function is in shared, non-unloadable code. *)
     (Dbg_other Debuginfo.none);
   D.define_label (label_to_asm_label ~section:Text label);

@@ -724,6 +724,7 @@ let record_frame_label env live dbg =
   let encode_reg_offset n = (n lsl 1) + 1 in
   let lbl = Cmm.new_label () in
   let live_offset = ref [] in
+  let code_ptr_live_offset = ref [] in
   Reg.Set.iter
     (function
       | { typ = Val; loc = Reg r; _ } ->
@@ -740,17 +741,23 @@ let record_frame_label env live dbg =
       | { typ = Val; loc = Unknown; _ } as r ->
         Misc.fatal_errorf "Unknown location %a" Printreg.reg r
       | { typ = Int | Float | Float32 | Vec128; _ } -> ()
-      | { typ = Code_pointer; _ } ->
-        (* TODO: record into [code_ptr_live_ofs] (frame descriptor parallel
-           array) once that piece of plumbing lands. *)
-        ()
+      | { typ = Code_pointer; loc = Reg r; _ } ->
+        code_ptr_live_offset
+          := encode_reg_offset (Regs.index_in_class r) :: !code_ptr_live_offset
+      | { typ = Code_pointer; loc = Stack s; _ } as reg ->
+        code_ptr_live_offset
+          := Env.slot_offset env s (Stack_class.of_machtype reg.typ)
+             :: !code_ptr_live_offset
+      | { typ = Code_pointer; loc = Unknown; _ } as r ->
+        Misc.fatal_errorf "Unknown location %a" Printreg.reg r
       | { typ = Vec256 | Vec512; _ } ->
         Misc.fatal_error "arm64: got 256/512 bit vector")
     live;
   (* CR sspies: Consider changing [record_frame_descr] to [Asm_label.t] instead
      of linear labels. *)
   record_frame_descr ~label:lbl ~frame_size:(Env.frame_size env)
-    ~live_offset:!live_offset ~unloadable:(Env.is_unloadable env) dbg;
+    ~live_offset:!live_offset ~code_ptr_live_offset:!code_ptr_live_offset
+    ~unloadable:(Env.is_unloadable env) dbg;
   label_to_asm_label ~section:Text lbl
 
 let record_frame env live dbg =
@@ -1508,7 +1515,7 @@ let emit_instr env i =
     | Single { reg = Float64 } ->
       A.ins2 LDR_simd_and_fp reg_s7 addressing;
       A.ins2 FCVT (H.reg_d dst) reg_s7
-    | Word_int | Word_val ->
+    | Word_int | Word_val | Word_code_pointer ->
       if is_atomic
       then (
         assert (
@@ -1563,7 +1570,7 @@ let emit_instr env i =
     | Single { reg = Float64 } ->
       A.ins2 FCVT reg_s7 (H.reg_d src);
       A.ins2 STR_simd_and_fp reg_s7 addressing
-    | Word_int | Word_val ->
+    | Word_int | Word_val | Word_code_pointer ->
       (* memory model barrier for non-initializing store *)
       if assignment then A.ins0 (DMB ISHLD);
       A.ins2 STR (H.reg_x src) addressing

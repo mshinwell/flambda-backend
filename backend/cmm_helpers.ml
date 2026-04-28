@@ -283,6 +283,27 @@ let white_closure_header sz = block_header Obj.closure_tag sz
 
 let black_closure_header sz = black_block_header Obj.closure_tag sz
 
+(* CU-appropriate variants: emit white (UNMARKED) headers for static data
+   belonging to an unloadable compilation unit, otherwise black headers.
+   Unloadable CU static data must be UNMARKED so that it remains scan-eligible
+   during the major GC mark phase, allowing unreferenced code/data blocks to
+   be collected. AOT (non-unloadable) CU static data continues to be black to
+   preserve the existing no-naked-pointers contract. *)
+let unit_block_header tag sz =
+  if !Clflags.unit_is_unloadable
+  then block_header tag sz
+  else black_block_header tag sz
+
+let unit_mixed_block_header tag sz ~scannable_prefix_len =
+  if !Clflags.unit_is_unloadable
+  then white_mixed_block_header tag sz ~scannable_prefix_len
+  else black_mixed_block_header tag sz ~scannable_prefix_len
+
+let unit_closure_header sz =
+  if !Clflags.unit_is_unloadable
+  then white_closure_header sz
+  else black_closure_header sz
+
 let local_closure_header sz = local_block_header Obj.closure_tag sz
 
 let infix_header ofs = block_header Obj.infix_tag ofs
@@ -345,6 +366,8 @@ let boxedint64_local_header =
 let boxedintnat_local_header = local_block_header Obj.custom_tag 2
 
 let black_custom_header ~size = black_block_header Obj.custom_tag size
+
+let unit_custom_header ~size = unit_block_header Obj.custom_tag size
 
 let caml_float32_ops = "caml_float32_ops"
 
@@ -1564,6 +1587,7 @@ let memory_chunk_width_in_bytes : memory_chunk -> int = function
   | Single { reg = Float64 | Float32 } -> 4
   | Word_int -> size_int
   | Word_val -> size_addr
+  | Word_code_pointer -> size_addr
   | Double -> size_float
   | Onetwentyeight_unaligned | Onetwentyeight_aligned -> size_vec128
   | Twofiftysix_unaligned | Twofiftysix_aligned -> size_vec256
@@ -2318,7 +2342,7 @@ let memory_chunk_size_in_words_for_mixed_block = function
         "Unable to compile mixed blocks on a platform where a float is not the \
          same width as a value.";
     1
-  | Word_int | Word_val -> 1
+  | Word_int | Word_val | Word_code_pointer -> 1
   | Onetwentyeight_unaligned | Onetwentyeight_aligned -> 2
   | Twofiftysix_unaligned | Twofiftysix_aligned -> 4
   | Fivetwelve_unaligned | Fivetwelve_aligned -> 8
@@ -2332,7 +2356,7 @@ let alloc_generic_set_fn block ofs newval memory_chunk dbg =
   | Word_val ->
     (* Values must go through "caml_initialize" *)
     addr_array_initialize block ofs newval dbg
-  | Word_int -> generic_case ()
+  | Word_int | Word_code_pointer -> generic_case ()
   (* Generic cases that may differ under big endian archs *)
   | Single _ | Double | Thirtytwo_unsigned | Thirtytwo_signed
   | Onetwentyeight_unaligned | Onetwentyeight_aligned | Twofiftysix_unaligned
@@ -2447,7 +2471,7 @@ let make_mixed_alloc ~mode dbg ~tag ~value_prefix_size args args_memory_chunks =
         then
           (* regular scanned part of a block *)
           match memory_chunk with
-          | Word_int | Word_val -> ok ()
+          | Word_int | Word_val | Word_code_pointer -> ok ()
           | Byte_unsigned | Byte_signed | Sixteen_unsigned | Sixteen_signed
           | Thirtytwo_unsigned | Thirtytwo_signed | Single _ | Double
           | Onetwentyeight_unaligned | Onetwentyeight_aligned
@@ -2463,7 +2487,9 @@ let make_mixed_alloc ~mode dbg ~tag ~value_prefix_size args args_memory_chunks =
           | Fivetwelve_aligned | Single _ | Byte_unsigned | Byte_signed
           | Sixteen_unsigned | Sixteen_signed ->
             ok ()
-          | Word_val -> error "the flat suffix of a mixed block")
+          | Word_val -> error "the flat suffix of a mixed block"
+          | Word_code_pointer ->
+            error "the flat suffix of a mixed block")
       0 args_memory_chunks
   in
   make_alloc_generic
@@ -4246,6 +4272,17 @@ let emit_block symb white_header cont =
   let black_header = Nativeint.logor white_header caml_black in
   (Cint black_header :: cdefine_symbol symb) @ cont
 
+(* CU-appropriate emit: white header for unloadable CUs, black otherwise. The
+   [white_header] argument is the bare header (no color); this function applies
+   the right color for the current CU. *)
+let emit_unit_block symb white_header cont =
+  let header =
+    if !Clflags.unit_is_unloadable
+    then white_header
+    else Nativeint.logor white_header caml_black
+  in
+  (Cint header :: cdefine_symbol symb) @ cont
+
 let emit_string_constant_fields s cont =
   let n = size_int - 1 - (String.length s mod size_int) in
   Cstring s :: Cskip n :: Cint8 n :: cont
@@ -4268,38 +4305,40 @@ let emit_float32_constant symb f cont =
   (* Here we are relying on the fact that the data section is zero initialized
      by just using [Csingle] and not worrying about the high 64 bits of the
      relevant field. *)
-  emit_block symb boxedfloat32_header
+  emit_unit_block symb boxedfloat32_header
     (Csymbol_address (global_symbol caml_float32_ops) :: Csingle f :: cont)
 
 let emit_float_constant symb f cont =
-  emit_block symb float_header (Cdouble f :: cont)
+  emit_unit_block symb float_header (Cdouble f :: cont)
 
 let emit_string_constant symb s cont =
-  emit_block symb
+  emit_unit_block symb
     (string_header (String.length s))
     (emit_string_constant_fields s cont)
 
 let emit_int32_constant symb n cont =
-  emit_block symb boxedint32_header (emit_boxed_int32_constant_fields n cont)
+  emit_unit_block symb boxedint32_header
+    (emit_boxed_int32_constant_fields n cont)
 
 let emit_int64_constant symb n cont =
-  emit_block symb boxedint64_header (emit_boxed_int64_constant_fields n cont)
+  emit_unit_block symb boxedint64_header
+    (emit_boxed_int64_constant_fields n cont)
 
 let emit_nativeint_constant symb n cont =
-  emit_block symb boxedintnat_header
+  emit_unit_block symb boxedintnat_header
     (emit_boxed_nativeint_constant_fields n cont)
 
 let emit_vec128_constant symb bits cont =
-  emit_block symb boxedvec128_header (Cvec128 bits :: cont)
+  emit_unit_block symb boxedvec128_header (Cvec128 bits :: cont)
 
 let emit_vec256_constant symb bits cont =
-  emit_block symb boxedvec256_header (Cvec256 bits :: cont)
+  emit_unit_block symb boxedvec256_header (Cvec256 bits :: cont)
 
 let emit_vec512_constant symb bits cont =
-  emit_block symb boxedvec512_header (Cvec512 bits :: cont)
+  emit_unit_block symb boxedvec512_header (Cvec512 bits :: cont)
 
 let emit_float_array_constant symb fields cont =
-  emit_block symb
+  emit_unit_block symb
     (floatarray_header (List.length fields))
     (Misc.map_end (fun f -> Cdouble f) fields cont)
 
@@ -4918,7 +4957,11 @@ let indirect_full_call ~dbg ty pos f ~callees args_type args =
       | [] -> Misc.fatal_error "indirect_full_call: args_type was empty"
       | _ :: _ :: _ -> 2
     in
-    load ~dbg Word_int Asttypes.Mutable
+    (* Load the closure's code pointer with [Word_code_pointer] so the
+       resulting value carries the [Code_pointer] machtype. This lets the
+       GC track the pointer via the parallel [code_ptr_live_ofs] frame
+       descriptor array if the value is held live across a safepoint. *)
+    load ~dbg Word_code_pointer Asttypes.Mutable
       ~addr:(field_address (Cvar v) offset dbg)
   in
   letin v' ~defining_expr:f

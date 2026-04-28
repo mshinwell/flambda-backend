@@ -689,7 +689,7 @@ let let_static_set_of_closures0 env res closure_symbols
   let block =
     match l with
     | _ :: _ ->
-      let header = C.cint (C.black_closure_header length) in
+      let header = C.cint (C.unit_closure_header length) in
       header :: l
     | [] ->
       Misc.fatal_error "Cannot statically allocate an empty set of closures"
