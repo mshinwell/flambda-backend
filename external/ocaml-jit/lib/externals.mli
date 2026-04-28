@@ -34,4 +34,6 @@ val register_unloadable_unit :
   nativeint array (* function entries, sorted by address *) ->
   nativeint (* code_end *) ->
   nativeint (* frametable, or 0n if absent *) ->
+  nativeint (* JIT buffer base address *) ->
+  int (* JIT buffer size in bytes *) ->
   unit

@@ -76,9 +76,9 @@ let alloc_all (type a r)
   match Externals.memalign total_size with
   | Error msg ->
       failwithf "posix_memalign for %d bytes failed: %s" total_size msg
-  | Ok address ->
-      let text = { address; value = jit_text_section } in
-      let address = Address.add_int address text_size in
+  | Ok base_address ->
+      let text = { address = base_address; value = jit_text_section } in
+      let address = Address.add_int base_address text_size in
       let map, _address =
         String.Map.fold binary_section_map ~init:(String.Map.empty, address)
           ~f:(fun ~key ~data:binary_section (map, address) ->
@@ -90,7 +90,7 @@ let alloc_all (type a r)
             let address = Address.add_int address size in
             (map, address))
       in
-      (text, map)
+      (text, map, base_address, total_size)
 
 (** Build symbol map from non-text sections *)
 let local_symbol_map (type a r)
@@ -254,7 +254,7 @@ let jit_load (type a r)
   let other_sections, text =
     extract_text_section (module E) binary_section_map
   in
-  let addressed_text, addressed_sections =
+  let addressed_text, addressed_sections, buffer_base, buffer_size =
     alloc_all (module E) text other_sections
   in
   let other_sections_symbols = local_symbol_map (module E) addressed_sections in
@@ -320,7 +320,9 @@ let jit_load (type a r)
         | None -> 0n
       in
       Externals.register_unloadable_unit code_blocks [||] function_entries
-        code_end_addr frametable_addr);
+        code_end_addr frametable_addr
+        (Address.to_nativeint buffer_base)
+        buffer_size);
   let result = jit_run entry_points in
   outcome_ref := Some result
 

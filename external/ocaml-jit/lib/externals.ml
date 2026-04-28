@@ -37,4 +37,7 @@ external register_unloadable_unit :
   nativeint array (* function entries, sorted by address *) ->
   nativeint (* code_end *) ->
   nativeint (* frametable, or 0n if absent *) ->
-  unit = "jit_register_unloadable_unit"
+  nativeint (* JIT buffer base address *) ->
+  int (* JIT buffer size in bytes *) ->
+  unit = "jit_register_unloadable_unit_bytecode"
+        "jit_register_unloadable_unit_native"

@@ -175,6 +175,12 @@ Caml_inline bool frame_has_code_ptr_slots(frame_descr *d) {
 void caml_init_frame_descriptors(void);
 void caml_register_frametables(void **tables, int ntables);
 
+/* Unregister a previously-registered frame table. Caller must hold the
+   STW barrier; the global frame-descriptor hashtable is mutated in place
+   and rebuilt from the remaining frametables. Used by the unloadable-unit
+   unload pass (G) to drop frametables of unreachable units. */
+void caml_unregister_frametable_from_stw_single(intnat *frametable);
+
 /* a linked list of frametables */
 typedef struct caml_frametable_list {
   intnat* frametable;

@@ -330,6 +330,47 @@ CAMLprim value jit_obj_to_addr(value obj) {
 }
 
 #ifdef CAML_RUNTIME_5
+/* Loader-private state stashed in [u->loader_data] for [jit_unit_on_unload]
+ * to use. The base/size describe the page-aligned buffer the JIT loader
+ * reserved for the unit's text and data sections (see [jit_memalign]). */
+struct jit_unit_loader_data {
+  void *buffer_base;
+  size_t buffer_size;
+};
+
+static void jit_unit_on_unload(struct caml_unloadable_unit *u) {
+  /* Called from STW once the GC has determined the unit is unreachable.
+   * Frees the per-unit metadata arrays, restores the JIT buffer to RW so
+   * [free] is well-defined, and releases the buffer back to the allocator.
+   *
+   * Note on memory reclamation: depending on how the buffer was obtained
+   * (see [jit_memalign]: [aligned_alloc], static buffer, or [sbrk]) the
+   * [free] below may or may not actually return pages to the OS. The
+   * common-path [aligned_alloc] case does; the static and [sbrk] paths
+   * leak. In all cases the runtime drops its references, so a subsequent
+   * cycle will not visit this unit. */
+  struct jit_unit_loader_data *ld =
+      (struct jit_unit_loader_data *)u->loader_data;
+
+  caml_stat_free(u->code_blocks);
+  caml_stat_free(u->data_blocks);
+  caml_stat_free(u->text_ranges);
+  caml_stat_free(u->text_range_fragnums);
+
+  if (ld != NULL) {
+    if (ld->buffer_base != NULL && ld->buffer_size > 0) {
+      /* Restore RW protection on the entire buffer before [free]: parts
+       * have been mapped RX (text) or RO (.rodata) and the allocator may
+       * touch arbitrary regions of the buffer when reclaiming. */
+      (void)mprotect(ld->buffer_base, ld->buffer_size, PROT_READ | PROT_WRITE);
+      free(ld->buffer_base);
+    }
+    caml_stat_free(ld);
+  }
+
+  caml_stat_free(u);
+}
+
 /* Build and register an [caml_unloadable_unit] for a JIT-emitted compilation
  * unit. Inputs are nativeint arrays / scalars from the OCaml side:
  *   - [code_blocks]: addresses of the unit's [Code_block] static-data items
@@ -345,16 +386,20 @@ CAMLprim value jit_obj_to_addr(value obj) {
  *   - [code_end_addr]: address of the unit's [code_end] symbol; the upper
  *     bound of the last function's text range.
  *   - [frametable_addr]: address of the unit's frame table (or 0 if none).
+ *   - [buffer_base_addr]: base of the JIT-allocated buffer covering both
+ *     text and data; passed through to the on_unload callback for [free].
+ *   - [buffer_size]: size of that buffer in bytes.
  *
  * The struct and its arrays are allocated via [caml_stat_alloc_noexc]; the
- * runtime keeps them alive until the unit is unloaded. (No [on_unload]
- * callback is registered yet — see CR below — so the actual buffers will
- * not be freed even if the GC determines the unit is unreachable.) */
-CAMLprim value jit_register_unloadable_unit(
+ * runtime keeps them alive until the unit is unloaded, at which point the
+ * installed [on_unload] callback releases everything. */
+CAMLprim value jit_register_unloadable_unit_native(
     value code_blocks, value data_blocks, value function_entries,
-    value code_end_addr, value frametable_addr) {
+    value code_end_addr, value frametable_addr, value buffer_base_addr,
+    value buffer_size) {
   CAMLparam5(code_blocks, data_blocks, function_entries, code_end_addr,
              frametable_addr);
+  CAMLxparam2(buffer_base_addr, buffer_size);
 
   uintnat n_code = Wosize_val(code_blocks);
   uintnat n_data = Wosize_val(data_blocks);
@@ -368,8 +413,14 @@ CAMLprim value jit_register_unloadable_unit(
   u->num_data_blocks = n_data;
   u->num_text_ranges = n_funcs;
   u->frametable = (intnat *)Nativeint_val(frametable_addr);
-  u->on_unload = NULL;
-  u->loader_data = NULL;
+  u->on_unload = &jit_unit_on_unload;
+
+  struct jit_unit_loader_data *ld =
+      caml_stat_alloc_noexc(sizeof(struct jit_unit_loader_data));
+  if (ld == NULL) caml_raise_out_of_memory();
+  ld->buffer_base = (void *)Nativeint_val(buffer_base_addr);
+  ld->buffer_size = (size_t)Long_val(buffer_size);
+  u->loader_data = ld;
 
   u->code_blocks = caml_stat_alloc_noexc(n_code * sizeof(value));
   if (u->code_blocks == NULL && n_code > 0) caml_raise_out_of_memory();
@@ -399,20 +450,28 @@ CAMLprim value jit_register_unloadable_unit(
     u->text_ranges[2 * i + 1] = end;
   }
 
-  /* CR mshinwell: set [u->on_unload] to a callback that frees the JIT
-   * buffer (the [aligned_alloc]/[posix_memalign]'d block backing both text
-   * and data sections). The loader currently retains the buffer base in
-   * OCaml-side state; that will need to be threaded through here so the
-   * runtime can free it when the unit is unloaded. */
-
   caml_register_unloadable_unit(u);
   CAMLreturn(Val_unit);
 }
+
+CAMLprim value jit_register_unloadable_unit_bytecode(value *argv, int argn) {
+  (void)argn;
+  return jit_register_unloadable_unit_native(argv[0], argv[1], argv[2],
+                                             argv[3], argv[4], argv[5],
+                                             argv[6]);
+}
 #else
-CAMLprim value jit_register_unloadable_unit(value a, value b, value c, value d,
-                                            value e) {
+CAMLprim value jit_register_unloadable_unit_native(
+    value a, value b, value c, value d, value e, value f, value g) {
   /* Unloadable units require runtime 5 (concurrent marker). */
-  (void)a; (void)b; (void)c; (void)d; (void)e;
+  (void)a; (void)b; (void)c; (void)d; (void)e; (void)f; (void)g;
   return Val_unit;
+}
+
+CAMLprim value jit_register_unloadable_unit_bytecode(value *argv, int argn) {
+  (void)argn;
+  return jit_register_unloadable_unit_native(argv[0], argv[1], argv[2],
+                                             argv[3], argv[4], argv[5],
+                                             argv[6]);
 }
 #endif
