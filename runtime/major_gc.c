@@ -41,6 +41,7 @@
 #include "caml/weak.h"
 #include "caml/custom.h"
 #include "caml/minor_gc.h"
+#include "caml/unloadable.h"
 
 /* NB the MARK_STACK_INIT_SIZE must be larger than the number of objects
    that can be in a pool, see POOL_WSIZE */
@@ -931,10 +932,20 @@ static intnat mark_stack_push_block(struct mark_stack* stk, value block)
   if (Tag_val(block) == Closure_tag) {
     /* Skip the code pointers and integers at beginning of closure;
        start scanning at the first word of the environment part. */
-    offset = Start_env_closinfo(Closinfo_val(block));
+    value closinfo = Closinfo_val(block);
+    offset = Start_env_closinfo(closinfo);
 
     CAMLassert(offset <= Wosize_val(block)
-      && offset >= Start_env_closinfo(Closinfo_val(block)));
+      && offset >= Start_env_closinfo(closinfo));
+
+    /* F.1: if this closure points into unloadable code, darken its
+       Code_block via the back-pointer at [Field(block, 0) - 1]. The
+       standard mark scan then recursively darkens the Code_block's dep
+       code- and data-blocks. CR mshinwell: handle multi-function
+       closures by walking each (code, closinfo) pair in the prefix. */
+    if (Unloadable_closinfo(closinfo)) {
+      caml_darken_code_block_for_entry(Caml_state, Field(block, 0));
+    }
   }
 
   CAMLassert(Has_status_val(block, caml_global_heap_state.MARKED));
@@ -1131,9 +1142,15 @@ again:
       }
 
       if (Tag_hd(hd) == Closure_tag) {
-        uintnat env_offset = Start_env_closinfo(Closinfo_val(block));
+        value closinfo = Closinfo_val(block);
+        uintnat env_offset = Start_env_closinfo(closinfo);
         budget -= env_offset;
         me.start += env_offset;
+        /* F.1: see [mark_stack_push_block] for the equivalent injection.
+           CR mshinwell: handle multi-function closures. */
+        if (Unloadable_closinfo(closinfo)) {
+          caml_darken_code_block_for_entry(Caml_state, Field(block, 0));
+        }
       }
     }
     else if (budget <= 0 || stk->count == 0) {
