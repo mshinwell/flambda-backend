@@ -41,7 +41,9 @@
 #include "caml/weak.h"
 #include "caml/custom.h"
 #include "caml/minor_gc.h"
+#ifdef NATIVE_CODE
 #include "caml/unloadable.h"
+#endif
 
 /* NB the MARK_STACK_INIT_SIZE must be larger than the number of objects
    that can be in a pool, see POOL_WSIZE */
@@ -941,8 +943,12 @@ static intnat mark_stack_push_block(struct mark_stack* stk, value block)
     /* F.1: for each function slot in the closure prefix whose closinfo
        has the unloadable bit set, darken the corresponding [Code_block]
        via the back-pointer at [entry - 1]. Standard mark scan then
-       recursively darkens the Code_block's dep code- and data-blocks. */
+       recursively darkens the Code_block's dep code- and data-blocks.
+       Native-code only: closures with unloadable code only exist in the
+       native runtime. */
+#ifdef NATIVE_CODE
     caml_darken_unloadable_code_blocks_in_closure(Caml_state, block);
+#endif
   }
 
   CAMLassert(Has_status_val(block, caml_global_heap_state.MARKED));
@@ -1144,7 +1150,9 @@ again:
         budget -= env_offset;
         me.start += env_offset;
         /* F.1: see [mark_stack_push_block] for the same injection. */
+#ifdef NATIVE_CODE
         caml_darken_unloadable_code_blocks_in_closure(Caml_state, block);
+#endif
       }
     }
     else if (budget <= 0 || stk->count == 0) {
@@ -1585,6 +1593,17 @@ static void cycle_major_heap_from_stw_single(
   caml_domain_state* domain,
   uintnat num_domains_in_stw)
 {
+#ifdef NATIVE_CODE
+  /* G: end-of-cycle unloadable-unit pass. Runs BEFORE the heap-state
+     rotation so the per-block MARKED bits still reflect cycle-N's
+     interpretation. Walks all registered unloadable units; unreachable
+     units are unlinked (and their loader callback invoked) and surviving
+     units have their blocks normalized so the rotation leaves them as
+     UNMARKED for cycle N+1. Native-code only: unloadable units are a
+     native-only concept (JIT-emitted code; bytecode is interpreted). */
+  caml_unloadable_check_and_unload_dead();
+#endif
+
   /* Cycle major heap colours */
   /* FIXME: delete caml_cycle_heap_from_stw_single
      and have per-domain copies of the data? */
