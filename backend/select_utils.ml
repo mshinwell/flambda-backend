@@ -267,6 +267,9 @@ let size_component : machtype_component -> int = function
   | Int ->
     assert (Int.equal Arch.size_int Arch.size_addr);
     Arch.size_int
+  | Code_pointer ->
+    assert (Int.equal Arch.size_int Arch.size_addr);
+    Arch.size_int
   | Float -> Arch.size_float
   | Float32 ->
     (* CR layouts v5.1: reconsider when float32 fields are efficiently packed.

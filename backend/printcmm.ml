@@ -42,6 +42,7 @@ let machtype_component ppf (ty : machtype_component) =
   | Vec512 -> fprintf ppf "vec512"
   | Float32 -> fprintf ppf "float32"
   | Valx2 -> fprintf ppf "valx2"
+  | Code_pointer -> fprintf ppf "code_ptr"
 
 let machtype ppf mty =
   match Array.length mty with

@@ -58,7 +58,7 @@ module T = struct
     type t = reg_class
 
     let of_machtype : Cmm.machtype_component -> t = function
-      | Val | Int | Addr -> GPR
+      | Val | Int | Addr | Code_pointer -> GPR
       | Float | Float32 | Vec128 | Vec256 | Vec512 | Valx2 -> SIMD
 
     let all = [GPR; SIMD]

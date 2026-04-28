@@ -79,7 +79,7 @@ let win64 = Arch.win64
 
 let types_are_compatible (left : Reg.t)  (right : Reg.t) =
   match left.typ, right.typ with
-  | (Int | Val | Addr), (Int | Val | Addr)
+  | (Int | Val | Addr | Code_pointer), (Int | Val | Addr | Code_pointer)
   | Float, Float
   | Float32, Float32
   | (Valx2 | Vec128), (Valx2 | Vec128) ->
@@ -89,7 +89,7 @@ let types_are_compatible (left : Reg.t)  (right : Reg.t) =
   | Vec512, Vec512 ->
     true
   | (Int | Val | Addr | Float | Float32 |
-     Vec128 | Vec256 | Vec512 | Valx2), _ -> false
+     Vec128 | Vec256 | Vec512 | Valx2 | Code_pointer), _ -> false
 
 (* Representation of hard registers by pseudo-registers *)
 
@@ -200,7 +200,7 @@ let calling_conventions
     let ty : machtype_component = arg.(i) in
     let registers, size =
       match ty with
-      | Val | Int | Addr -> int_registers, size_int
+      | Val | Int | Addr | Code_pointer -> int_registers, size_int
       | Float | Float32 -> float_registers, size_float
       | Vec128 -> float_registers, size_vec128
       | Vec256 -> float_registers, size_vec256
@@ -329,7 +329,8 @@ let win64_loc_external_arguments arg =
     let ty : machtype_component = arg.(i) in
     let arguments, size =
       match ty with
-      | Val | Int | Addr -> win64_int_external_arguments, size_int
+      | Val | Int | Addr | Code_pointer ->
+        win64_int_external_arguments, size_int
       | Float | Float32 -> win64_float_external_arguments, size_float
       | Vec128 | Vec256 | Vec512 ->
         (* CR mslater: (SIMD) win64 calling convention requires pass by reference *)

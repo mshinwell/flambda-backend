@@ -27,6 +27,7 @@ type machtype_component = Cmx_format.machtype_component =
   | Vec512
   | Float32
   | Valx2
+  | Code_pointer
 
 (*=- [Val] denotes a valid OCaml value: either a pointer to the beginning
      of a heap block, an infix pointer if it is preceded by the correct
@@ -75,6 +76,8 @@ val typ_vec128 : machtype
 val typ_vec256 : machtype
 
 val typ_vec512 : machtype
+
+val typ_code_pointer : machtype
 
 val typ_int128 : machtype
 
@@ -706,6 +709,8 @@ val is_val : machtype_component -> bool
 val is_int : machtype_component -> bool
 
 val is_addr : machtype_component -> bool
+
+val is_code_pointer : machtype_component -> bool
 
 val is_exn_handler : ccatch_flag -> bool
 

@@ -128,6 +128,10 @@ let vectorizable_machtypes (r1 : Reg.t) (r2 : Reg.t) =
        [Addr], we could generalize [machtype], but for simplicity do not
        vectorize [Addr]. *)
     false
+  | Code_pointer, _ | _, Code_pointer ->
+    (* [Code_pointer] tracks per-slot GC liveness for unloadable code; do not
+       vectorize, by analogy with [Addr]. *)
+    false
   | ( (Vec128 | Vec256 | Vec512 | Valx2),
       (Val | Int | Float | Float32 | Vec128 | Vec256 | Vec512 | Valx2) )
   | (Val | Int | Float | Float32), (Vec128 | Vec256 | Vec512 | Valx2) ->
@@ -152,6 +156,8 @@ let vectorize_machtypes (pack : Reg.t list) : Cmm.machtype_component =
         Printreg.reglist pack;
     match hd.typ, List.length pack with
     | Addr, _ -> Misc.fatal_errorf "Unexpected machtype for %a" Printreg.reg hd
+    | Code_pointer, _ ->
+      Misc.fatal_errorf "Unexpected machtype for %a" Printreg.reg hd
     | Float, 2 | Float32, 4 -> Vec128
     | Int, _ ->
       (* [Int] may be used for int32, width should be correct by construction of

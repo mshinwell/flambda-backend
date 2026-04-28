@@ -565,7 +565,7 @@ let must_save_simd_regs live : Regs.Save_simd_regs.t =
         | Vec256 -> v256 := true
         | Vec512 -> v512 := true
         | Float | Vec128 | Float32 | Valx2 -> v128 := true
-        | Val | Addr | Int -> ())
+        | Val | Addr | Int | Code_pointer -> ())
     live;
   if !v512
   then (
@@ -609,7 +609,11 @@ let record_frame_label live dbg =
         Misc.fatal_errorf "bad GC root %a" Printreg.reg r
       | { typ = Val | Valx2; loc = Unknown; _ } as r ->
         Misc.fatal_errorf "Unknown location %a" Printreg.reg r
-      | { typ = Int | Float | Float32 | Vec128 | Vec256 | Vec512; _ } -> ())
+      | { typ = Int | Float | Float32 | Vec128 | Vec256 | Vec512; _ } -> ()
+      | { typ = Code_pointer; _ } ->
+        (* TODO: record into [code_ptr_live_ofs] (frame descriptor parallel
+           array) once that piece of plumbing lands. *)
+        ())
     live;
   (* CR sspies: Consider changing [record_frame_descr] to [Asm_label.t] instead
      of Linear labels. *)
@@ -1143,7 +1147,8 @@ let move (src : Reg.t) (dst : Reg.t) =
     Misc.fatal_errorf
       "Illegal move with an unknown register location (%a to %a)\n" Printreg.reg
       src Printreg.reg dst
-  | ( (Float | Float32 | Vec128 | Vec256 | Vec512 | Int | Val | Addr | Valx2),
+  | ( (Float | Float32 | Vec128 | Vec256 | Vec512 | Int | Val | Addr | Valx2
+      | Code_pointer),
       (Reg _ | Stack _),
       _,
       _ ) ->
@@ -1156,7 +1161,7 @@ let stack_to_stack_move (src : Reg.t) (dst : Reg.t) =
   if not (Reg.equal_location src.loc dst.loc)
   then
     match src.typ with
-    | Int | Val ->
+    | Int | Val | Code_pointer ->
       (* Not calling move because r15 is not in int_reg_name. *)
       I.mov (reg src) r15;
       I.mov r15 (reg dst)
@@ -2999,6 +3004,9 @@ let emit_probe_handler_wrapper (p : Probe_emission.probe) =
           match r.typ with
           | Val -> k :: acc
           | Int | Float | Vec128 | Vec256 | Vec512 | Float32 -> acc
+          | Code_pointer ->
+            (* TODO: record into [code_ptr_live_ofs] once plumbed. *)
+            acc
           | Valx2 -> k :: (k + Arch.size_addr) :: acc
           | Addr -> Misc.fatal_errorf "bad GC root %a" Printreg.reg r)
         | Stack (Incoming _ | Reg.Local _ | Domainstate _) | Reg _ | Unknown ->

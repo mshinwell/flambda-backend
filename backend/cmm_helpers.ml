@@ -2153,6 +2153,7 @@ module Extended_machtype_component = struct
     | Val -> Val
     | Addr -> Addr
     | Int -> Any_int
+    | Code_pointer -> Any_int
     | Float -> Float
     | Vec128 -> Vec128
     | Vec256 -> Vec256
@@ -2253,6 +2254,9 @@ let machtype_identifier t =
     | Addr ->
       Misc.fatal_error "[Addr] is forbidden inside arity for generic functions"
     | Valx2 -> Misc.fatal_error "Unexpected machtype_component Valx2"
+    | Code_pointer ->
+      Misc.fatal_error
+        "[Code_pointer] is forbidden inside arity for generic functions"
   in
   String.of_seq (Seq.map char_of_component (Array.to_seq t))
 
@@ -3813,6 +3817,7 @@ let machtype_stored_size t =
       match (c : machtype_component) with
       | Addr -> Misc.fatal_error "[Addr] cannot be stored"
       | Valx2 -> Misc.fatal_error "Unexpected machtype_component Valx2"
+      | Code_pointer -> Misc.fatal_error "[Code_pointer] cannot be stored"
       | Val | Int -> cur + 1
       | Float -> cur + ints_per_float
       | Float32 ->
@@ -3829,6 +3834,7 @@ let machtype_non_scanned_size t =
       match (c : machtype_component) with
       | Addr -> Misc.fatal_error "[Addr] cannot be stored"
       | Valx2 -> Misc.fatal_error "Unexpected machtype_component Valx2"
+      | Code_pointer -> Misc.fatal_error "[Code_pointer] cannot be stored"
       | Val -> cur
       | Int -> cur + 1
       | Float -> cur + ints_per_float
@@ -3853,6 +3859,8 @@ let value_slot_given_machtype vs =
         | Int | Float | Float32 | Vec128 | Vec256 | Vec512 -> true
         | Val -> false
         | Valx2 -> Misc.fatal_error "Unexpected machtype_component Valx2"
+        | Code_pointer ->
+          Misc.fatal_error "[Code_pointer] cannot be a value slot"
         | Addr -> assert false)
       vs
   in
@@ -3887,6 +3895,8 @@ let read_from_closure_given_machtype t clos base_offset dbg =
             load Fivetwelve_unaligned non_scanned_pos )
         | Val -> (non_scanned_pos, scanned_pos + 1), load Word_val scanned_pos
         | Valx2 -> Misc.fatal_error "Unexpected machtype_component Valx2"
+        | Code_pointer ->
+          Misc.fatal_error "[Code_pointer] cannot be read from a closure slot"
         | Addr -> Misc.fatal_error "[Addr] cannot be read")
       (base_offset, base_offset + machtype_non_scanned_size t)
       (Array.to_list t)
