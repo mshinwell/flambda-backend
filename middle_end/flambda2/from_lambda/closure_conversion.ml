@@ -2478,9 +2478,9 @@ let make_unboxed_function_wrapper acc function_slot ~unarized_params:params
         (Zero_alloc_attribute.from_lambda
            (Function_decl.zero_alloc_attribute decl))
       ~is_a_functor:(Function_decl.is_a_functor decl)
-      ~cold:false ~is_unloadable:!Clflags.unit_is_unloadable ~is_opaque:false
-      ~recursive ~newer_version_of:None
-      ~cost_metrics
+      ~cold:false
+      ~is_unloadable:!Clflags.unit_is_unloadable
+      ~is_opaque:false ~recursive ~newer_version_of:None ~cost_metrics
       ~inlining_arguments:(Inlining_arguments.create ~round:0)
       ~dbg ~is_tupled ~is_my_closure_used:true ~inlining_decision
       ~absolute_history ~relative_history ~loopify:Never_loopify

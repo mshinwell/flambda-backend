@@ -100,8 +100,8 @@ let lub_component comp1 comp2 =
   | Float32, Float
   | Float, Float32
   | Code_pointer, (Int | Addr | Val | Float | Float32 | Vec128 | Vec256 | Vec512)
-  | (Int | Addr | Val | Float | Float32 | Vec128 | Vec256 | Vec512), Code_pointer
-    ->
+  | ( (Int | Addr | Val | Float | Float32 | Vec128 | Vec256 | Vec512),
+      Code_pointer ) ->
     Printf.eprintf "%d %d\n%!" (Obj.magic comp1) (Obj.magic comp2);
     (* Float unboxing code must be sure to avoid this case. *)
     assert false
@@ -132,8 +132,8 @@ let ge_component comp1 comp2 =
   | Float32, Float
   | Float, Float32
   | Code_pointer, (Int | Addr | Val | Float | Float32 | Vec128 | Vec256 | Vec512)
-  | (Int | Addr | Val | Float | Float32 | Vec128 | Vec256 | Vec512), Code_pointer
-    ->
+  | ( (Int | Addr | Val | Float | Float32 | Vec128 | Vec256 | Vec512),
+      Code_pointer ) ->
     Printf.eprintf "GE: %d %d\n%!" (Obj.magic comp1) (Obj.magic comp2);
     assert false
   | Valx2, _ | _, Valx2 ->
@@ -369,8 +369,8 @@ type memory_chunk =
   | Word_val
   | Word_code_pointer
       (** Like [Word_int] but the loaded value is a code pointer (the
-          [Code_pointer] machtype), so the GC can be told to track it via
-          the parallel [code_ptr_live_ofs] array in frame descriptors. *)
+          [Code_pointer] machtype), so the GC can be told to track it via the
+          parallel [code_ptr_live_ofs] array in frame descriptors. *)
   | Single of { reg : float_width }
   | Double
   | Onetwentyeight_unaligned
@@ -905,16 +905,14 @@ let rank_machtype_component : machtype_component -> int = function
   | Code_pointer -> 9
 
 let compare_machtype_component
-    ((Val | Addr | Int | Float | Vec128 | Vec256 | Vec512 | Float32 | Valx2
-      | Code_pointer) as
-     left :
+    (( Val | Addr | Int | Float | Vec128 | Vec256 | Vec512 | Float32 | Valx2
+     | Code_pointer ) as left :
       machtype_component) (right : machtype_component) =
   rank_machtype_component left - rank_machtype_component right
 
 let equal_machtype_component
-    ((Val | Addr | Int | Float | Vec128 | Vec256 | Vec512 | Float32 | Valx2
-      | Code_pointer) as
-     left :
+    (( Val | Addr | Int | Float | Vec128 | Vec256 | Vec512 | Float32 | Valx2
+     | Code_pointer ) as left :
       machtype_component) (right : machtype_component) =
   rank_machtype_component left = rank_machtype_component right
 
@@ -1084,19 +1082,22 @@ let is_val (m : machtype_component) =
   match m with
   | Val -> true
   | Addr | Int | Float | Vec128 | Vec256 | Vec512 | Float32 | Valx2
-  | Code_pointer -> false
+  | Code_pointer ->
+    false
 
 let is_int (m : machtype_component) =
   match m with
   | Int -> true
   | Addr | Val | Float | Vec128 | Vec256 | Vec512 | Float32 | Valx2
-  | Code_pointer -> false
+  | Code_pointer ->
+    false
 
 let is_addr (m : machtype_component) =
   match m with
   | Addr -> true
   | Val | Int | Float | Vec128 | Vec256 | Vec512 | Float32 | Valx2
-  | Code_pointer -> false
+  | Code_pointer ->
+    false
 
 let is_code_pointer (m : machtype_component) =
   match m with

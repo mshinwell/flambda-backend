@@ -116,8 +116,8 @@ val black_custom_header : size:int -> nativeint
 
 (** [unit_*_header] variants emit white (UNMARKED) headers for static data of
     unloadable compilation units, and black headers otherwise. The choice is
-    driven by [!Clflags.unit_is_unloadable]. Use these in to_cmm code paths
-    that emit static data for the current CU. *)
+    driven by [!Clflags.unit_is_unloadable]. Use these in to_cmm code paths that
+    emit static data for the current CU. *)
 val unit_block_header : int -> int -> nativeint
 
 val unit_mixed_block_header :
@@ -128,21 +128,13 @@ val unit_closure_header : int -> nativeint
 val unit_custom_header : size:int -> nativeint
 
 val pack_closure_info :
-  arity:int ->
-  startenv:int ->
-  is_last:bool ->
-  is_unloadable:bool ->
-  nativeint
+  arity:int -> startenv:int -> is_last:bool -> is_unloadable:bool -> nativeint
 
 (** Closure info for a closure of given arity and distance to environment.
     [is_unloadable] indicates that this closure's code lives in an unloadable
     compilation unit, so the GC must treat the code pointer specially. *)
 val closure_info :
-  arity:arity ->
-  startenv:int ->
-  is_last:bool ->
-  is_unloadable:bool ->
-  nativeint
+  arity:arity -> startenv:int -> is_last:bool -> is_unloadable:bool -> nativeint
 
 val closure_info' :
   arity:Lambda.function_kind * 'a list ->
@@ -773,8 +765,8 @@ val emit_block : symbol -> nativeint -> data_item list -> data_item list
 (** Like [emit_block], but uses a white header for unloadable compilation units
     and a black header otherwise (gated by [!Clflags.unit_is_unloadable]). Use
     this for static data belonging to the CU under compilation. In unloadable
-    mode, also registers the symbol via
-    [register_unloadable_data_block_symbol]. *)
+    mode, also registers the symbol via [register_unloadable_data_block_symbol].
+*)
 val emit_unit_block : symbol -> nativeint -> data_item list -> data_item list
 
 (** When true, [emit_unit_block] does not register the emitted symbol with
@@ -783,11 +775,10 @@ val emit_unit_block : symbol -> nativeint -> data_item list -> data_item list
     the runtime's [code_blocks] list. *)
 val suppress_unloadable_data_block_tracking : bool ref
 
-(** Register a static data block symbol as belonging to the current
-    (unloadable) compilation unit. No-op if the CU is not unloadable, or if
-    [suppress_unloadable_data_block_tracking] is set. Used by emit paths that
-    do not go through [emit_unit_block] (notably static set-of-closures
-    blocks). *)
+(** Register a static data block symbol as belonging to the current (unloadable)
+    compilation unit. No-op if the CU is not unloadable, or if
+    [suppress_unloadable_data_block_tracking] is set. Used by emit paths that do
+    not go through [emit_unit_block] (notably static set-of-closures blocks). *)
 val register_unloadable_data_block_symbol : symbol -> unit
 
 (** Retrieve and clear the list of unloadable data block symbols accumulated
@@ -1206,11 +1197,11 @@ val cmm_arith_size : expression -> int option
 val make_symbol : ?compilation_unit:Compilation_unit.t -> string -> string
 
 (** [code_block_symbol_name entry_linkage_name] is the linkage name of the
-    [Code_block] static-data symbol associated with the function whose entry
-    has the given linkage name. The to_cmm Code_block emission pass produces
-    these symbols (when the CU is unloadable); the per-function back-pointer
-    emitted just ahead of each function entry refers to them via this naming
-    convention. *)
+    [Code_block] static-data symbol associated with the function whose entry has
+    the given linkage name. The to_cmm Code_block emission pass produces these
+    symbols (when the CU is unloadable); the per-function back-pointer emitted
+    just ahead of each function entry refers to them via this naming convention.
+*)
 val code_block_symbol_name : string -> string
 
 val machtype_of_layout : Lambda.layout -> machtype

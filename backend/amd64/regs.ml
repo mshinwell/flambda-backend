@@ -203,7 +203,7 @@ module T = struct
     let index_in_class = index_in_class phys_reg in
     let names =
       match (typ : Cmm.machtype_component) with
-      | Int | Addr | Val -> gpr_name
+      | Int | Addr | Val | Code_pointer -> gpr_name
       | Float | Float32 | Vec128 | Valx2 -> xmm_name
       | Vec256 -> ymm_name
       | Vec512 -> zmm_name

@@ -46,8 +46,8 @@ type frame_descr =
     fd_frame_size : int; (* Size of stack frame *)
     fd_live_offset : int list; (* Offsets/regs of live addresses *)
     fd_code_ptr_live_offset : int list;
-        (* Offsets/regs of live Code_pointer-typed slots, encoded in the
-           same scheme as [fd_live_offset]. Sets bit 3
+        (* Offsets/regs of live Code_pointer-typed slots, encoded in the same
+           scheme as [fd_live_offset]. Sets bit 3
            (FRAME_DESCRIPTOR_HAS_CODE_PTR_SLOTS = 0x8) of the frame_data word
            when non-empty. *)
     fd_unloadable : bool;

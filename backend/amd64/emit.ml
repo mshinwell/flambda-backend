@@ -188,7 +188,7 @@ let zmm_reg_name =
 let register_name typ phys_reg : X86_ast.arg =
   let reg_index = Regs.index_in_class phys_reg in
   match (typ : Cmm.machtype_component) with
-  | Int | Val | Addr -> Reg64 int_reg_name.(reg_index)
+  | Int | Val | Addr | Code_pointer -> Reg64 int_reg_name.(reg_index)
   | Float | Float32 | Vec128 | Valx2 -> Regf xmm_reg_name.(reg_index)
   | Vec256 ->
     I.require_vec256 ();
@@ -458,7 +458,7 @@ let x86_data_type_for_stack_slot : Cmm.machtype_component -> X86_ast.data_type =
     I.require_vec512 ();
     VEC512
   | Valx2 -> VEC128
-  | Int | Addr | Val -> QWORD
+  | Int | Addr | Val | Code_pointer -> QWORD
   | Float32 -> REAL4
 
 let reg : Reg.t -> X86_ast.arg =
@@ -1157,8 +1157,8 @@ let move (src : Reg.t) (dst : Reg.t) =
     Misc.fatal_errorf
       "Illegal move with an unknown register location (%a to %a)\n" Printreg.reg
       src Printreg.reg dst
-  | ( (Float | Float32 | Vec128 | Vec256 | Vec512 | Int | Val | Addr | Valx2
-      | Code_pointer),
+  | ( ( Float | Float32 | Vec128 | Vec256 | Vec512 | Int | Val | Addr | Valx2
+      | Code_pointer ),
       (Reg _ | Stack _),
       _,
       _ ) ->
@@ -1313,7 +1313,7 @@ end = struct
       | Byte_unsigned | Byte_signed -> I8
       | Sixteen_unsigned | Sixteen_signed -> I16
       | Thirtytwo_unsigned | Thirtytwo_signed | Single _ -> I32
-      | Word_int | Word_val | Double -> I64
+      | Word_int | Word_val | Word_code_pointer | Double -> I64
       | Onetwentyeight_unaligned | Onetwentyeight_aligned -> I128
       | Twofiftysix_unaligned | Twofiftysix_aligned -> I256
       | Fivetwelve_unaligned | Fivetwelve_aligned -> I512
@@ -1548,7 +1548,7 @@ end = struct
         match memory_chunk with
         | Byte_unsigned | Byte_signed | Sixteen_unsigned | Sixteen_signed
         | Thirtytwo_unsigned | Thirtytwo_signed | Single _ | Word_int | Word_val
-        | Double | Onetwentyeight_aligned ->
+        | Word_code_pointer | Double | Onetwentyeight_aligned ->
           emit_shadow_check ?dependencies ~address ~report memory_chunk
         | Onetwentyeight_unaligned ->
           emit_shadow_check ?dependencies ~address ~report Byte_unsigned;
@@ -2091,7 +2091,8 @@ let emit_instr ~first ~last ~fallthrough i =
       instruction address dest
     in
     match memory_chunk with
-    | Word_int | Word_val -> load ~dest:(res i 0) QWORD I.mov
+    | Word_int | Word_val | Word_code_pointer ->
+      load ~dest:(res i 0) QWORD I.mov
     | Byte_unsigned -> load ~dest:(res i 0) BYTE I.movzx
     | Byte_signed -> load ~dest:(res i 0) BYTE I.movsx
     | Sixteen_unsigned -> load ~dest:(res i 0) WORD I.movzx
@@ -2127,7 +2128,7 @@ let emit_instr ~first ~last ~fallthrough i =
       instruction src address
     in
     match chunk with
-    | Word_int | Word_val -> store QWORD arg I.mov
+    | Word_int | Word_val | Word_code_pointer -> store QWORD arg I.mov
     | Byte_unsigned | Byte_signed -> store BYTE arg8 I.mov
     | Sixteen_unsigned | Sixteen_signed -> store WORD arg16 I.mov
     | Thirtytwo_signed | Thirtytwo_unsigned -> store DWORD arg32 I.mov
@@ -2680,16 +2681,15 @@ let fundecl fundecl =
   let fundecl_sym = S.create_global fundecl.fun_name in
   if fundecl.fun_unloadable
   then (
-    (* Back-pointer at [entry - 1]: a machine-width word holding the address
-       of this function's Code_block. Read-only at runtime (lives in .text);
-       used by the GC mark phase F.1/F.2 to darken the Code_block when an
-       unloadable closure or return-address is reached. We pad to a full
-       16 bytes (8 bytes of space + 8-byte back-pointer) so the entry below
-       remains 16-byte aligned. *)
+    (* Back-pointer at [entry - 1]: a machine-width word holding the address of
+       this function's Code_block. Read-only at runtime (lives in .text); used
+       by the GC mark phase F.1/F.2 to darken the Code_block when an unloadable
+       closure or return-address is reached. We pad to a full 16 bytes (8 bytes
+       of space + 8-byte back-pointer) so the entry below remains 16-byte
+       aligned. *)
     D.space ~bytes:8;
     D.symbol
-      (S.create_global
-         (Cmm_helpers.code_block_symbol_name fundecl.fun_name)));
+      (S.create_global (Cmm_helpers.code_block_symbol_name fundecl.fun_name)));
   if
     is_macosx system
     && (not !Clflags.output_c_object)
@@ -2908,7 +2908,7 @@ let size_of_regs regs =
   Array.fold_right
     (fun r acc ->
       match r.Reg.typ with
-      | Int | Addr | Val -> acc + size_int
+      | Int | Addr | Val | Code_pointer -> acc + size_int
       | Float | Float32 ->
         (* Float32 slots still take up a full word *)
         acc + size_float
@@ -2925,7 +2925,7 @@ let stack_locations ~offset regs =
           n
           +
           match r.Reg.typ with
-          | Int | Val | Addr -> size_int
+          | Int | Val | Addr | Code_pointer -> size_int
           | Float | Float32 ->
             (* Float32 slots still take up a full word *)
             size_float
@@ -3036,7 +3036,8 @@ let emit_probe_handler_wrapper (p : Probe_emission.probe) =
       saved_live ([], [])
   in
   record_frame_descr ~label ~frame_size:(wrapper_frame_size n) ~live_offset
-    ~code_ptr_live_offset ~unloadable:false
+    ~code_ptr_live_offset
+    ~unloadable:false
       (* The wrapper function is in shared, non-unloadable code. *)
     (Dbg_other Debuginfo.none);
   D.define_label (label_to_asm_label ~section:Text label);

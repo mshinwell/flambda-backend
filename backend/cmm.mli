@@ -297,8 +297,8 @@ type memory_chunk =
   | Word_val (* pointer inside heap or encoded int *)
   | Word_code_pointer
       (** Like [Word_int] but the loaded value carries the [Code_pointer]
-          machtype, so the GC tracks it via the parallel
-          [code_ptr_live_ofs] frame-descriptor array. *)
+          machtype, so the GC tracks it via the parallel [code_ptr_live_ofs]
+          frame-descriptor array. *)
   | Single of { reg : float_width }
     (* F32 on the heap, may be F32 or F64 in registers. *)
   | Double (* word-aligned 64-bit float see PR#10433 *)

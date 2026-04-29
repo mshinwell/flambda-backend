@@ -137,12 +137,11 @@ let add_functions env ~params_and_body res (code : Code.t) =
       ~result_arity:(Code.result_arity code) ~fun_dbg:(Code.dbg code)
       ~zero_alloc_attribute:(Code.zero_alloc_attribute code)
   in
-  (* Emit a [Code_block] for this function alongside the fundecl. The
-     Code_block must be emitted from this path (rather than later via
-     [Exported_code.iter_code]) because simplification can store the
-     metadata of a rebuilt function as [Metadata_only] in [all_code] while
-     the function body still flows through here via [Static_const_or_code.
-     Code]. *)
+  (* Emit a [Code_block] for this function alongside the fundecl. The Code_block
+     must be emitted from this path (rather than later via
+     [Exported_code.iter_code]) because simplification can store the metadata of
+     a rebuilt function as [Metadata_only] in [all_code] while the function body
+     still flows through here via [Static_const_or_code. Code]. *)
   To_cmm_code_blocks.emit_code_block_for ~all_code:(To_cmm_env.all_code env)
     code res
 

@@ -314,9 +314,9 @@ end = struct
              deleted of size %d"
             Function_slot.print function_slot size function_slot_size;
         let closure_info =
-          (* Deleted slots represent code that was eliminated; they don't
-             carry a live code pointer, so [is_unloadable] is irrelevant
-             here — pick [false] for safety. *)
+          (* Deleted slots represent code that was eliminated; they don't carry
+             a live code pointer, so [is_unloadable] is irrelevant here — pick
+             [false] for safety. *)
           C.pack_closure_info
             ~arity:(if size = 2 then 1 else 2)
             ~startenv:(startenv - slot_offset) ~is_last:last_function_slot

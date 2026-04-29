@@ -1196,7 +1196,8 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
             | Addr -> assert false
             | Valx2 -> Misc.fatal_error "Unexpected machtype_component Valx2"
             | Val | Int | Float | Vec128 | Vec256 | Vec512 | Float32
-            | Code_pointer -> ())
+            | Code_pointer ->
+              ())
           src;
         SU.insert_moves env sub_cfg src tmp_regs;
         SU.insert_moves env sub_cfg tmp_regs (Array.concat handler.regs);

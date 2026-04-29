@@ -121,8 +121,8 @@ let reg_v2s_of_float reg =
   let index = reg_index reg in
   match reg.typ with
   | Float -> Ast.DSL.reg_v2s index
-  | Val | Int | Addr | Float32 | Vec128 | Valx2 | Vec256 | Vec512
-  | Code_pointer ->
+  | Val | Int | Addr | Float32 | Vec128 | Valx2 | Vec256 | Vec512 | Code_pointer
+    ->
     Misc.fatal_errorf "reg_v2s_of_float: expected Float register, got %a"
       Printreg.reg reg
 
@@ -289,8 +289,8 @@ let reg_d reg =
   let index = reg_index reg in
   match reg.typ with
   | Float -> Ast.DSL.reg_op (Ast.Reg.reg_d index)
-  | Val | Int | Addr | Float32 | Vec128 | Valx2 | Vec256 | Vec512
-  | Code_pointer ->
+  | Val | Int | Addr | Float32 | Vec128 | Valx2 | Vec256 | Vec512 | Code_pointer
+    ->
     Misc.fatal_errorf "reg_d: expected Float register, got %a" Printreg.reg reg
 
 let reg_s reg =
@@ -308,8 +308,8 @@ let reg_s_of_float reg =
   let index = reg_index reg in
   match reg.typ with
   | Float -> Ast.DSL.reg_op (Ast.Reg.reg_s index)
-  | Val | Int | Addr | Float32 | Vec128 | Valx2 | Vec256 | Vec512
-  | Code_pointer ->
+  | Val | Int | Addr | Float32 | Vec128 | Valx2 | Vec256 | Vec512 | Code_pointer
+    ->
     Misc.fatal_errorf "reg_s_of_float: expected Float register, got %a"
       Printreg.reg reg
 
@@ -384,8 +384,8 @@ let reg_fp_operand_3 r1 r2 r3 =
       ( Ast.DSL.reg_op (Ast.Reg.reg_d index1),
         Ast.DSL.reg_op (Ast.Reg.reg_d index2),
         Ast.DSL.reg_op (Ast.Reg.reg_d index3) )
-  | ( (Float32 | Float | Val | Int | Addr | Vec128 | Valx2 | Vec256 | Vec512
-      | Code_pointer),
+  | ( ( Float32 | Float | Val | Int | Addr | Vec128 | Valx2 | Vec256 | Vec512
+      | Code_pointer ),
       _,
       _ ) ->
     Misc.fatal_errorf
@@ -425,8 +425,8 @@ let reg_fp_operand_4 r1 r2 r3 r4 : scalar_fp_regs_4 =
         Ast.DSL.reg_op (Ast.Reg.reg_d index2),
         Ast.DSL.reg_op (Ast.Reg.reg_d index3),
         Ast.DSL.reg_op (Ast.Reg.reg_d index4) )
-  | ( (Float32 | Float | Val | Int | Addr | Vec128 | Valx2 | Vec256 | Vec512
-      | Code_pointer),
+  | ( ( Float32 | Float | Val | Int | Addr | Vec128 | Valx2 | Vec256 | Vec512
+      | Code_pointer ),
       _,
       _,
       _ ) ->

@@ -286,8 +286,8 @@ let black_closure_header sz = black_block_header Obj.closure_tag sz
 (* CU-appropriate variants: emit white (UNMARKED) headers for static data
    belonging to an unloadable compilation unit, otherwise black headers.
    Unloadable CU static data must be UNMARKED so that it remains scan-eligible
-   during the major GC mark phase, allowing unreferenced code/data blocks to
-   be collected. AOT (non-unloadable) CU static data continues to be black to
+   during the major GC mark phase, allowing unreferenced code/data blocks to be
+   collected. AOT (non-unloadable) CU static data continues to be black to
    preserve the existing no-naked-pointers contract. *)
 let unit_block_header tag sz =
   if !Clflags.unit_is_unloadable
@@ -382,8 +382,8 @@ let pos_arity_in_closinfo = (8 * size_addr) - 8
 
 let pack_closure_info ~arity ~startenv ~is_last ~is_unloadable =
   assert (-128 <= arity && arity <= 127);
-  (* The "delta" / startenv field now occupies one less bit than before
-     (we stole the top bit for [is_unloadable]). *)
+  (* The "delta" / startenv field now occupies one less bit than before (we
+     stole the top bit for [is_unloadable]). *)
   assert (0 <= startenv && startenv < 1 lsl (pos_arity_in_closinfo - 3));
   Nativeint.(
     add
@@ -2488,8 +2488,7 @@ let make_mixed_alloc ~mode dbg ~tag ~value_prefix_size args args_memory_chunks =
           | Sixteen_unsigned | Sixteen_signed ->
             ok ()
           | Word_val -> error "the flat suffix of a mixed block"
-          | Word_code_pointer ->
-            error "the flat suffix of a mixed block")
+          | Word_code_pointer -> error "the flat suffix of a mixed block")
       0 args_memory_chunks
   in
   make_alloc_generic
@@ -4028,12 +4027,11 @@ let intermediate_curry_functions ~nlocal ~arity result =
                         ~startenv:
                           (function_slot_size
                           + machtype_non_scanned_size arg_type)
-                        ~is_last:true
-                        ~is_unloadable:false
-                          (* The curry trampoline itself is in shared,
-                             non-unloadable code; the underlying unloadable
-                             closure is captured in the env and tracked via
-                             its own closinfo bit. *),
+                        ~is_last:true ~is_unloadable:false
+                      (* The curry trampoline itself is in shared,
+                         non-unloadable code; the underlying unloadable closure
+                         is captured in the env and tracked via its own closinfo
+                         bit. *),
                       dbg () ) ]
                 @ (if has_nary
                    then
@@ -4272,13 +4270,13 @@ let emit_block symb white_header cont =
   let black_header = Nativeint.logor white_header caml_black in
   (Cint black_header :: cdefine_symbol symb) @ cont
 
-(* Tracking of static data blocks in unloadable CUs. The symbols registered
-   here are emitted in [to_cmm.ml]'s unit emission as a static array
+(* Tracking of static data blocks in unloadable CUs. The symbols registered here
+   are emitted in [to_cmm.ml]'s unit emission as a static array
    ("unloadable_data_blocks") that the runtime registration path reads to
-   populate the [data_blocks] field of [caml_unloadable_unit]. The runtime
-   needs this list to normalize surviving units' block headers at end of major
-   cycle. [Code_block]s are NOT included — they're tracked separately via
-   the [_code_block] suffix and registered in the unit's [code_blocks] list. *)
+   populate the [data_blocks] field of [caml_unloadable_unit]. The runtime needs
+   this list to normalize surviving units' block headers at end of major cycle.
+   [Code_block]s are NOT included — they're tracked separately via the
+   [_code_block] suffix and registered in the unit's [code_blocks] list. *)
 let unloadable_data_block_symbols : Cmm.symbol list ref = ref []
 
 let suppress_unloadable_data_block_tracking = ref false
@@ -4292,9 +4290,9 @@ let flush_unloadable_data_block_symbols () =
   unloadable_data_block_symbols := [];
   r
 
-(* The known name (relative to the current compilation unit) of the static
-   array emitted by to_cmm to enumerate unloadable static data blocks. The
-   JIT loader looks up this symbol and passes its address to the runtime. *)
+(* The known name (relative to the current compilation unit) of the static array
+   emitted by to_cmm to enumerate unloadable static data blocks. The JIT loader
+   looks up this symbol and passes its address to the runtime. *)
 let unloadable_data_blocks_symbol_basename = "unloadable_data_blocks"
 
 (* CU-appropriate emit: white header for unloadable CUs, black otherwise. The
@@ -4304,9 +4302,9 @@ let unloadable_data_blocks_symbol_basename = "unloadable_data_blocks"
    through to the runtime registration. [Local] symbols are skipped: the
    [Csymbol_address] entries in the side array cannot be relocated to a Local
    symbol cross-section on Mach-O. In practice, [Local] symbols here are
-   compiler-internal helpers (e.g. the "fail_if_called_indirectly" message)
-   that never appear as targets of heap pointers, so omitting them from the
-   GC's per-cycle normalization is harmless. *)
+   compiler-internal helpers (e.g. the "fail_if_called_indirectly" message) that
+   never appear as targets of heap pointers, so omitting them from the GC's
+   per-cycle normalization is harmless. *)
 let emit_unit_block symb white_header cont =
   let header =
     if !Clflags.unit_is_unloadable
@@ -4996,10 +4994,10 @@ let indirect_full_call ~dbg ty pos f ~callees args_type args =
       | [] -> Misc.fatal_error "indirect_full_call: args_type was empty"
       | _ :: _ :: _ -> 2
     in
-    (* Load the closure's code pointer with [Word_code_pointer] so the
-       resulting value carries the [Code_pointer] machtype. This lets the
-       GC track the pointer via the parallel [code_ptr_live_ofs] frame
-       descriptor array if the value is held live across a safepoint. *)
+    (* Load the closure's code pointer with [Word_code_pointer] so the resulting
+       value carries the [Code_pointer] machtype. This lets the GC track the
+       pointer via the parallel [code_ptr_live_ofs] frame descriptor array if
+       the value is held live across a safepoint. *)
     load ~dbg Word_code_pointer Asttypes.Mutable
       ~addr:(field_address (Cvar v) offset dbg)
   in

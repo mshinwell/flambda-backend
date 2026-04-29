@@ -1224,8 +1224,10 @@ let move_between_distinct_locs env (src : Reg.t) (dst : Reg.t) =
     A.ins_mov_vector (H.reg_v16b_operand dst) (H.reg_v16b_operand src)
   | (Vec256 | Vec512), _, _, _ | _, _, (Vec256 | Vec512), _ ->
     Misc.fatal_error "arm64: got 256/512 bit vector"
-  | (Int | Val | Addr | Code_pointer), Reg _, (Int | Val | Addr | Code_pointer),
-    Reg _ ->
+  | ( (Int | Val | Addr | Code_pointer),
+      Reg _,
+      (Int | Val | Addr | Code_pointer),
+      Reg _ ) ->
     A.ins_mov_reg (H.reg_x dst) (H.reg_x src)
   | Float, Reg _, Float, Stack _ ->
     emit_stack_str_simd_and_fp env (H.reg_d src) dst
@@ -1233,8 +1235,10 @@ let move_between_distinct_locs env (src : Reg.t) (dst : Reg.t) =
     emit_stack_str_simd_and_fp env (H.reg_s src) dst
   | (Vec128 | Valx2), Reg _, (Vec128 | Valx2), Stack _ ->
     emit_stack_str_simd_and_fp env (H.reg_q src) dst
-  | (Int | Val | Addr | Code_pointer), Reg _, (Int | Val | Addr | Code_pointer),
-    Stack _ ->
+  | ( (Int | Val | Addr | Code_pointer),
+      Reg _,
+      (Int | Val | Addr | Code_pointer),
+      Stack _ ) ->
     emit_stack_str env (H.reg_x src) dst
   | Float, Stack _, Float, Reg _ ->
     emit_stack_ldr_simd_and_fp env (H.reg_d dst) src
@@ -1242,8 +1246,10 @@ let move_between_distinct_locs env (src : Reg.t) (dst : Reg.t) =
     emit_stack_ldr_simd_and_fp env (H.reg_s dst) src
   | (Vec128 | Valx2), Stack _, (Vec128 | Valx2), Reg _ ->
     emit_stack_ldr_simd_and_fp env (H.reg_q dst) src
-  | (Int | Val | Addr | Code_pointer), Stack _,
-    (Int | Val | Addr | Code_pointer), Reg _ ->
+  | ( (Int | Val | Addr | Code_pointer),
+      Stack _,
+      (Int | Val | Addr | Code_pointer),
+      Reg _ ) ->
     emit_stack_ldr env (H.reg_x dst) src
   | _, Stack _, _, Stack _ ->
     Misc.fatal_errorf "Illegal move between stack slots (%a to %a)\n"
@@ -2101,11 +2107,10 @@ let fundecl fundecl =
   then
     (* Back-pointer at [entry - 1]: a machine-width word holding the address of
        this function's Code_block. Read-only at runtime (lives in .text); used
-       by the GC mark phase F.1/F.2 to darken the Code_block when an
-       unloadable closure or return-address is reached. *)
+       by the GC mark phase F.1/F.2 to darken the Code_block when an unloadable
+       closure or return-address is reached. *)
     D.symbol
-      (S.create_global
-         (Cmm_helpers.code_block_symbol_name fundecl.fun_name));
+      (S.create_global (Cmm_helpers.code_block_symbol_name fundecl.fun_name));
   global_maybe_protected fun_sym;
   D.type_symbol ~ty:Function fun_sym;
   (* Define both a symbol and a label so the function can be referenced either

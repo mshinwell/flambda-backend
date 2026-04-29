@@ -23,8 +23,8 @@ let linkage_name code_id =
 
 let code_block_symbol_for code_id : Cmm.symbol =
   (* Code_block symbols always belong to the current CU (we only emit them for
-     code defined here); they are exported because back-pointers in foreign
-     CUs may reference them via direct calls into our text. *)
+     code defined here); they are exported because back-pointers in foreign CUs
+     may reference them via direct calls into our text. *)
   { sym_name = linkage_name code_id; sym_global = Global }
 
 let dep_is_unloadable all_code dep_code_id =
@@ -52,9 +52,7 @@ let emit_code_block_for ~all_code (code : Code.t) res =
         code_id_deps
       @ List.map
           (fun sym ->
-            let sym_name =
-              Linkage_name.to_string (Symbol.linkage_name sym)
-            in
+            let sym_name = Linkage_name.to_string (Symbol.linkage_name sym) in
             let sym_global : Cmm.is_global =
               if Compilation_unit.is_current (Symbol.compilation_unit sym)
               then Local
@@ -66,9 +64,9 @@ let emit_code_block_for ~all_code (code : Code.t) res =
     let n_fields = List.length dep_fields in
     let header = C.unit_block_header Runtimetags.code_block_tag n_fields in
     let block_sym = code_block_symbol_for code_id in
-    (* Suppress unloadable_data_block tracking for Code_blocks: they are
-       tracked separately via the runtime's [code_blocks] list (located by
-       the JIT loader using the [_code_block] symbol-name suffix). *)
+    (* Suppress unloadable_data_block tracking for Code_blocks: they are tracked
+       separately via the runtime's [code_blocks] list (located by the JIT
+       loader using the [_code_block] symbol-name suffix). *)
     let prev = !C.suppress_unloadable_data_block_tracking in
     C.suppress_unloadable_data_block_tracking := true;
     let data_items = C.emit_unit_block block_sym header dep_fields in
@@ -85,8 +83,8 @@ let emit_entry_code_block ~(entry_sym : Cmm.symbol) res =
       }
     in
     let header = C.unit_block_header Runtimetags.code_block_tag 0 in
-    (* Suppress data-block tracking: Code_blocks are tracked separately
-       via the [_code_block] suffix during JIT registration (see jit.ml's
+    (* Suppress data-block tracking: Code_blocks are tracked separately via the
+       [_code_block] suffix during JIT registration (see jit.ml's
        [unloadable_metadata]). *)
     let prev = !C.suppress_unloadable_data_block_tracking in
     C.suppress_unloadable_data_block_tracking := true;
