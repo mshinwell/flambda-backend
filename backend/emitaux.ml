@@ -221,8 +221,15 @@ let emit_frames a =
     emit_unsigned_16_or_32 (fd.fd_frame_size + flags);
     emit_unsigned_16_or_32 (List.length fd.fd_live_offset);
     List.iter emit_live_offset fd.fd_live_offset;
+    (* Bits 0 (DEBUG) and 1 (ALLOC) determine whether the runtime expects a
+       debuginfo / alloc-lengths section here. Bits 2 (UNLOADABLE) and 3
+       (HAS_CODE_PTR_SLOTS) do not affect this layout, so we mask them off
+       before deciding to skip. Without this mask, an unloadable frame whose
+       Cmm-level debuginfo is [Debuginfo.none] would still register an empty
+       entry in the debuginfo table, tripping [assert false] in the
+       [emit_debuginfo] inner loop below. *)
     (match fd.fd_debuginfo with
-    | _ when flags = 0 -> ()
+    | _ when flags land 3 = 0 -> ()
     | Dbg_other dbg ->
       a.efa_align 4;
       a.efa_label_rel (label_debuginfos false dbg) Int32.zero
