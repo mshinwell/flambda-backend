@@ -1149,8 +1149,10 @@ let move (src : Reg.t) (dst : Reg.t) =
     if distinct then movsd (reg src) (reg dst)
   | Float32, (Reg _ | Stack _), Float32, (Reg _ | Stack _) ->
     if distinct then movss (reg src) (reg dst)
-  | (Int | Val | Addr), (Reg _ | Stack _), (Int | Val | Addr), (Reg _ | Stack _)
-    ->
+  | ( (Int | Val | Addr | Code_pointer),
+      (Reg _ | Stack _),
+      (Int | Val | Addr | Code_pointer),
+      (Reg _ | Stack _) ) ->
     if distinct then I.mov (reg src) (reg dst)
   | _, Unknown, _, (Reg _ | Stack _ | Unknown)
   | _, (Reg _ | Stack _), _, Unknown ->
