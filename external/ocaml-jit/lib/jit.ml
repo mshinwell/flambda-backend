@@ -301,64 +301,85 @@ let jit_load (type a r)
   (* If the compilation unit emitted any [_code_block] symbols, register the
      unit with the runtime so the GC can detect when the unit becomes
      unreachable and unload its text/data buffers. *)
-  (match unloadable_metadata local_symbols with
-  | None -> ()
-  | Some (code_blocks, function_entries) ->
-      let code_end_addr =
-        match entry_points.code_end with
-        | Some addr -> Address.to_nativeint addr
-        | None -> failwithf "code_end missing for unloadable unit"
-      in
-      let frametable_addr =
-        match entry_points.frametable with
-        | Some addr -> Address.to_nativeint addr
-        | None -> 0n
-      in
-      (* The compiler emits a static array, named by appending
-         [unloadable_data_blocks_symbol_basename] to the unit's symbol
-         prefix, listing every static data block's address (excluding
-         Code_blocks, which are tracked separately via [code_blocks]).
-         Layout: [count; addr_1; ...; addr_count]. The C side reads it to
-         populate the unit's [data_blocks] field. We pass [0n] only when
-         no such symbol exists (which only happens for non-unloadable
-         units; see the [unloadable_metadata] gate above). *)
-      let data_blocks_table_addr =
-        (* Match symbols whose name ends in
-           [_<unloadable_data_blocks_symbol_basename>]. The exact prefix
-           depends on the compilation-unit linkage prefix, which the JIT
-           does not track explicitly, so we filter by suffix. Must match
-           [Cmm_helpers.unloadable_data_blocks_symbol_basename]; the linker
-           name is [caml<UnitPrefix>__<basename>], possibly emitted with
-           target-specific aliases (e.g. on Mach-O the assembler emits both
-           a global [_<name>] and a local [L_<name>] entry pointing to the
-           same address). We deduplicate by address. *)
-        let suffix = "__unloadable_data_blocks" in
-        let suffix_len = String.length suffix in
-        let addrs =
-          Symbols.fold local_symbols ~init:[]
-            ~f:(fun acc name addr ->
-              let n = String.length name in
-              if n >= suffix_len
-                 && String.equal
-                      (String.sub name (n - suffix_len) suffix_len)
-                      suffix
-              then
-                let a = Address.to_nativeint addr in
-                if List.exists (Nativeint.equal a) acc then acc else a :: acc
-              else acc)
+  let entry_points =
+    match unloadable_metadata local_symbols with
+    | None -> entry_points
+    | Some (code_blocks, function_entries) ->
+        let code_end_addr =
+          match entry_points.code_end with
+          | Some addr -> Address.to_nativeint addr
+          | None -> failwithf "code_end missing for unloadable unit"
         in
-        match addrs with
-        | [addr] -> addr
-        | [] -> 0n
-        | _ ->
-            failwithf
-              "More than one distinct unloadable_data_blocks symbol address \
-               found in JIT unit (expected at most one)"
-      in
-      Externals.register_unloadable_unit code_blocks data_blocks_table_addr
-        function_entries code_end_addr frametable_addr
-        (Address.to_nativeint buffer_base)
-        buffer_size);
+        let frametable_addr =
+          match entry_points.frametable with
+          | Some addr -> Address.to_nativeint addr
+          | None -> 0n
+        in
+        let gc_roots_addr =
+          match entry_points.gc_roots with
+          | Some addr -> Address.to_nativeint addr
+          | None -> 0n
+        in
+        (* The compiler emits a static array, named by appending
+           [unloadable_data_blocks_symbol_basename] to the unit's symbol
+           prefix, listing every static data block's address (excluding
+           Code_blocks, which are tracked separately via [code_blocks]).
+           Layout: [count; addr_1; ...; addr_count]. The C side reads it to
+           populate the unit's [data_blocks] field. We pass [0n] only when
+           no such symbol exists (which only happens for non-unloadable
+           units; see the [unloadable_metadata] gate above). *)
+        let data_blocks_table_addr =
+          (* Match symbols whose name ends in
+             [_<unloadable_data_blocks_symbol_basename>]. The exact prefix
+             depends on the compilation-unit linkage prefix, which the JIT
+             does not track explicitly, so we filter by suffix. Must match
+             [Cmm_helpers.unloadable_data_blocks_symbol_basename]; the linker
+             name is [caml<UnitPrefix>__<basename>], possibly emitted with
+             target-specific aliases (e.g. on Mach-O the assembler emits both
+             a global [_<name>] and a local [L_<name>] entry pointing to the
+             same address). We deduplicate by address. *)
+          let suffix = "__unloadable_data_blocks" in
+          let suffix_len = String.length suffix in
+          let addrs =
+            Symbols.fold local_symbols ~init:[]
+              ~f:(fun acc name addr ->
+                let n = String.length name in
+                if n >= suffix_len
+                   && String.equal
+                        (String.sub name (n - suffix_len) suffix_len)
+                        suffix
+                then
+                  let a = Address.to_nativeint addr in
+                  if List.exists (Nativeint.equal a) acc then acc else a :: acc
+                else acc)
+          in
+          match addrs with
+          | [addr] -> addr
+          | [] -> 0n
+          | _ ->
+              failwithf
+                "More than one distinct unloadable_data_blocks symbol address \
+                 found in JIT unit (expected at most one)"
+        in
+        Externals.register_unloadable_unit code_blocks data_blocks_table_addr
+          function_entries code_end_addr frametable_addr gc_roots_addr
+          (Address.to_nativeint buffer_base)
+          buffer_size;
+        (* The unloadable-unit registration owns the frame table, gc_roots
+           and code-fragment registrations — drop them from [entry_points]
+           so [jit_run] (the legacy non-unloadable path) does not also
+           register them. A duplicate gc_roots in particular is fatal
+           (caml_register_dyn_global raises [Register_dyn_global_duplicate])
+           when a freed unit's buffer address gets reused by a later unit.
+           [data_begin]/[data_end] go to [caml_page_table_add] under
+           runtime 4 only, so leaving them is harmless on runtime 5. *)
+        { entry_points with
+          frametable = None;
+          gc_roots = None;
+          code_begin = None;
+          code_end = None;
+        }
+  in
   let result = jit_run entry_points in
   outcome_ref := Some result
 

@@ -135,14 +135,28 @@ let unit0 ~offsets ~all_code ~reachable_names flambda_unit =
   let entry =
     let fun_codegen =
       let fun_codegen = [Cmm.Reduce_code_size; Cmm.Use_linscan_regalloc] in
-      if Flambda_features.backend_cse_at_toplevel ()
-      then fun_codegen
-      else Cmm.No_CSE :: fun_codegen
+      let fun_codegen =
+        if Flambda_features.backend_cse_at_toplevel ()
+        then fun_codegen
+        else Cmm.No_CSE :: fun_codegen
+      in
+      (* The entry (module initializer) is a function in this CU just like
+         any other; if the unit is unloadable, it needs the [Unloadable]
+         codegen option so the back-end emits frame-descriptor UNLOADABLE
+         bits and the back-pointer at [entry - 1]. The matching [Code_block]
+         is emitted below by [To_cmm_code_blocks.emit_entry_code_block]. *)
+      if !Clflags.unit_is_unloadable
+      then Cmm.Unloadable :: fun_codegen
+      else fun_codegen
     in
     C.cfunction
       (C.fundecl entry_sym [] body fun_codegen dbg Default_poll Cmm.typ_val)
   in
-  let res = To_cmm_code_blocks.emit_code_blocks all_code res in
+  (* Per-function [Code_block]s are emitted alongside fundecls in
+     [To_cmm_static.add_functions]. Here we just emit the [Code_block] for
+     the entry (module initializer) function, which doesn't go through that
+     path. *)
+  let res = To_cmm_code_blocks.emit_entry_code_block ~entry_sym res in
   (* In unloadable mode, emit a static array enumerating every static data
      block in the unit so the JIT loader can pass the list to
      [caml_register_unloadable_unit]. The runtime needs this list to normalize

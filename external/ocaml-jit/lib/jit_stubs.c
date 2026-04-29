@@ -399,11 +399,11 @@ static void jit_unit_on_unload(struct caml_unloadable_unit *u) {
  * installed [on_unload] callback releases everything. */
 CAMLprim value jit_register_unloadable_unit_native(
     value code_blocks, value data_blocks_table_addr, value function_entries,
-    value code_end_addr, value frametable_addr, value buffer_base_addr,
-    value buffer_size) {
+    value code_end_addr, value frametable_addr, value gc_roots_addr,
+    value buffer_base_addr, value buffer_size) {
   CAMLparam5(code_blocks, data_blocks_table_addr, function_entries,
              code_end_addr, frametable_addr);
-  CAMLxparam2(buffer_base_addr, buffer_size);
+  CAMLxparam3(gc_roots_addr, buffer_base_addr, buffer_size);
 
   uintnat n_code = Wosize_val(code_blocks);
   uintnat n_funcs = Wosize_val(function_entries);
@@ -421,6 +421,7 @@ CAMLprim value jit_register_unloadable_unit_native(
   u->num_data_blocks = n_data;
   u->num_text_ranges = n_funcs;
   u->frametable = (intnat *)Nativeint_val(frametable_addr);
+  u->gc_roots = (void *)Nativeint_val(gc_roots_addr);
   u->on_unload = &jit_unit_on_unload;
 
   struct jit_unit_loader_data *ld =
@@ -468,13 +469,13 @@ CAMLprim value jit_register_unloadable_unit_bytecode(value *argv, int argn) {
   (void)argn;
   return jit_register_unloadable_unit_native(argv[0], argv[1], argv[2],
                                              argv[3], argv[4], argv[5],
-                                             argv[6]);
+                                             argv[6], argv[7]);
 }
 #else
 CAMLprim value jit_register_unloadable_unit_native(
-    value a, value b, value c, value d, value e, value f, value g) {
+    value a, value b, value c, value d, value e, value f, value g, value h) {
   /* Unloadable units require runtime 5 (concurrent marker). */
-  (void)a; (void)b; (void)c; (void)d; (void)e; (void)f; (void)g;
+  (void)a; (void)b; (void)c; (void)d; (void)e; (void)f; (void)g; (void)h;
   return Val_unit;
 }
 
@@ -482,6 +483,6 @@ CAMLprim value jit_register_unloadable_unit_bytecode(value *argv, int argn) {
   (void)argn;
   return jit_register_unloadable_unit_native(argv[0], argv[1], argv[2],
                                              argv[3], argv[4], argv[5],
-                                             argv[6]);
+                                             argv[6], argv[7]);
 }
 #endif
