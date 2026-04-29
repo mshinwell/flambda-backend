@@ -1,7 +1,8 @@
 (* TEST
   include eval;
   flags = "-extension runtime_metaprogramming";
-  native;
+  runtime5;
+  { native; }
 *)
 
 (* Variant of eval_test.ml that wraps each Eval.eval phrase in a function so

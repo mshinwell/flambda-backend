@@ -1,7 +1,8 @@
 (* TEST
   include eval;
   flags = "-extension runtime_metaprogramming";
-  native;
+  runtime5;
+  { native; }
 *)
 
 #syntax quotations on
