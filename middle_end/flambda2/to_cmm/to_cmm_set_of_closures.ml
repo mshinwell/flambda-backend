@@ -690,6 +690,11 @@ let let_static_set_of_closures0 env res closure_symbols
     match l with
     | _ :: _ ->
       let header = C.cint (C.unit_closure_header length) in
+      (* In unloadable mode, register the closure block's start symbol (the
+         function-slot symbol at offset 0, which is the address of the block
+         contents right after the header). This goes into the unit's
+         [data_blocks] list so the GC normalizes the header at end of cycle. *)
+      C.register_unloadable_data_block_symbol closure_symbol_for_updates;
       header :: l
     | [] ->
       Misc.fatal_error "Cannot statically allocate an empty set of closures"

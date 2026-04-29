@@ -4272,13 +4272,49 @@ let emit_block symb white_header cont =
   let black_header = Nativeint.logor white_header caml_black in
   (Cint black_header :: cdefine_symbol symb) @ cont
 
+(* Tracking of static data blocks in unloadable CUs. The symbols registered
+   here are emitted in [to_cmm.ml]'s unit emission as a static array
+   ("unloadable_data_blocks") that the runtime registration path reads to
+   populate the [data_blocks] field of [caml_unloadable_unit]. The runtime
+   needs this list to normalize surviving units' block headers at end of major
+   cycle. [Code_block]s are NOT included — they're tracked separately via
+   the [_code_block] suffix and registered in the unit's [code_blocks] list. *)
+let unloadable_data_block_symbols : Cmm.symbol list ref = ref []
+
+let suppress_unloadable_data_block_tracking = ref false
+
+let register_unloadable_data_block_symbol sym =
+  if !Clflags.unit_is_unloadable && not !suppress_unloadable_data_block_tracking
+  then unloadable_data_block_symbols := sym :: !unloadable_data_block_symbols
+
+let flush_unloadable_data_block_symbols () =
+  let r = !unloadable_data_block_symbols in
+  unloadable_data_block_symbols := [];
+  r
+
+(* The known name (relative to the current compilation unit) of the static
+   array emitted by to_cmm to enumerate unloadable static data blocks. The
+   JIT loader looks up this symbol and passes its address to the runtime. *)
+let unloadable_data_blocks_symbol_basename = "unloadable_data_blocks"
+
 (* CU-appropriate emit: white header for unloadable CUs, black otherwise. The
    [white_header] argument is the bare header (no color); this function applies
-   the right color for the current CU. *)
+   the right color for the current CU. In unloadable mode, also registers
+   [Global] symbols with [unloadable_data_block_symbols] so they can be plumbed
+   through to the runtime registration. [Local] symbols are skipped: the
+   [Csymbol_address] entries in the side array cannot be relocated to a Local
+   symbol cross-section on Mach-O. In practice, [Local] symbols here are
+   compiler-internal helpers (e.g. the "fail_if_called_indirectly" message)
+   that never appear as targets of heap pointers, so omitting them from the
+   GC's per-cycle normalization is harmless. *)
 let emit_unit_block symb white_header cont =
   let header =
     if !Clflags.unit_is_unloadable
-    then white_header
+    then (
+      (match symb.sym_global with
+      | Global -> register_unloadable_data_block_symbol symb
+      | Local -> ());
+      white_header)
     else Nativeint.logor white_header caml_black
   in
   (Cint header :: cdefine_symbol symb) @ cont

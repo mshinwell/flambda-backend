@@ -375,8 +375,12 @@ static void jit_unit_on_unload(struct caml_unloadable_unit *u) {
  * unit. Inputs are nativeint arrays / scalars from the OCaml side:
  *   - [code_blocks]: addresses of the unit's [Code_block] static-data items
  *     (one per function defined in the unit).
- *   - [data_blocks]: addresses of the unit's other static-data blocks (those
- *     emitted with white headers per B.1).
+ *   - [data_blocks_table_addr]: address of a static array, emitted by the
+ *     compiler in the unit's data section, enumerating the unit's static
+ *     data blocks (those emitted with white/UNMARKED headers per B.1). The
+ *     array layout is [count; addr_1; ...; addr_count] where [count] is one
+ *     [intnat]-sized word and each address is [intnat]-sized. May be 0n if
+ *     the unit has no static data blocks.
  *   - [function_entries]: addresses of each function's entry, sorted in
  *     ascending order. Used to derive per-function text ranges:
  *     [function_entries[i] .. function_entries[i+1])  (and the last entry
@@ -394,16 +398,20 @@ static void jit_unit_on_unload(struct caml_unloadable_unit *u) {
  * runtime keeps them alive until the unit is unloaded, at which point the
  * installed [on_unload] callback releases everything. */
 CAMLprim value jit_register_unloadable_unit_native(
-    value code_blocks, value data_blocks, value function_entries,
+    value code_blocks, value data_blocks_table_addr, value function_entries,
     value code_end_addr, value frametable_addr, value buffer_base_addr,
     value buffer_size) {
-  CAMLparam5(code_blocks, data_blocks, function_entries, code_end_addr,
-             frametable_addr);
+  CAMLparam5(code_blocks, data_blocks_table_addr, function_entries,
+             code_end_addr, frametable_addr);
   CAMLxparam2(buffer_base_addr, buffer_size);
 
   uintnat n_code = Wosize_val(code_blocks);
-  uintnat n_data = Wosize_val(data_blocks);
   uintnat n_funcs = Wosize_val(function_entries);
+
+  intnat *data_blocks_table =
+      (intnat *)Nativeint_val(data_blocks_table_addr);
+  uintnat n_data = (data_blocks_table == NULL) ? 0
+                                               : (uintnat)data_blocks_table[0];
 
   struct caml_unloadable_unit *u =
       caml_stat_alloc_noexc(sizeof(struct caml_unloadable_unit));
@@ -431,7 +439,9 @@ CAMLprim value jit_register_unloadable_unit_native(
   u->data_blocks = caml_stat_alloc_noexc(n_data * sizeof(value));
   if (u->data_blocks == NULL && n_data > 0) caml_raise_out_of_memory();
   for (uintnat i = 0; i < n_data; i++) {
-    u->data_blocks[i] = (value)Nativeint_val(Field(data_blocks, i));
+    /* The array entries are stored as raw addresses (Csymbol_address, which
+     * the assembler emits as machine words). */
+    u->data_blocks[i] = (value)data_blocks_table[1 + i];
   }
 
   /* Per-function text ranges: [entry_i .. entry_{i+1}); last extends to

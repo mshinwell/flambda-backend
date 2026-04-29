@@ -772,8 +772,32 @@ val emit_block : symbol -> nativeint -> data_item list -> data_item list
 
 (** Like [emit_block], but uses a white header for unloadable compilation units
     and a black header otherwise (gated by [!Clflags.unit_is_unloadable]). Use
-    this for static data belonging to the CU under compilation. *)
+    this for static data belonging to the CU under compilation. In unloadable
+    mode, also registers the symbol via
+    [register_unloadable_data_block_symbol]. *)
 val emit_unit_block : symbol -> nativeint -> data_item list -> data_item list
+
+(** When true, [emit_unit_block] does not register the emitted symbol with
+    [unloadable_data_block_symbols]. The to_cmm Code_block emission pass sets
+    this around its emit calls because Code_blocks are tracked separately via
+    the runtime's [code_blocks] list. *)
+val suppress_unloadable_data_block_tracking : bool ref
+
+(** Register a static data block symbol as belonging to the current
+    (unloadable) compilation unit. No-op if the CU is not unloadable, or if
+    [suppress_unloadable_data_block_tracking] is set. Used by emit paths that
+    do not go through [emit_unit_block] (notably static set-of-closures
+    blocks). *)
+val register_unloadable_data_block_symbol : symbol -> unit
+
+(** Retrieve and clear the list of unloadable data block symbols accumulated
+    since the last flush. Called once per compilation unit by [to_cmm.ml]. *)
+val flush_unloadable_data_block_symbols : unit -> symbol list
+
+(** The CU-relative basename of the static array emitted by to_cmm to enumerate
+    unloadable data block addresses. The full linkage name is obtained via
+    [make_symbol]. *)
+val unloadable_data_blocks_symbol_basename : string
 
 (** Emit specific kinds of constant blocks as data items *)
 val emit_float32_constant : symbol -> float -> data_item list -> data_item list

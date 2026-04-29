@@ -143,6 +143,43 @@ let unit0 ~offsets ~all_code ~reachable_names flambda_unit =
       (C.fundecl entry_sym [] body fun_codegen dbg Default_poll Cmm.typ_val)
   in
   let res = To_cmm_code_blocks.emit_code_blocks all_code res in
+  (* In unloadable mode, emit a static array enumerating every static data
+     block in the unit so the JIT loader can pass the list to
+     [caml_register_unloadable_unit]. The runtime needs this list to normalize
+     surviving units' headers (white -> MARKED) at end of major cycle. Format:
+     [count; addr_1; ..; addr_count]. The symbol is always emitted (with
+     count = 0 if there are no data blocks) so the JIT loader can rely on its
+     presence whenever the CU is unloadable. *)
+  let res =
+    if !Clflags.unit_is_unloadable
+    then (
+      let syms = C.flush_unloadable_data_block_symbols () in
+      (* Reverse-and-dedup: the helper accumulates in reverse order, and a
+         symbol may have been registered more than once if [emit_unit_block]
+         was called multiple times for the same definition (defensive). *)
+      let seen = Hashtbl.create 8 in
+      let syms =
+        List.rev syms
+        |> List.filter (fun (s : Cmm.symbol) ->
+               if Hashtbl.mem seen s.sym_name
+               then false
+               else (
+                 Hashtbl.add seen s.sym_name ();
+                 true))
+      in
+      let count = List.length syms in
+      let array_name =
+        Cmm_helpers.make_symbol C.unloadable_data_blocks_symbol_basename
+      in
+      let res, array_sym = R.raw_symbol res ~global:Global array_name in
+      let data_items =
+        Cmm.Cdefine_symbol array_sym
+        :: Cmm.Cint (Nativeint.of_int count)
+        :: List.map (fun s -> Cmm.Csymbol_address s) syms
+      in
+      R.add_archive_data_items res data_items)
+    else res
+  in
   let { R.data_items; gc_roots; functions } = R.to_cmm res in
   let _res, cmm_helpers_data = flush_cmm_helpers_state res in
   let gc_root_data = C.gc_root_table gc_roots in

@@ -30,7 +30,9 @@ val dlsym : string -> Address.t option
 
 val register_unloadable_unit :
   nativeint array (* code-block addresses *) ->
-  nativeint array (* data-block addresses *) ->
+  nativeint
+  (* Address of the unit's data-blocks table:
+     a static array [count; addr_1; ...; addr_count]. 0n if absent. *) ->
   nativeint array (* function entries, sorted by address *) ->
   nativeint (* code_end *) ->
   nativeint (* frametable, or 0n if absent *) ->
