@@ -93,9 +93,9 @@ let phys_reg (typ : Cmm.machtype_component) phys_reg =
     then Reg.create_alias r ~typ
     else r
   | Code_pointer ->
-    (* Preserve [Code_pointer] machtype on physical regs so that frame-descriptor
-       emission can identify code-pointer slots for the parallel
-       [code_ptr_live_ofs] array. *)
+    (* Preserve [Code_pointer] machtype on physical regs so that
+       frame-descriptor emission can identify code-pointer slots for the
+       parallel [code_ptr_live_ofs] array. *)
     Reg.create_alias hard_int_reg.(index_in_class) ~typ
   | Float -> hard_float_reg.(index_in_class)
   | Float32 -> hard_float32_reg.(index_in_class)
