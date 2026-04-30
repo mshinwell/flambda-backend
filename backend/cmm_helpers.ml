@@ -4295,24 +4295,36 @@ let flush_unloadable_data_block_symbols () =
    looks up this symbol and passes its address to the runtime. *)
 let unloadable_data_blocks_symbol_basename = "unloadable_data_blocks"
 
-(* CU-appropriate emit: white header for unloadable CUs, black otherwise. The
-   [white_header] argument is the bare header (no color); this function applies
-   the right color for the current CU. In unloadable mode, also registers
-   [Global] symbols with [unloadable_data_block_symbols] so they can be plumbed
-   through to the runtime registration. [Local] symbols are skipped: the
-   [Csymbol_address] entries in the side array cannot be relocated to a Local
-   symbol cross-section on Mach-O. In practice, [Local] symbols here are
-   compiler-internal helpers (e.g. the "fail_if_called_indirectly" message) that
-   never appear as targets of heap pointers, so omitting them from the GC's
-   per-cycle normalization is harmless. *)
+(* CU-appropriate emit: in unloadable mode, [Global] symbols get a white
+   (UNMARKED) header and are registered for end-of-cycle normalization;
+   [Local] symbols get a black (NOT_MARKABLE) header and are never tracked.
+   Outside unloadable mode, every symbol gets a black header.
+
+   Why the split: white-headered blocks must be re-marked to MARKED at the
+   end of each surviving cycle so the imminent color rotation maps them to
+   UNMARKED for the next cycle. A white-headered block that is *not* tracked
+   would have its bits left at zero, which the next cycle interprets as
+   GARBAGE — any heap pointer reaching it would then trip
+   [!Has_status_hd(hd, GARBAGE)] in the debug runtime (or read evicted bits
+   in release).
+
+   We can't put [Local] symbols in the per-unit [unloadable_data_blocks]
+   array because Mach-O cannot relocate [Csymbol_address] entries to a Local
+   symbol cross-section. So [Local] symbols use a black header, which the
+   mark scan treats as NOT_MARKABLE (skipped, never asserted on). This is
+   safe because Local symbols are CU-private — no heap pointer from another
+   CU can reach them, and within the unit any Global ancestor block whose
+   fields reference a Local block IS tracked, so the unit cannot be unloaded
+   while a Local block is still transitively heap-reachable. *)
 let emit_unit_block symb white_header cont =
   let header =
     if !Clflags.unit_is_unloadable
-    then (
-      (match symb.sym_global with
-      | Global -> register_unloadable_data_block_symbol symb
-      | Local -> ());
-      white_header)
+    then
+      match symb.sym_global with
+      | Global ->
+        register_unloadable_data_block_symbol symb;
+        white_header
+      | Local -> Nativeint.logor white_header caml_black
     else Nativeint.logor white_header caml_black
   in
   (Cint header :: cdefine_symbol symb) @ cont
