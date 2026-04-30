@@ -427,9 +427,19 @@ let jit_load_lambda ~phrase_name ppf (program : Lambda.program) =
        - emission of [Code_block] static items (C)
        - per-function back-pointers in [.text] (D)
      We save and restore so any non-JIT compile after this in the same
-     process is unaffected. *)
+     process is unaffected.
+
+     Disabled when [Externals.supports_unloading] is false (Linux ASan,
+     Linux TCMalloc, musl): the buffer allocator on those builds returns
+     memory that cannot be passed to [free], so the unload path would
+     corrupt the allocator. Instead we compile the CU as non-unloadable —
+     black headers, no Code_blocks, no UNLOADABLE bits — and leak the
+     buffer for the life of the process. The downside is an unbounded
+     leak, but it lets [Eval.eval] keep working in those configurations.
+     [unloadable_metadata] then returns [None], so [register_unloadable_
+     unit] is also skipped. *)
   let saved_unit_is_unloadable = !Clflags.unit_is_unloadable in
-  Clflags.unit_is_unloadable := true;
+  Clflags.unit_is_unloadable := Externals.supports_unloading ();
   let restore () =
     Clflags.unit_is_unloadable := saved_unit_is_unloadable
   in

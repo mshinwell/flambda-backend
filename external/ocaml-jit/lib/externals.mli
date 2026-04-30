@@ -16,6 +16,12 @@
 
 val memalign : int -> (Address.t, string) result
 
+(** Whether the build's allocator backend supports unloading JIT'd CUs. False
+    when the JIT buffer is allocated via [sbrk] (Linux ASan / TCMalloc) or out
+    of a static [.bss] arena (musl), neither of which can be passed to [free].
+    Drives [Eval.eval]'s choice between unloadable and forever-leaked CUs. *)
+val supports_unloading : unit -> bool
+
 val load_section : Address.t -> string -> int -> unit
 
 val mprotect_ro : Address.t -> int -> (unit, int) result

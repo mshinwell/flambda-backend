@@ -16,6 +16,8 @@
 
 external memalign : int -> (Address.t, string) result = "jit_memalign"
 
+external supports_unloading : unit -> bool = "jit_supports_unloading"
+
 external load_section : Address.t -> string -> int -> unit = "jit_load_section"
 
 external mprotect_ro : Address.t -> int -> (unit, int) result

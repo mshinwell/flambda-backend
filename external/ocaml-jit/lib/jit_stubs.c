@@ -152,6 +152,48 @@ static void *alloc_page_aligned_statically(size_t page_size, size_t size) {
   return result;
 }
 
+/* True if the build uses an allocation backend that supports unloading the
+ * JIT'd buffer when its CU becomes unreachable. The unload path calls [free]
+ * on the buffer (see [jit_unit_on_unload]), which is well-defined only when
+ * the buffer was returned by [aligned_alloc].
+ *
+ * Disabled on three Linux configurations:
+ *   - [musl]: [jit_memalign] uses a static [.bss] arena (musl's malloc mixes
+ *     [sbrk] and [mmap], breaking relocations), so [free] would corrupt
+ *     unrelated process state.
+ *   - AddressSanitizer: [jit_memalign] uses [sbrk] (because ASan's
+ *     intercepted [aligned_alloc] returns high addresses out of relocation
+ *     range), and ASan reports the resulting [free] as a SEGV.
+ *   - TCMalloc: same [sbrk] path, and TCMalloc's [free] does not know about
+ *     pointers returned from [sbrk].
+ *
+ * On macOS, ASan-instrumented [aligned_alloc] is paired with an ASan-aware
+ * [free], so unloading remains supported.
+ *
+ * When unloading is disabled, [Eval.eval] still works: the unit is compiled
+ * as non-unloadable (black-headered data, no Code_block scaffolding), and
+ * the buffer is leaked for the life of the process. */
+CAMLprim value jit_supports_unloading(value unit) {
+  CAMLparam1(unit);
+  int supports;
+  if (MUSL) {
+    supports = 0;
+  } else if (ASAN_IS_ENABLED
+#ifdef __linux__
+             || TCMalloc_MallocExtension_MallocIsTCMalloc()
+#endif
+  ) {
+#if defined(__APPLE__)
+    supports = 1;
+#else
+    supports = 0;
+#endif
+  } else {
+    supports = 1;
+  }
+  CAMLreturn(Val_bool(supports));
+}
+
 CAMLprim value jit_memalign(value section_size) {
   CAMLparam1 (section_size);
   CAMLlocal1 (result);
@@ -343,12 +385,9 @@ static void jit_unit_on_unload(struct caml_unloadable_unit *u) {
    * Frees the per-unit metadata arrays, restores the JIT buffer to RW so
    * [free] is well-defined, and releases the buffer back to the allocator.
    *
-   * Note on memory reclamation: depending on how the buffer was obtained
-   * (see [jit_memalign]: [aligned_alloc], static buffer, or [sbrk]) the
-   * [free] below may or may not actually return pages to the OS. The
-   * common-path [aligned_alloc] case does; the static and [sbrk] paths
-   * leak. In all cases the runtime drops its references, so a subsequent
-   * cycle will not visit this unit. */
+   * This path only runs when unloading is supported (see
+   * [jit_supports_unloading]); under that gate [jit_memalign] always uses
+   * [aligned_alloc], so [free] here is well-defined. */
   struct jit_unit_loader_data *ld =
       (struct jit_unit_loader_data *)u->loader_data;
 
