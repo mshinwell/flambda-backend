@@ -4296,26 +4296,25 @@ let flush_unloadable_data_block_symbols () =
 let unloadable_data_blocks_symbol_basename = "unloadable_data_blocks"
 
 (* CU-appropriate emit: in unloadable mode, [Global] symbols get a white
-   (UNMARKED) header and are registered for end-of-cycle normalization;
-   [Local] symbols get a black (NOT_MARKABLE) header and are never tracked.
-   Outside unloadable mode, every symbol gets a black header.
+   (UNMARKED) header and are registered for end-of-cycle normalization; [Local]
+   symbols get a black (NOT_MARKABLE) header and are never tracked. Outside
+   unloadable mode, every symbol gets a black header.
 
-   Why the split: white-headered blocks must be re-marked to MARKED at the
-   end of each surviving cycle so the imminent color rotation maps them to
-   UNMARKED for the next cycle. A white-headered block that is *not* tracked
-   would have its bits left at zero, which the next cycle interprets as
-   GARBAGE — any heap pointer reaching it would then trip
-   [!Has_status_hd(hd, GARBAGE)] in the debug runtime (or read evicted bits
-   in release).
+   Why the split: white-headered blocks must be re-marked to MARKED at the end
+   of each surviving cycle so the imminent color rotation maps them to UNMARKED
+   for the next cycle. A white-headered block that is *not* tracked would have
+   its bits left at zero, which the next cycle interprets as GARBAGE — any heap
+   pointer reaching it would then trip [!Has_status_hd(hd, GARBAGE)] in the
+   debug runtime (or read evicted bits in release).
 
-   We can't put [Local] symbols in the per-unit [unloadable_data_blocks]
-   array because Mach-O cannot relocate [Csymbol_address] entries to a Local
-   symbol cross-section. So [Local] symbols use a black header, which the
-   mark scan treats as NOT_MARKABLE (skipped, never asserted on). This is
-   safe because Local symbols are CU-private — no heap pointer from another
-   CU can reach them, and within the unit any Global ancestor block whose
-   fields reference a Local block IS tracked, so the unit cannot be unloaded
-   while a Local block is still transitively heap-reachable. *)
+   We can't put [Local] symbols in the per-unit [unloadable_data_blocks] array
+   because Mach-O cannot relocate [Csymbol_address] entries to a Local symbol
+   cross-section. So [Local] symbols use a black header, which the mark scan
+   treats as NOT_MARKABLE (skipped, never asserted on). This is safe because
+   Local symbols are CU-private — no heap pointer from another CU can reach
+   them, and within the unit any Global ancestor block whose fields reference a
+   Local block IS tracked, so the unit cannot be unloaded while a Local block is
+   still transitively heap-reachable. *)
 let emit_unit_block symb white_header cont =
   let header =
     if !Clflags.unit_is_unloadable

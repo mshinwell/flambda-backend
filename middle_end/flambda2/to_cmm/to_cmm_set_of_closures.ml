@@ -689,22 +689,20 @@ let let_static_set_of_closures0 env res closure_symbols
   let block =
     match l with
     | _ :: _ ->
-      (* In unloadable mode, [Global] closure symbols get a white header and
-         are registered in the unit's [data_blocks] list so the GC can
-         normalize and re-mark them at end of cycle. [Local] closure symbols
-         get a black header (NOT_MARKABLE) and are not tracked: we cannot
-         relocate [Csymbol_address] entries in the side array to a Local
-         symbol cross-section on Mach-O, and a Local block is by definition
-         only reachable from a tracked Global block in the same unit. The
-         non-unloadable case is unchanged: [unit_closure_header] already
-         returns a black header. See [Cmm_helpers.emit_unit_block] for the
-         analogous treatment of non-closure static blocks. *)
+      (* In unloadable mode, [Global] closure symbols get a white header and are
+         registered in the unit's [data_blocks] list so the GC can normalize and
+         re-mark them at end of cycle. [Local] closure symbols get a black
+         header (NOT_MARKABLE) and are not tracked: we cannot relocate
+         [Csymbol_address] entries in the side array to a Local symbol
+         cross-section on Mach-O, and a Local block is by definition only
+         reachable from a tracked Global block in the same unit. The
+         non-unloadable case is unchanged: [unit_closure_header] already returns
+         a black header. See [Cmm_helpers.emit_unit_block] for the analogous
+         treatment of non-closure static blocks. *)
       let header_bits =
         if !Clflags.unit_is_unloadable
         then
-          match
-            (closure_symbol_for_updates : Cmm.symbol).sym_global
-          with
+          match (closure_symbol_for_updates : Cmm.symbol).sym_global with
           | Global ->
             C.register_unloadable_data_block_symbol closure_symbol_for_updates;
             C.unit_closure_header length
