@@ -63,15 +63,22 @@ static void ensure_mutex_initialized(void) {
 }
 
 /* Normalize a static block's header color bits to the current cycle's
- * [UNMARKED] interpretation. Compiled headers use bit-value 0 (white) which
- * is only a valid UNMARKED value for cycle 0; later cycles have a different
- * bit-value for UNMARKED owing to the tri-color rotation. Without this
- * patch, blocks loaded mid-program would be misinterpreted as GARBAGE or
- * (after another rotation) MARKED, breaking the mark scan. */
+ * allocation status. When marking has not started, the block becomes
+ * UNMARKED so the next mark scan can darken it. When marking is in
+ * progress (caml_marking_started()), the block becomes MARKED — i.e.
+ * "born alive in this cycle". This matches the convention applied by the
+ * shared-heap allocator (caml_allocation_status) and is required for
+ * correctness: the curry-stub closure (or any other heap block) created
+ * after this unit is registered may be allocated MARKED if marking is in
+ * progress, in which case the marker will not scan its fields. If our
+ * static block were UNMARKED in such a cycle, no path would darken it
+ * (the curry stub holding the only pointer is allocated MARKED and
+ * therefore skipped by the mark scan). Born-marked here means the unit
+ * survives the current cycle; the post-rotation cycle reverts it to
+ * UNMARKED, after which standard marking takes over. */
 static void normalize_block_color(value v) {
   header_t hd = Hd_val(v);
-  Hd_val(v); /* re-assert read; assignment below uses Hp_val. */
-  *Hp_val(v) = With_status_hd(hd, caml_global_heap_state.UNMARKED);
+  *Hp_val(v) = With_status_hd(hd, caml_allocation_status());
 }
 
 void caml_register_unloadable_unit(struct caml_unloadable_unit *u) {
@@ -193,6 +200,10 @@ void caml_unloadable_check_and_unload_dead(void) {
     }
     for (uintnat i = 0; i < u->num_data_blocks && !live; i++) {
       if (Has_status_val(u->data_blocks[i], marked)) live = 1;
+    }
+    if (unloadable_debug()) {
+      fprintf(stderr, "[unloadable] check unit=%p live=%d\n",
+              (void*)u, live);
     }
     if (!live) {
       *link = u->next;
