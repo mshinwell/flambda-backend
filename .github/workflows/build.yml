@@ -209,7 +209,7 @@ jobs:
             # to [free]; see [jit_supports_unloading]). The tests below
             # explicitly assert that unloading happens, which it doesn't on
             # musl, so skip them here.
-            disable_testcases: 'testsuite/tests/quotation/eval/eval_test_unload.ml testsuite/tests/quotation/eval/unload_smoke.ml testsuite/tests/quotation/eval/unload_reachability.ml'
+            disable_testcases: 'testsuite/tests/quotation/eval/eval_test_unload.ml testsuite/tests/quotation/eval/unload_smoke.ml testsuite/tests/quotation/eval/unload_reachability.ml testsuite/tests/quotation/eval/unload_multi_arg.ml testsuite/tests/quotation/eval/unload_partial_app.ml testsuite/tests/quotation/eval/unload_tupled.ml testsuite/tests/quotation/eval/unload_mutual_rec.ml testsuite/tests/quotation/eval/unload_value_slots.ml testsuite/tests/quotation/eval/unload_many_cycles.ml testsuite/tests/quotation/eval/unload_concurrent_units.ml testsuite/tests/quotation/eval/unload_exceptions.ml testsuite/tests/quotation/eval/unload_returned_data.ml testsuite/tests/quotation/eval/unload_inter_unit.ml'
 
           # Here and below, we put 'reaper=1,_' instead of '_,reaper=1', as
           # some tests rely on explicitely controlling whether the reaper is
