@@ -191,40 +191,28 @@ Caml_inline void caml_darken_code_block_for_entry(void *state, value entry) {
  * (size 3). The curry_ptr in a size-3 slot points to a non-unloadable
  * runtime stub and never needs back-pointer darkening.
  *
- * To distinguish slot sizes we look for the following infix header. An
- * infix header at word [j] of a closure has [Tag_hd == Infix_tag] AND
- * [Wosize_hd == j] (the offset is stored in the wosize field, see
- * [Infix_offset_hd]). The conjunction is needed because a closinfo with
- * [delta = 124] has the same low byte as [Infix_tag]. */
-Caml_inline int caml_is_infix_header_at(value closure, uintnat j) {
-  value w = Field(closure, j);
-  return Tag_hd(w) == Infix_tag && Wosize_hd(w) == j;
-}
-
+ * Slot size is decided by [Flambda 2]'s [closure_code_pointers]:
+ * [Full_application_only] (size 2) for [Curried] with 0 or 1 param;
+ * [Full_and_partial_application] (size 3) otherwise (curried with >= 2
+ * params, or tupled). The closinfo arity field encodes this:
+ * [closure_info'] writes [List.length params] for curried (a non-negative
+ * int), and [-List.length params] for tupled (negative). We read
+ * [Arity_closinfo] (signed) to disambiguate: arity in [{0, 1}] => size 2;
+ * arity > 1 or arity < 0 => size 3. We cannot rely on a following infix
+ * header because a single-function closure with a non-scannable env (e.g.
+ * a captured int) has no infix header after [F_0], yet has
+ * [env_start - slot_start > 2] because the non-scannable env words are
+ * part of the prefix. */
 Caml_inline void caml_darken_unloadable_code_blocks_in_closure(
     void *state, value closure) {
   value closinfo_0 = Closinfo_val(closure);
   uintnat env_start = Start_env_closinfo(closinfo_0);
   uintnat slot_start = 0;
   while (slot_start + 2 <= env_start) {
-    uintnat slot_size;
-    if (slot_start + 3 <= env_start
-        && caml_is_infix_header_at(closure, slot_start + 2)) {
-      slot_size = 2;
-    } else if (slot_start + 4 <= env_start
-               && caml_is_infix_header_at(closure, slot_start + 3)) {
-      slot_size = 3;
-    } else {
-      /* Last slot, no following infix header; size deduced from remaining
-       * prefix words. */
-      uintnat remaining = env_start - slot_start;
-      if (remaining == 2 || remaining == 3) {
-        slot_size = remaining;
-      } else {
-        break;
-      }
-    }
     value closinfo = Field(closure, slot_start + 1);
+    intnat arity = Arity_closinfo(closinfo);
+    uintnat slot_size = (arity > 1 || arity < 0) ? 3 : 2;
+    if (slot_start + slot_size > env_start) break;
     if (Unloadable_closinfo(closinfo)) {
       uintnat code_offset =
         (slot_size == 2) ? slot_start : slot_start + 2;
