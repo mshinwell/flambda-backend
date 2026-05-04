@@ -8,13 +8,12 @@
 
 #syntax quotations on
 
-(* Closures capturing floats. Floats are stored as double-words (not as
-   tagged ints), so the compiler may either box them on the heap (a
-   Double_tag block reachable as a scannable env field) or unbox them
-   into the closure's non-scannable env. Either way, the runtime must
-   keep the eval'd unit alive so long as the closure is held — and the
-   closure-slot scan must not misclassify the slot when non-scannable
-   float words live in the prefix. *)
+(* Closures capturing boxed floats. A boxed [float] is a pointer to a
+   [Double_tag] block, so it sits in the closure's scannable env. Mark
+   propagation has to follow the closure's value-slot field to that
+   [Double_tag] block. (The unboxed-numerics case — [float#], [int64#]
+   etc. inlined into the closure's non-scannable prefix — is exercised
+   in [unload_unboxed_nums.ml].) *)
 
 let report label =
   let r = Eval.unloadable_units_registered_total () in
