@@ -348,6 +348,11 @@ let mk_function_layout f =
     Printf.sprintf " Order of functions in the generated assembly (default: %s)"
       default )
 
+let mk_name_mangling_scheme f =
+  ( "-name-mangling-scheme",
+    Arg.Symbol ([ "flat"; "structured" ], f),
+    " Override the default name mangling scheme set at configure time" )
+
 let mk_disable_builtin_check f =
   ( "-disable-builtin-check",
     Arg.Unit f,
@@ -1002,6 +1007,26 @@ let mk_no_flambda2_speculative_inlining_only_if_arguments_useful f =
          Flambda2.Inlining.Default.speculative_inlining_only_if_arguments_useful)
   )
 
+let mk_flambda2_speculative_inlining_track_lifted_constants f =
+  ( "-flambda2-speculative-inlining-track-lifted-constants",
+    Arg.Unit f,
+    Printf.sprintf
+      " Track the size of lifted constants when doing speculative inlining%s\n\
+      \    (Flambda 2 only)"
+      (format_default
+         Flambda2.Inlining.Default.speculative_inlining_track_lifted_constants)
+  )
+
+let mk_no_flambda2_speculative_inlining_track_lifted_constants f =
+  ( "-no-flambda2-speculative-inlining-track-lifted-constants",
+    Arg.Unit f,
+    Printf.sprintf
+      " Do not track the size of lifted constants when doing speculative\n\
+      \    inlining%s (Flambda 2 only)"
+      (format_not_default
+         Flambda2.Inlining.Default.speculative_inlining_track_lifted_constants)
+  )
+
 let mk_flambda2_inlining_report_bin f =
   ( "-flambda2-inlining-report-bin",
     Arg.Unit f,
@@ -1269,6 +1294,7 @@ module type Oxcaml_options = sig
   val no_zero_alloc_checker_details_extra : unit -> unit
   val zero_alloc_checker_join : int -> unit
   val function_layout : string -> unit
+  val name_mangling_scheme : string -> unit
   val disable_builtin_check : unit -> unit
   val disable_poll_insertion : unit -> unit
   val enable_poll_insertion : unit -> unit
@@ -1360,6 +1386,8 @@ module type Oxcaml_options = sig
   val flambda2_inline_threshold : string -> unit
   val flambda2_speculative_inlining_only_if_arguments_useful : unit -> unit
   val no_flambda2_speculative_inlining_only_if_arguments_useful : unit -> unit
+  val flambda2_speculative_inlining_track_lifted_constants : unit -> unit
+  val no_flambda2_speculative_inlining_track_lifted_constants : unit -> unit
   val flambda2_inlining_report_bin : unit -> unit
   val flambda2_unicode : unit -> unit
   val flambda2_kind_checks : unit -> unit
@@ -1448,6 +1476,7 @@ module Make_oxcaml_options (F : Oxcaml_options) = struct
         F.no_zero_alloc_checker_details_extra;
       mk_zero_alloc_checker_join F.zero_alloc_checker_join;
       mk_function_layout F.function_layout;
+      mk_name_mangling_scheme F.name_mangling_scheme;
       mk_disable_builtin_check F.disable_builtin_check;
       mk_disable_poll_insertion F.disable_poll_insertion;
       mk_enable_poll_insertion F.enable_poll_insertion;
@@ -1566,6 +1595,10 @@ module Make_oxcaml_options (F : Oxcaml_options) = struct
         F.flambda2_speculative_inlining_only_if_arguments_useful;
       mk_no_flambda2_speculative_inlining_only_if_arguments_useful
         F.no_flambda2_speculative_inlining_only_if_arguments_useful;
+      mk_flambda2_speculative_inlining_track_lifted_constants
+        F.flambda2_speculative_inlining_track_lifted_constants;
+      mk_no_flambda2_speculative_inlining_track_lifted_constants
+        F.no_flambda2_speculative_inlining_track_lifted_constants;
       mk_flambda2_inlining_report_bin F.flambda2_inlining_report_bin;
       mk_flambda2_unicode F.flambda2_unicode;
       mk_flambda2_kind_checks F.flambda2_kind_checks;
@@ -1726,6 +1759,17 @@ module Oxcaml_options_impl = struct
     match Oxcaml_flags.Function_layout.of_string s with
     | None -> () (* this should not occur as we use Arg.Symbol *)
     | Some layout -> Oxcaml_flags.function_layout := layout
+
+  let name_mangling_scheme s =
+    let scheme : Config.name_mangling_scheme option =
+      match s with
+      | "flat" -> Some Flat
+      | "structured" -> Some Structured
+      | _ -> None (* this should not occur as we use Arg.Symbol *)
+    in
+    match scheme with
+    | Some scheme -> Compilation_unit.set_name_mangling_scheme_override scheme
+    | None -> ()
 
   let disable_builtin_check = set' Oxcaml_flags.disable_builtin_check
   let disable_poll_insertion = set' Oxcaml_flags.disable_poll_insertion
@@ -1983,6 +2027,12 @@ module Oxcaml_options_impl = struct
 
   let no_flambda2_speculative_inlining_only_if_arguments_useful =
     clear' Flambda2.Inlining.speculative_inlining_only_if_arguments_useful
+
+  let flambda2_speculative_inlining_track_lifted_constants =
+    set' Flambda2.Inlining.speculative_inlining_track_lifted_constants
+
+  let no_flambda2_speculative_inlining_track_lifted_constants =
+    clear' Flambda2.Inlining.speculative_inlining_track_lifted_constants
 
   let flambda2_inlining_report_bin = set' Flambda2.Inlining.report_bin
   let flambda2_unicode = set Flambda2.unicode
@@ -2256,6 +2306,20 @@ module Extra_params = struct
         | None ->
             raise (Arg.Bad (Printf.sprintf "Unexpected value %s for %s" v name))
         )
+    | "name-mangling-scheme" -> (
+        let scheme : Config.name_mangling_scheme option =
+          match v with
+          | "flat" -> Some Flat
+          | "structured" -> Some Structured
+          | _ -> None
+        in
+        match scheme with
+        | Some scheme ->
+            Compilation_unit.set_name_mangling_scheme_override scheme;
+            true
+        | None ->
+            raise (Arg.Bad (Printf.sprintf "Unexpected value %s for %s" v name))
+        )
     | "builtin-check" -> set' Oxcaml_flags.disable_builtin_check
     | "poll-insertion" -> set' Oxcaml_flags.disable_poll_insertion
     | "symbol-visibility-protected" ->
@@ -2421,6 +2485,8 @@ module Extra_params = struct
         true
     | "flambda2-speculative-inlining-only-if-arguments-useful" ->
         set' Flambda2.Inlining.speculative_inlining_only_if_arguments_useful
+    | "flambda2-speculative-inlining-track-lifted-constants" ->
+        set' Flambda2.Inlining.speculative_inlining_track_lifted_constants
     | "flambda2-inlining-report-bin" -> set' Flambda2.Inlining.report_bin
     | "flambda2-expert-fallback-inlining-heuristic" ->
         set Flambda2.Expert.fallback_inlining_heuristic
