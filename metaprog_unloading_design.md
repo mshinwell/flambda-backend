@@ -501,27 +501,10 @@ finalised under STW:
 
 ## H. Open issues
 
-1. **GC mid-call from inside the eval'd unit**: covered by
-   `unload_signal_gc.ml`. The eval'd worker calls a host callback
-   that runs `Gc.compact ()` while the worker frame is still on the
-   stack; F.2 looks up the frame's RA in the code-fragment table and
-   darkens the unit's `Code_block`. Surfaced (and fixed) the NULL
-   slot-pointer bug in `caml_visit_code_block_for_entry`: minor GC
-   `oldify_one` requires a writable slot, so the helper now passes a
-   stack local.
-2. **C callbacks**: covered by `unload_c_callback.ml`. A C
-   trampoline calls the eval'd worker via `caml_callback3`; the
-   eval'd code calls back into a host OCaml function that runs
-   `Gc.compact ()`. The OCaml stack contains a C-OCaml-C-OCaml
-   boundary; the upper OCaml chunk (containing the eval'd worker
-   frame) is still walked, so F.2 fires correctly. (The signal-
-   handler stack walk in `signals_nat.c` shares the same
-   `caml_scan_stack`, so it should inherit the same behaviour;
-   no separate test yet.)
-3. **Reset cost**: walking every block in every unloadable unit at
+1. **Reset cost**: walking every block in every unloadable unit at
    end of cycle to rewrite marks is O(total unloadable symbols).
    Bounded and infrequent (major GC). Measure if it shows up.
-4. **`code_blocks` deduplication on Mach-O**: when the assembler
+2. **`code_blocks` deduplication on Mach-O**: when the assembler
    emits `D.symbol` for a name that is both an exported entry and a
    joint label (the `_code_block` site in
    `backend/{amd64,arm64}/emit.ml`), Mach-O produces both a global
@@ -532,7 +515,7 @@ finalised under STW:
    zero-length range per function. ELF (Linux x86-64 / arm64) emits
    only one symbol per name, so this issue is Mach-O-specific.
    Harmless but wasteful (a few words per function on macOS).
-5. **Dynlink applicability**: same machinery should serve Dynlink
+3. **Dynlink applicability**: same machinery should serve Dynlink
    units that opt in to unloadability. The `is_unloadable` flag in
    `Code_metadata` is the natural opt-in; the runtime registration
    path would mirror `caml_register_unloadable_unit`.
