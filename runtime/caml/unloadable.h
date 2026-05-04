@@ -227,12 +227,16 @@ Caml_inline void caml_darken_unloadable_code_blocks_in_closure(
  * [scanning_action]. Used by F.2 / F.3 in the stack-walker, which is shared
  * across mark, oldify, and compactor scans. For non-mark scans the action's
  * effect on a static [Code_block] is benign (oldify is a no-op for
- * out-of-heap blocks; the compactor does not move static data). */
+ * out-of-heap blocks; the compactor does not move static data).
+ *
+ * The slot pointer is to a local because [oldify_one] writes [*p = v]
+ * unconditionally for non-young values; passing NULL would crash a minor
+ * GC that walks an unloadable frame. */
 #include "roots.h"
 Caml_inline void caml_visit_code_block_for_entry(
     scanning_action f, void *fdata, value entry) {
   value code_block = *((value *)entry - 1);
-  f(fdata, code_block, NULL);
+  f(fdata, code_block, &code_block);
 }
 
 /* Walk the parallel [code_ptr_live_ofs] array of a frame descriptor (F.3),
