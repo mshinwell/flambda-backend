@@ -21,6 +21,19 @@ type t
 (** Free names for cmm expressions *)
 type free_vars = Backend_var.Set.t
 
+(** Delayed symbol initializations *)
+module Symbol_inits : sig
+  type t
+
+  val empty : t
+
+  val merge : t -> t -> t
+
+  val is_empty : t -> bool
+
+  val print : Format.formatter -> t -> unit
+end
+
 (** A cmm expression along with extra information *)
 type expr_with_info =
   { cmm : Cmm.expression;
@@ -44,8 +57,8 @@ type extra_info =
           expression. This allows to obtain the Cmm expression as it was before
           untagging. *)
 
-(** Record of all primitive translation functions, to avoid a cyclic
-    dependency. *)
+(** Record of all primitive translation functions, to avoid a cyclic dependency.
+*)
 type prim_res = extra_info option * To_cmm_result.t * Cmm.expression
 
 type ('env, 'prim, 'arity) prim_helper =
@@ -68,6 +81,15 @@ type 'env trans_prim =
         Flambda_primitive.ternary_primitive,
         Cmm.expression -> Cmm.expression -> Cmm.expression -> prim_res )
       prim_helper;
+    quaternary :
+      ( 'env,
+        Flambda_primitive.quaternary_primitive,
+        Cmm.expression ->
+        Cmm.expression ->
+        Cmm.expression ->
+        Cmm.expression ->
+        prim_res )
+      prim_helper;
     variadic :
       ( 'env,
         Flambda_primitive.variadic_primitive,
@@ -81,6 +103,7 @@ val create :
   Exported_code.t ->
   trans_prim:t trans_prim ->
   return_continuation:Continuation.t ->
+  return_continuation_arity:Cmm.machtype list ->
   exn_continuation:Continuation.t ->
   t
 
@@ -90,26 +113,26 @@ val create :
 val enter_function_body :
   t ->
   return_continuation:Continuation.t ->
+  return_continuation_arity:Cmm.machtype list ->
   exn_continuation:Continuation.t ->
   t
 
 (** {2 Debuginfo} *)
 
-(** Add the inlined debuginfo from the env to the debuginfo provided,
-    in order to get the correct debuginfo to attach. *)
+(** Add the inlined debuginfo from the env to the debuginfo provided, in order
+    to get the correct debuginfo to attach. *)
 val add_inlined_debuginfo : t -> Debuginfo.t -> Debuginfo.t
 
-(** Adjust the inlined debuginfo in the env to represent the fact
-    that we entered the inlined body of a function. *)
-val enter_inlined_apply : t -> Debuginfo.t -> t
+(** Adjust the inlined debuginfo in the env to represent the fact that we
+    entered the inlined body of a function. *)
+val enter_inlined_apply : t -> Inlined_debuginfo.t -> t
 
 (** Set the inlined debuginfo. *)
-val set_inlined_debuginfo : t -> Debuginfo.t -> t
+val set_inlined_debuginfo : t -> Inlined_debuginfo.t -> t
+
+val currently_in_inlined_body : t -> bool
 
 (** {2 Continuations} *)
-
-(** Returns the return continuation of the environment. *)
-val return_continuation : t -> Continuation.t
 
 (** Returns the exception continuation of the environment. *)
 val exn_continuation : t -> Continuation.t
@@ -132,11 +155,13 @@ val exported_offsets : t -> Exported_offsets.t
     the new environment and the created variable. Will produce a fatal error if
     the given variable is already bound. *)
 val create_bound_parameter :
-  t -> Variable.t -> t * Backend_var.With_provenance.t
+  t -> Variable.t * Flambda_debug_uid.t -> t * Backend_var.With_provenance.t
 
 (** Same as {!create_variable} but for a list of variables. *)
 val create_bound_parameters :
-  t -> Variable.t list -> t * Backend_var.With_provenance.t list
+  t ->
+  (Variable.t * Flambda_debug_uid.t) list ->
+  t * Backend_var.With_provenance.t list
 
 (** {2 Delayed let-bindings}
 
@@ -154,7 +179,7 @@ val create_bound_parameters :
     according to the effects and coeffects of their defining expressions:
 
     - bindings whose defining expressions are _pure_, that is to say have
-    neither effects nor coeffects;
+      neither effects nor coeffects;
 
     - bindings that have effects and/or coeffects.
 
@@ -232,7 +257,7 @@ val bind_variable_to_primitive :
   ?extra:extra_info ->
   t ->
   To_cmm_result.t ->
-  Variable.t ->
+  Bound_var.t ->
   inline:'a inline ->
   defining_expr:'a bound_expr ->
   effects_and_coeffects_of_defining_expr:Effects_and_coeffects.t ->
@@ -244,7 +269,7 @@ val bind_variable :
   ?extra:extra_info ->
   t ->
   To_cmm_result.t ->
-  Variable.t ->
+  Bound_var.t ->
   defining_expr:Cmm.expression ->
   free_vars_of_defining_expr:free_vars ->
   num_normal_occurrences_of_bound_vars:Num_occurrences.t Variable.Map.t ->
@@ -254,10 +279,12 @@ val bind_variable :
 val add_alias :
   t ->
   To_cmm_result.t ->
-  var:Variable.t ->
+  var:Bound_var.t ->
   alias_of:Variable.t ->
   num_normal_occurrences_of_bound_vars:Num_occurrences.t Variable.Map.t ->
   t * To_cmm_result.t
+
+val add_symbol_init : t -> Backend_var.t -> Cmm.expression -> t
 
 (** Try and inline an Flambda variable using the delayed let-bindings. *)
 val inline_variable :
@@ -278,9 +305,19 @@ val flush_delayed_lets :
   mode:flush_mode ->
   t ->
   To_cmm_result.t ->
-  (Cmm.expression -> free_vars -> Cmm.expression * free_vars)
+  (Cmm.expression ->
+  free_vars ->
+  Symbol_inits.t ->
+  Cmm.expression * free_vars * Symbol_inits.t)
   * t
   * To_cmm_result.t
+
+val place_symbol_inits :
+  params:(Backend_var.With_provenance.t * _) list ->
+  Cmm.expression ->
+  free_vars ->
+  Symbol_inits.t ->
+  Cmm.expression * free_vars * Symbol_inits.t
 
 (** Fetch the extra info for a Flambda variable (if any), specified as a
     [Simple]. *)
@@ -288,19 +325,26 @@ val extra_info : t -> Simple.t -> extra_info option
 
 (** {2 Continuation bindings} *)
 
+(** Param types: some parameters might be skipped: for instance parameters of
+    kind [Rec_info] are meant to be removed during to_cmm translation. *)
+type 'a param_type =
+  | Param of 'a
+  | Skip_param
+
 (** Translation information for continuations. A continuation may either be
     translated as a static jump to a Cmm continuation (represented as a Cmm
     label), or inlined at any unique use site. *)
 type cont = private
+  | Return of { param_types : Cmm.machtype list }
   | Jump of
       { cont : Lambda.static_label;
-        param_types : Cmm.machtype list
+        param_types : Cmm.machtype param_type list
       }
   | Inline of
       { handler_params : Bound_parameters.t;
         handler_params_occurrences : Num_occurrences.t Variable.Map.t;
         handler_body : Flambda.Expr.t;
-        handler_body_inlined_debuginfo : Debuginfo.t
+        handler_body_inlined_debuginfo : Inlined_debuginfo.t
       }
 
 (** Record that the given continuation should be compiled to a jump, creating a
@@ -308,7 +352,7 @@ type cont = private
 val add_jump_cont :
   t ->
   Continuation.t ->
-  param_types:Cmm.machtype list ->
+  param_types:Cmm.machtype param_type list ->
   Lambda.static_label * t
 
 (** Record that the given continuation should be inlined. *)
@@ -320,21 +364,12 @@ val add_inline_cont :
   handler_body:Flambda.Expr.t ->
   t
 
-(** Register the given continuation as an exception handler and set up the extra
-    Cmm mutable variables needed for any extra arguments. *)
-val add_exn_handler :
-  t ->
-  Continuation.t ->
-  Flambda_arity.t ->
-  t * (Backend_var.t * Flambda_kind.With_subkind.t) list
+(** Register the given continuation as an exception handler. *)
+val add_exn_handler : t -> Continuation.t -> [`Unarized] Flambda_arity.t -> t
 
 (** Return whether the given continuation has been registered as an exception
     handler. *)
 val is_exn_handler : t -> Continuation.t -> bool
-
-(** Return the Cmm mutable variables associated with the given exception
-    handler. *)
-val get_exn_extra_args : t -> Continuation.t -> Backend_var.t list
 
 (** Return the binding for a given continuation, describing whether it is to be
     compiled as a jump or inlined, etc. Produces a fatal error if given an
@@ -345,3 +380,7 @@ val get_continuation : t -> Continuation.t -> cont
     fatal error if given an unbound continuation, or a continuation that was
     registered (using [add_inline_cont]) to be inlined. *)
 val get_cmm_continuation : t -> Continuation.t -> Lambda.static_label
+
+(** print function *)
+val print_param_type :
+  (Format.formatter -> 'a -> unit) -> Format.formatter -> 'a param_type -> unit

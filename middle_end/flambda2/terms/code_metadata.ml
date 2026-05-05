@@ -17,16 +17,24 @@
 type t =
   { code_id : Code_id.t;
     newer_version_of : Code_id.t option;
-    params_arity : Flambda_arity.t;
-    num_trailing_local_params : int;
-    result_arity : Flambda_arity.t;
+    params_arity : [`Complex] Flambda_arity.t;
+    param_modes : Alloc_mode.For_types.t list;
+    first_complex_local_param : int;
+    (* Note: first_complex_local_param cannot be computed from param_modes,
+       because it might be 0 if the closure itself has to be allocated locally,
+       for instance as a result of a partial application. *)
+    result_arity : [`Unarized] Flambda_arity.t;
     result_types : Result_types.t Or_unknown_or_bottom.t;
-    contains_no_escaping_local_allocs : bool;
+    result_mode : Lambda.locality_mode;
     stub : bool;
     inline : Inline_attribute.t;
-    check : Check_attribute.t;
+    zero_alloc_attribute : Zero_alloc_attribute.t;
     poll_attribute : Poll_attribute.t;
+    regalloc_attribute : Regalloc_attribute.t;
+    regalloc_param_attribute : Regalloc_param_attribute.t;
+    cold : bool;
     is_a_functor : bool;
+    is_opaque : bool;
     recursive : Recursive.t;
     cost_metrics : Cost_metrics.t;
     inlining_arguments : Inlining_arguments.t;
@@ -56,28 +64,33 @@ module Code_metadata_accessors (X : Metadata_view_type) = struct
 
   let params_arity t = (metadata t).params_arity
 
-  let num_leading_heap_params t =
-    let { params_arity; num_trailing_local_params; _ } = metadata t in
-    let n = Flambda_arity.cardinal params_arity - num_trailing_local_params in
-    assert (n >= 0);
-    (* see [create] *)
-    n
+  let param_modes t = (metadata t).param_modes
 
-  let num_trailing_local_params t = (metadata t).num_trailing_local_params
+  let first_complex_local_param t = (metadata t).first_complex_local_param
 
   let result_arity t = (metadata t).result_arity
 
   let result_types t = (metadata t).result_types
 
+  let result_mode t = (metadata t).result_mode
+
   let stub t = (metadata t).stub
 
   let inline t = (metadata t).inline
 
-  let check t = (metadata t).check
+  let zero_alloc_attribute t = (metadata t).zero_alloc_attribute
 
   let poll_attribute t = (metadata t).poll_attribute
 
+  let regalloc_attribute t = (metadata t).regalloc_attribute
+
+  let regalloc_param_attribute t = (metadata t).regalloc_param_attribute
+
+  let cold t = (metadata t).cold
+
   let is_a_functor t = (metadata t).is_a_functor
+
+  let is_opaque t = (metadata t).is_opaque
 
   let recursive t = (metadata t).recursive
 
@@ -93,14 +106,17 @@ module Code_metadata_accessors (X : Metadata_view_type) = struct
 
   let inlining_decision t = (metadata t).inlining_decision
 
-  let contains_no_escaping_local_allocs t =
-    (metadata t).contains_no_escaping_local_allocs
-
   let absolute_history t = (metadata t).absolute_history
 
   let relative_history t = (metadata t).relative_history
 
   let loopify t = (metadata t).loopify
+
+  let function_slot_size t =
+    let metadata = metadata t in
+    let is_tupled = metadata.is_tupled in
+    let arity = Flambda_arity.num_params metadata.params_arity in
+    if (arity = 0 || arity = 1) && not is_tupled then 2 else 3
 end
 
 module type Code_metadata_accessors_result_type = sig
@@ -124,16 +140,21 @@ include Code_metadata_accessors [@inlined hint] (Metadata_view)
 type 'a create_type =
   Code_id.t ->
   newer_version_of:Code_id.t option ->
-  params_arity:Flambda_arity.t ->
-  num_trailing_local_params:int ->
-  result_arity:Flambda_arity.t ->
+  params_arity:[`Complex] Flambda_arity.t ->
+  param_modes:Alloc_mode.For_types.t list ->
+  first_complex_local_param:int ->
+  result_arity:[`Unarized] Flambda_arity.t ->
   result_types:Result_types.t Or_unknown_or_bottom.t ->
-  contains_no_escaping_local_allocs:bool ->
+  result_mode:Lambda.locality_mode ->
   stub:bool ->
   inline:Inline_attribute.t ->
-  check:Check_attribute.t ->
+  zero_alloc_attribute:Zero_alloc_attribute.t ->
   poll_attribute:Poll_attribute.t ->
+  regalloc_attribute:Regalloc_attribute.t ->
+  regalloc_param_attribute:Regalloc_param_attribute.t ->
+  cold:bool ->
   is_a_functor:bool ->
+  is_opaque:bool ->
   recursive:Recursive.t ->
   cost_metrics:Cost_metrics.t ->
   inlining_arguments:Inlining_arguments.t ->
@@ -146,9 +167,10 @@ type 'a create_type =
   loopify:Loopify_attribute.t ->
   'a
 
-let createk k code_id ~newer_version_of ~params_arity ~num_trailing_local_params
-    ~result_arity ~result_types ~contains_no_escaping_local_allocs ~stub
-    ~(inline : Inline_attribute.t) ~check ~poll_attribute ~is_a_functor
+let createk k code_id ~newer_version_of ~params_arity ~param_modes
+    ~first_complex_local_param ~result_arity ~result_types ~result_mode ~stub
+    ~(inline : Inline_attribute.t) ~zero_alloc_attribute ~poll_attribute
+    ~regalloc_attribute ~regalloc_param_attribute ~cold ~is_a_functor ~is_opaque
     ~recursive ~cost_metrics ~inlining_arguments ~dbg ~is_tupled
     ~is_my_closure_used ~inlining_decision ~absolute_history ~relative_history
     ~loopify =
@@ -160,25 +182,41 @@ let createk k code_id ~newer_version_of ~params_arity ~num_trailing_local_params
     ()
   | true, (Always_inline | Unroll _) ->
     Misc.fatal_error "Stubs may not be annotated as [Always_inline] or [Unroll]");
-  if num_trailing_local_params < 0
-     || num_trailing_local_params > Flambda_arity.cardinal params_arity
+  if
+    first_complex_local_param < 0
+    || first_complex_local_param > Flambda_arity.num_params params_arity
   then
     Misc.fatal_errorf
-      "Illegal num_trailing_local_params=%d for params arity: %a"
-      num_trailing_local_params Flambda_arity.print params_arity;
+      "Illegal first_complex_local_param=%d for params arity: %a"
+      first_complex_local_param Flambda_arity.print params_arity;
+  if
+    List.compare_length_with param_modes
+      (Flambda_arity.cardinal_unarized params_arity)
+    <> 0
+  then
+    Misc.fatal_errorf "Parameter modes do not match arity: %a and (%a)"
+      Flambda_arity.print params_arity
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space
+         Alloc_mode.For_types.print)
+      param_modes;
   k
     { code_id;
       newer_version_of;
       params_arity;
-      num_trailing_local_params;
+      param_modes;
+      first_complex_local_param;
       result_arity;
       result_types;
-      contains_no_escaping_local_allocs;
+      result_mode;
       stub;
       inline;
-      check;
+      zero_alloc_attribute;
       poll_attribute;
+      regalloc_attribute;
+      regalloc_param_attribute;
+      cold;
       is_a_functor;
+      is_opaque;
       recursive;
       cost_metrics;
       inlining_arguments;
@@ -199,6 +237,20 @@ let with_newer_version_of newer_version_of t = { t with newer_version_of }
 
 let with_cost_metrics cost_metrics t = { t with cost_metrics }
 
+let with_is_my_closure_used is_my_closure_used t = { t with is_my_closure_used }
+
+let with_result_arity result_arity t = { t with result_arity }
+
+let with_params_arity params_arity t = { t with params_arity }
+
+let with_param_modes param_modes t = { t with param_modes }
+
+let with_is_tupled is_tupled t = { t with is_tupled }
+
+let with_result_types result_types t = { t with result_types }
+
+let with_inlining_decision inlining_decision t = { t with inlining_decision }
+
 module Option = struct
   include Option
 
@@ -210,7 +262,7 @@ end
 
 let [@ocamlformat "disable"] print_inlining_paths ppf
                                 (relative_history, absolute_history) =
-  if !Flambda_backend_flags.dump_inlining_paths then
+  if !Oxcaml_flags.dump_inlining_paths then
     Format.fprintf ppf
       "@[<hov 1>(relative_history@ %a)@]@ \
        @[<hov 1>(absolute_history@ %a)@]@ "
@@ -218,9 +270,10 @@ let [@ocamlformat "disable"] print_inlining_paths ppf
       Inlining_history.Absolute.print absolute_history
 
 let [@ocamlformat "disable"] print ppf
-       { code_id = _; newer_version_of; stub; inline; check; poll_attribute;
-         is_a_functor; params_arity; num_trailing_local_params; result_arity;
-         result_types; contains_no_escaping_local_allocs;
+       { code_id = _; newer_version_of; stub; inline; zero_alloc_attribute; poll_attribute;
+         regalloc_attribute; regalloc_param_attribute; cold; is_a_functor; is_opaque; params_arity; param_modes;
+         first_complex_local_param; result_arity;
+         result_types; result_mode;
          recursive; cost_metrics; inlining_arguments;
          dbg; is_tupled; is_my_closure_used; inlining_decision;
          absolute_history; relative_history; loopify } =
@@ -231,12 +284,17 @@ let [@ocamlformat "disable"] print ppf
       @[<hov 1>%t(inline@ %a)%t@]@ \
       @[<hov 1>%t(%a)%t@]@ \
       @[<hov 1>%t(poll_attribute@ %a)%t@]@ \
+      @[<hov 1>%t(regalloc_attribute@ %a)%t@]@ \
+      @[<hov 1>%t(regalloc_param_attribute@ %a)%t@]@ \
+      @[<hov 1>%t(cold@ %b)%t@]@ \
       @[<hov 1>%t(is_a_functor@ %b)%t@]@ \
+      @[<hov 1>%t(is_opaque@ %b)%t@]@ \
       @[<hov 1>%t(params_arity@ %t%a%t)%t@]@ \
-      @[<hov 1>(num_trailing_local_params@ %d)@]@ \
+      @[<hov 1>%t(param_modes@ %t(%a)%t)%t@]@ \
+      @[<hov 1>(first_complex_local_param@ %d)@]@ \
       @[<hov 1>%t(result_arity@ %t%a%t)%t@]@ \
       @[<hov 1>(result_types@ @[<hov 1>(%a)@])@]@ \
-      @[<hov 1>(contains_no_escaping_local_allocs@ %b)@]@ \
+      @[<hov 1>(result_mode@ %s)@]@ \
       @[<hov 1>%t(recursive@ %a)%t@]@ \
       @[<hov 1>(cost_metrics@ %a)@]@ \
       @[<hov 1>(inlining_arguments@ %a)@]@ \
@@ -259,38 +317,67 @@ let [@ocamlformat "disable"] print ppf
     else C.none)
     Inline_attribute.print inline
     Flambda_colours.pop
-    (if Check_attribute.is_default check
+    (if Zero_alloc_attribute.is_default zero_alloc_attribute
      then Flambda_colours.elide else C.none)
-    Check_attribute.print check
+    Zero_alloc_attribute.print zero_alloc_attribute
     Flambda_colours.pop
     (if Poll_attribute.is_default poll_attribute
      then Flambda_colours.elide else C.none)
     Poll_attribute.print poll_attribute
     Flambda_colours.pop
+    (if Regalloc_attribute.is_default regalloc_attribute
+     then Flambda_colours.elide else C.none)
+    Regalloc_attribute.print regalloc_attribute
+    Flambda_colours.pop
+    (if Regalloc_param_attribute.is_default regalloc_param_attribute
+     then Flambda_colours.elide else C.none)
+    Regalloc_param_attribute.print regalloc_param_attribute
+    Flambda_colours.pop
+    (if not cold then Flambda_colours.elide else C.none)
+    cold
+    Flambda_colours.pop
     (if not is_a_functor then Flambda_colours.elide else C.none)
     is_a_functor
     Flambda_colours.pop
-    (if Flambda_arity.is_singleton_value params_arity
+    (if not is_opaque then Flambda_colours.elide else C.none)
+    is_opaque
+    Flambda_colours.pop
+    (if Flambda_arity.is_one_param_of_kind_value params_arity
     then Flambda_colours.elide
     else Flambda_colours.none)
     Flambda_colours.pop
     Flambda_arity.print params_arity
-    (if Flambda_arity.is_singleton_value params_arity
+    (if Flambda_arity.is_one_param_of_kind_value params_arity
     then Flambda_colours.elide
     else Flambda_colours.none)
     Flambda_colours.pop
-    num_trailing_local_params
-    (if Flambda_arity.is_singleton_value result_arity
+    (if List.for_all
+      (fun mode -> Alloc_mode.For_types.equal mode Alloc_mode.For_types.heap)
+      param_modes
+    then Flambda_colours.elide
+    else Flambda_colours.none)
+    Flambda_colours.pop
+    (Format.pp_print_list ~pp_sep:Format.pp_print_space
+      Alloc_mode.For_types.print)
+    param_modes
+    (if List.for_all
+      (fun mode -> Alloc_mode.For_types.equal mode Alloc_mode.For_types.heap)
+      param_modes
+    then Flambda_colours.elide
+    else Flambda_colours.none)
+    Flambda_colours.pop
+    first_complex_local_param
+    (if Flambda_arity.is_one_param_of_kind_value result_arity
     then Flambda_colours.elide
     else Flambda_colours.none)
     Flambda_colours.pop
     Flambda_arity.print result_arity
-    (if Flambda_arity.is_singleton_value result_arity
+    (if Flambda_arity.is_one_param_of_kind_value result_arity
     then Flambda_colours.elide
     else Flambda_colours.none)
     Flambda_colours.pop
     (Or_unknown_or_bottom.print Result_types.print) result_types
-    contains_no_escaping_local_allocs
+    (match result_mode with Alloc_heap -> "Heap" | Alloc_local -> "Local")
     (match recursive with
     | Non_recursive -> Flambda_colours.elide
     | Recursive -> Flambda_colours.none)
@@ -313,17 +400,22 @@ let [@ocamlformat "disable"] print ppf
 
 let free_names
     { code_id = _;
+      cold = _;
       newer_version_of;
       params_arity = _;
-      num_trailing_local_params = _;
+      param_modes = _;
+      first_complex_local_param = _;
       result_arity = _;
       result_types;
-      contains_no_escaping_local_allocs = _;
+      result_mode = _;
       stub = _;
       inline = _;
-      check = _;
+      zero_alloc_attribute = _;
       poll_attribute = _;
+      regalloc_attribute = _;
+      regalloc_param_attribute = _;
       is_a_functor = _;
+      is_opaque = _;
       recursive = _;
       cost_metrics = _;
       inlining_arguments = _;
@@ -353,17 +445,22 @@ let free_names
 
 let apply_renaming
     ({ code_id;
+       cold = _;
        newer_version_of;
        params_arity = _;
-       num_trailing_local_params = _;
+       param_modes = _;
+       first_complex_local_param = _;
        result_arity = _;
        result_types;
-       contains_no_escaping_local_allocs = _;
+       result_mode = _;
        stub = _;
        inline = _;
-       check = _;
+       zero_alloc_attribute = _;
        poll_attribute = _;
+       regalloc_attribute = _;
+       regalloc_param_attribute = _;
        is_a_functor = _;
+       is_opaque = _;
        recursive = _;
        cost_metrics = _;
        inlining_arguments = _;
@@ -391,9 +488,10 @@ let apply_renaming
       Or_unknown_or_bottom.Ok
         (Result_types.apply_renaming result_types renaming)
   in
-  if code_id == code_id'
-     && newer_version_of == newer_version_of'
-     && result_types == result_types'
+  if
+    code_id == code_id'
+    && newer_version_of == newer_version_of'
+    && result_types == result_types'
   then t
   else
     { t with
@@ -404,17 +502,22 @@ let apply_renaming
 
 let ids_for_export
     { code_id;
+      cold = _;
       newer_version_of;
       params_arity = _;
-      num_trailing_local_params = _;
+      param_modes = _;
+      first_complex_local_param = _;
       result_arity = _;
       result_types;
-      contains_no_escaping_local_allocs = _;
+      result_mode = _;
       stub = _;
       inline = _;
-      check = _;
+      zero_alloc_attribute = _;
       poll_attribute = _;
+      regalloc_attribute = _;
+      regalloc_param_attribute = _;
       is_a_functor = _;
+      is_opaque = _;
       recursive = _;
       cost_metrics = _;
       inlining_arguments = _;
@@ -441,17 +544,22 @@ let ids_for_export
 
 let approx_equal
     { code_id = code_id1;
+      cold = cold1;
       newer_version_of = newer_version_of1;
       params_arity = params_arity1;
-      num_trailing_local_params = num_trailing_local_params1;
+      param_modes = param_modes1;
+      first_complex_local_param = first_complex_local_param1;
       result_arity = result_arity1;
       result_types = _;
-      contains_no_escaping_local_allocs = contains_no_escaping_local_allocs1;
+      result_mode = result_mode1;
       stub = stub1;
       inline = inline1;
-      check = check1;
+      zero_alloc_attribute = zero_alloc_attribute1;
       poll_attribute = poll_attribute1;
+      regalloc_attribute = regalloc_attribute1;
+      regalloc_param_attribute = regalloc_param_attribute1;
       is_a_functor = is_a_functor1;
+      is_opaque = is_opaque1;
       recursive = recursive1;
       cost_metrics = cost_metrics1;
       inlining_arguments = inlining_arguments1;
@@ -465,16 +573,21 @@ let approx_equal
     }
     { code_id = code_id2;
       newer_version_of = newer_version_of2;
+      cold = cold2;
       params_arity = params_arity2;
-      num_trailing_local_params = num_trailing_local_params2;
+      param_modes = param_modes2;
+      first_complex_local_param = first_complex_local_param2;
       result_arity = result_arity2;
       result_types = _;
-      contains_no_escaping_local_allocs = contains_no_escaping_local_allocs2;
+      result_mode = result_mode2;
       stub = stub2;
       inline = inline2;
-      check = check2;
+      zero_alloc_attribute = zero_alloc_attribute2;
       poll_attribute = poll_attribute2;
+      regalloc_attribute = regalloc_attribute2;
+      regalloc_param_attribute = regalloc_param_attribute2;
       is_a_functor = is_a_functor2;
+      is_opaque = is_opaque2;
       recursive = recursive2;
       cost_metrics = cost_metrics2;
       inlining_arguments = inlining_arguments2;
@@ -489,15 +602,20 @@ let approx_equal
   Code_id.equal code_id1 code_id2
   && (Option.equal Code_id.equal) newer_version_of1 newer_version_of2
   && Flambda_arity.equal_ignoring_subkinds params_arity1 params_arity2
-  && Int.equal num_trailing_local_params1 num_trailing_local_params2
+  && List.equal Alloc_mode.For_types.equal param_modes1 param_modes2
+  && Int.equal first_complex_local_param1 first_complex_local_param2
   && Flambda_arity.equal_ignoring_subkinds result_arity1 result_arity2
-  && Bool.equal contains_no_escaping_local_allocs1
-       contains_no_escaping_local_allocs2
+  && Lambda.eq_locality_mode result_mode1 result_mode2
   && Bool.equal stub1 stub2
   && Inline_attribute.equal inline1 inline2
-  && Check_attribute.equal check1 check2
+  && Zero_alloc_attribute.equal zero_alloc_attribute1 zero_alloc_attribute2
   && Poll_attribute.equal poll_attribute1 poll_attribute2
+  && Regalloc_attribute.equal regalloc_attribute1 regalloc_attribute2
+  && Regalloc_param_attribute.equal regalloc_param_attribute1
+       regalloc_param_attribute2
+  && Bool.equal cold1 cold2
   && Bool.equal is_a_functor1 is_a_functor2
+  && Bool.equal is_opaque1 is_opaque2
   && Recursive.equal recursive1 recursive2
   && Cost_metrics.equal cost_metrics1 cost_metrics2
   && Inlining_arguments.equal inlining_arguments1 inlining_arguments2
@@ -511,8 +629,10 @@ let approx_equal
   && Loopify_attribute.equal loopify1 loopify2
 
 let map_result_types ({ result_types; _ } as t) ~f =
-  { t with
-    result_types =
-      Or_unknown_or_bottom.map result_types
-        ~f:(Result_types.map_result_types ~f)
-  }
+  let result_types' =
+    Or_unknown_or_bottom.map_sharing result_types
+      ~f:(Result_types.map_result_types ~f)
+  in
+  if result_types == result_types'
+  then t
+  else { t with result_types = result_types' }

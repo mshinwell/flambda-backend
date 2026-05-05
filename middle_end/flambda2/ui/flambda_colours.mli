@@ -92,4 +92,8 @@ val each_file : directive
 
 val lambda : directive
 
+val unboxed_product : directive
+
+val effect_ : directive
+
 val without_colours : f:(unit -> 'a) -> 'a

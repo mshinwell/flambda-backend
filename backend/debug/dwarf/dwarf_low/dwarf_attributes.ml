@@ -14,6 +14,7 @@
 
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
+open! Int_replace_polymorphic_compare [@@ocaml.warning "-66"]
 module Uint64 = Numbers.Uint64
 
 module Class = struct
@@ -328,8 +329,8 @@ module Attribute = struct
       | String_length : [< Class.exprloc | Class.Dwarf_4.loclistptr] t
       | Return_addr : [< Class.exprloc | Class.Dwarf_4.loclistptr] t
       | Start_scope : [< Class.constant | Class.Dwarf_4.rangelistptr] t
-      | Data_member_location
-          : [< Class.constant | Class.exprloc | Class.Dwarf_4.loclistptr] t
+      | Data_member_location :
+          [< Class.constant | Class.exprloc | Class.Dwarf_4.loclistptr] t
       | Frame_base : [< Class.exprloc | Class.Dwarf_4.loclistptr] t
       | Segment : [< Class.exprloc | Class.Dwarf_4.loclistptr] t
       | Static_link : [< Class.exprloc | Class.Dwarf_4.loclistptr] t
@@ -354,6 +355,7 @@ module Attribute = struct
       | Prefix_name : Class.string t
       | Linker_dirs : Class.string t
       | Cmt_file_digest : Class.string t
+      | Offset_record_from_pointer : Class.constant t
   end
 
   type 'dwarf_classes t =
@@ -394,8 +396,8 @@ module Attribute = struct
     | Base_types : Class.reference t
     | Calling_convention : Class.constant t
     | Count : [< Class.constant | Class.exprloc | Class.reference] t
-    | Data_member_location
-        : [< Class.constant | Class.exprloc | Class.loclistsptr] t
+    | Data_member_location :
+        [< Class.constant | Class.exprloc | Class.loclistsptr] t
     | Decl_column : Class.constant t
     | Decl_file : Class.constant t
     | Decl_line : Class.constant t
@@ -425,8 +427,8 @@ module Attribute = struct
     | Use_UTF8 : Class.flag t
     | Extension : Class.reference t
     | Ranges : Class.rnglist t
-    | Trampoline
-        : [< Class.address | Class.flag | Class.reference | Class.string] t
+    | Trampoline :
+        [< Class.address | Class.flag | Class.reference | Class.string] t
     | Call_column : Class.constant t
     | Call_file : Class.constant t
     | Call_line : Class.constant t
@@ -633,6 +635,8 @@ module Attribute = struct
       | Ocaml_specific Prefix_name -> "Ocaml_prefix_name"
       | Ocaml_specific Linker_dirs -> "Ocaml_linker_dirs"
       | Ocaml_specific Cmt_file_digest -> "Ocaml_cmt_file_digest"
+      | Ocaml_specific Offset_record_from_pointer ->
+        "offset_record_from_pointer"
     in
     "DW_AT_" ^ name
 
@@ -784,6 +788,7 @@ module Attribute = struct
     | Ocaml_specific Prefix_name -> 0x3103
     | Ocaml_specific Linker_dirs -> 0x3104
     | Ocaml_specific Cmt_file_digest -> 0x3105
+    | Ocaml_specific Offset_record_from_pointer -> 0x3106
 
   let encode t =
     Dwarf_value.uleb128 ~comment:(name t)
@@ -804,7 +809,7 @@ module Attribute = struct
 
       let compare = Stdlib.compare
 
-      let equal (t1 : t) t2 = t1 = t2
+      let equal (t1 : t) t2 = Stdlib.compare t1 t2 = 0
 
       let hash _ = failwith "Sealed.hash unsupported"
 

@@ -1,13 +1,16 @@
-[@@@ocaml.warning "+a-4-30-40-41-42"]
+[@@@ocaml.warning "+a-40-41-42"]
 
+open! Int_replace_polymorphic_compare [@@ocaml.warning "-66"]
 open! Regalloc_utils
-module DLL = Flambda_backend_utils.Doubly_linked_list
+module DLL = Oxcaml_utils.Doubly_linked_list
 
-let live_before :
-    type a. a Cfg.instruction -> Cfg_with_liveness.liveness -> Reg.Set.t =
+let live_before : type a.
+    a Cfg.instruction -> Cfg_with_infos.liveness -> Reg.Set.t =
  fun instr liveness ->
-  match Cfg_dataflow.Instr.Tbl.find_opt liveness instr.id with
-  | None -> fatal "no liveness information for instruction %d" instr.id
+  match InstructionId.Tbl.find_opt liveness instr.id with
+  | None ->
+    fatal "no liveness information for instruction %a" InstructionId.format
+      instr.id
   | Some { Cfg_liveness.before; across = _ } -> before
 
 let remove_deadcode (body : Cfg.basic_instruction_list) changed liveness
@@ -18,22 +21,20 @@ let remove_deadcode (body : Cfg.basic_instruction_list) changed liveness
       let is_deadcode =
         match instr.desc with
         | Op _ as op ->
-          Cfg.is_pure_basic op
-          && Reg.disjoint_set_array !used_after instr.res
-          && (not (Proc.regs_are_volatile instr.arg))
-          && not (Proc.regs_are_volatile instr.res)
-        | Reloadretaddr | Pushtrap _ | Poptrap | Prologue -> false
+          Cfg.is_pure_basic op && Reg.disjoint_set_array !used_after instr.res
+        | Reloadretaddr | Pushtrap _ | Poptrap _ | Prologue | Epilogue
+        | Stack_check _ ->
+          false
       in
       used_after := before;
       changed := !changed || is_deadcode;
       not is_deadcode)
 
-let run cfg_with_liveness =
-  let liveness = Cfg_with_liveness.liveness cfg_with_liveness in
+let run cfg_with_infos =
+  let liveness = Cfg_with_infos.liveness cfg_with_infos in
   let changed = ref false in
-  Cfg.iter_blocks (Cfg_with_liveness.cfg cfg_with_liveness)
-    ~f:(fun _label block ->
+  Cfg.iter_blocks (Cfg_with_infos.cfg cfg_with_infos) ~f:(fun _label block ->
       remove_deadcode block.body changed liveness
         (live_before block.terminator liveness));
-  if !changed then Cfg_with_liveness.invalidate_liveness cfg_with_liveness;
-  cfg_with_liveness
+  if !changed then Cfg_with_infos.invalidate_liveness cfg_with_infos;
+  cfg_with_infos

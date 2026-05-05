@@ -11,7 +11,10 @@
 
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
-module DLL = Flambda_backend_utils.Doubly_linked_list
+(* CR-soon xclerc for xclerc: try to enable warning 4. *)
+
+open! Int_replace_polymorphic_compare
+module DLL = Oxcaml_utils.Doubly_linked_list
 include Cfg_intf.S
 
 module Location : sig
@@ -25,7 +28,9 @@ module Location : sig
 
   val to_loc_lossy : t -> Reg.location
 
-  val print : Format.formatter -> t -> unit
+  val print : Cmm.machtype_component -> Format.formatter -> t -> unit
+
+  val compare : t -> t -> int
 
   val equal : t -> t -> bool
 
@@ -35,15 +40,15 @@ module Location : sig
 end = struct
   module Stack = struct
     (** This type is based on [Reg.stack_location]. The first difference is that
-        for [Stack (Local index)] this types additionally stores [reg_class]
-        because local stacks are separate for different register classes.
+        for [Stack (Local index)] this types additionally stores [stack_class]
+        because local stacks are separate for different stack slot classes.
         Secondly for all stacks it stores index in words and not byte offset.
         That gives the guarantee that if indices are different then the
         locations do not overlap. *)
     type t =
       | Local of
           { index : int;
-            reg_class : int
+            stack_class : Stack_class.t
           }
       | Incoming of { index : int }
       | Outgoing of { index : int }
@@ -84,13 +89,16 @@ end = struct
 
     let word_index_to_byte_offset index = index * word_size
 
-    let of_stack_loc ~reg_class loc =
+    let of_stack_loc ~stack_class loc =
       match loc with
-      | Reg.Local index -> Local { index; reg_class }
+      | Reg.Local index -> Local { index; stack_class }
       | Reg.Incoming offset ->
         Incoming { index = byte_offset_to_word_index offset }
       | Reg.Outgoing offset ->
-        Outgoing { index = byte_offset_to_word_index offset }
+        (* macOS on arm requires unaligned stack locations for C calls. *)
+        if Target_system.is_macos () && Target_system.is_arm ()
+        then Outgoing { index = offset / word_size }
+        else Outgoing { index = byte_offset_to_word_index offset }
       | Reg.Domainstate offset ->
         Domainstate { index = byte_offset_to_word_index offset }
 
@@ -102,16 +110,28 @@ end = struct
       | Domainstate { index } ->
         Reg.Domainstate (word_index_to_byte_offset index)
 
-    let unknown_reg_class = -1
-
-    let reg_class_lossy t =
-      match t with
-      | Local { reg_class; _ } -> reg_class
-      | Incoming _ | Outgoing _ | Domainstate _ -> unknown_reg_class
+    let compare (t1 : t) (t2 : t) : int =
+      match t1, t2 with
+      | ( Local { index = i1; stack_class = c1 },
+          Local { index = i2; stack_class = c2 } ) ->
+        let c = Int.compare i1 i2 in
+        if c <> 0
+        then c
+        else Int.compare (Stack_class.hash c1) (Stack_class.hash c2)
+      | Incoming { index = i1 }, Incoming { index = i2 } -> Int.compare i1 i2
+      | Outgoing { index = i1 }, Outgoing { index = i2 } -> Int.compare i1 i2
+      | Domainstate { index = i1 }, Domainstate { index = i2 } ->
+        Int.compare i1 i2
+      | Local _, (Incoming _ | Outgoing _ | Domainstate _) -> -1
+      | (Incoming _ | Outgoing _ | Domainstate _), Local _ -> 1
+      | Incoming _, (Outgoing _ | Domainstate _) -> -1
+      | (Outgoing _ | Domainstate _), Incoming _ -> 1
+      | Outgoing _, Domainstate _ -> -1
+      | Domainstate _, Outgoing _ -> 1
   end
 
   type t =
-    | Reg of int
+    | Reg of Regs.Phys_reg.t
     | Stack of Stack.t
 
   let of_reg reg =
@@ -120,7 +140,10 @@ end = struct
     | Reg.Reg idx -> Some (Reg idx)
     | Reg.Stack stack ->
       Some
-        (Stack (Stack.of_stack_loc ~reg_class:(Proc.register_class reg) stack))
+        (Stack
+           (Stack.of_stack_loc
+              ~stack_class:(Stack_class.of_machtype reg.Reg.typ)
+              stack))
 
   let of_reg_exn reg = of_reg reg |> Option.get
 
@@ -131,17 +154,15 @@ end = struct
     | Reg idx -> Reg.Reg idx
     | Stack stack -> Reg.Stack (Stack.to_stack_loc_lossy stack)
 
-  let reg_class_lossy t =
-    match t with Reg _ -> -1 | Stack stack -> Stack.reg_class_lossy stack
-
-  let print ppf t =
-    Printmach.loc ~reg_class:(reg_class_lossy t)
-      ~unknown:(fun _ -> assert false)
-      ppf (to_loc_lossy t)
+  let print typ ppf t =
+    Printreg.loc ~unknown:(fun _ -> assert false) ppf (to_loc_lossy t) typ
 
   let compare (t1 : t) (t2 : t) : int =
-    (* CR-someday azewierzejew: Implement proper comparison. *)
-    Stdlib.compare t1 t2
+    match t1, t2 with
+    | Reg r1, Reg r2 -> Regs.Phys_reg.compare r1 r2
+    | Stack s1, Stack s2 -> Stack.compare s1 s2
+    | Reg _, Stack _ -> -1
+    | Stack _, Reg _ -> 1
 
   let equal (t1 : t) (t2 : t) : bool = compare t1 t2 = 0
 
@@ -158,7 +179,7 @@ end
 module Reg_id : sig
   type t =
     | Preassigned of { location : Location.t }
-    | Named of { stamp : int }
+    | Named of { stamp : Reg.Stamp.t }
 
   val compare : t -> t -> int
 
@@ -168,11 +189,11 @@ module Reg_id : sig
 end = struct
   type t =
     | Preassigned of { location : Location.t }
-    | Named of { stamp : int }
+    | Named of { stamp : Reg.Stamp.t }
 
   let of_reg (reg : Reg.t) =
     let loc = Location.of_reg reg in
-    if Option.is_some loc <> Reg.is_preassigned reg
+    if not (Bool.equal (Option.is_some loc) (Reg.is_preassigned reg))
     then
       Regalloc_utils.fatal
         "Mismatch between register having location (%b) and register being a \
@@ -188,8 +209,12 @@ end = struct
     | Named _ -> Reg.Unknown
 
   let compare (t1 : t) (t2 : t) =
-    (* CR-someday azewierzejew: Implement proper comparison. *)
-    Stdlib.compare t1 t2
+    match t1, t2 with
+    | Preassigned { location = l1 }, Preassigned { location = l2 } ->
+      Location.compare l1 l2
+    | Named { stamp = s1 }, Named { stamp = s2 } -> Reg.Stamp.compare s1 s2
+    | Preassigned _, Named _ -> -1
+    | Named _, Preassigned _ -> 1
 end
 
 module Register : sig
@@ -210,14 +235,17 @@ module Register : sig
 
   val print : Format.formatter -> t -> unit
 
+  val typ : t -> Cmm.machtype_component
+
   module Set : Set.S with type elt = t
 
   module Map : Map.S with type key = t
 end = struct
   module For_print = struct
     type t =
-      { raw_name : Reg.Raw_name.t;
-        stamp : int;
+      { name : Reg.Name.t;
+        stamp : Reg.Stamp.t;
+        preassigned : bool;
         typ : Cmm.machtype_component
       }
   end
@@ -229,22 +257,29 @@ end = struct
 
   let create (reg : Reg.t) : t =
     { reg_id = Reg_id.of_reg reg;
-      for_print = { raw_name = reg.raw_name; stamp = reg.stamp; typ = reg.typ }
+      for_print =
+        { name = reg.name;
+          stamp = reg.stamp;
+          preassigned = reg.preassigned;
+          typ = reg.typ
+        }
     }
 
   let to_dummy_reg (t : t) : Reg.t =
-    { Reg.dummy with
-      raw_name = t.for_print.raw_name;
-      typ = t.for_print.typ;
-      stamp = t.for_print.stamp;
-      loc = Reg_id.to_loc_lossy t.reg_id
-    }
+    let name = t.for_print.name in
+    let typ = t.for_print.typ in
+    let stamp = t.for_print.stamp in
+    let preassigned = t.for_print.preassigned in
+    let loc = Reg_id.to_loc_lossy t.reg_id in
+    Reg.For_printing.create ~name ~typ ~stamp ~preassigned ~loc
+
+  let typ (t : t) = t.for_print.typ
 
   let print (ppf : Format.formatter) (t : t) : unit =
     match t.reg_id with
     | Preassigned { location } ->
-      Format.fprintf ppf "R[%a]" Location.print location
-    | Named _ -> Printmach.reg ppf (to_dummy_reg t)
+      Format.fprintf ppf "R[%a]" (Location.print t.for_print.typ) location
+    | Named _ -> Printreg.reg ppf (to_dummy_reg t)
 
   let compare (t1 : t) (t2 : t) : int = Reg_id.compare t1.reg_id t2.reg_id
 
@@ -293,14 +328,14 @@ module Description : sig
       instructions within or between basic blocks.
 
       The validator checks that the register allocator does not remove
-      instructions except Prologue (whenever it's allowed to do so), and does
-      not add any new instructions except Spill and Reload. The unique IDs of
-      instructions are sufficient to determine this, and the description does
-      not need to record the block an instruction belongs to. It is possible to
-      reconstruct some information about the CFG structure from the description.
-      For example, successors of a block can be reconstructed from the labels
-      that appear in terminator's [desc]. It also checks that all [fun_args]
-      were preassigned before allocation and that they haven't changed after. *)
+      instructions, and does not add any new instructions except Spill and
+      Reload. The unique IDs of instructions are sufficient to determine this,
+      and the description does not need to record the block an instruction
+      belongs to. It is possible to reconstruct some information about the CFG
+      structure from the description. For example, successors of a block can be
+      reconstructed from the labels that appear in terminator's [desc]. It also
+      checks that all [fun_args] were preassigned before allocation and that
+      they haven't changed after. *)
   type t
 
   (** Will return [Some _] for the instructions that existed in the CFG before
@@ -321,14 +356,14 @@ module Description : sig
   val reg_fun_args : t -> Register.t array
 end = struct
   type basic_info =
-    { successor_id : int;
+    { successor_id : InstructionId.t;
       instr : basic Instruction.t
     }
 
   type t =
-    { instructions : (int, basic_info) Hashtbl.t;
-      terminators : (int, terminator Instruction.t) Hashtbl.t;
-      first_instruction_in_block : int Label.Tbl.t;
+    { instructions : (InstructionId.t, basic_info) Hashtbl.t;
+      terminators : (InstructionId.t, terminator Instruction.t) Hashtbl.t;
+      first_instruction_in_block : InstructionId.t Label.Tbl.t;
       reg_fun_args : Register.t array
     }
 
@@ -345,7 +380,9 @@ end = struct
 
   let add_instr_id ~seen_ids ~context id =
     if Hashtbl.mem seen_ids id
-    then Regalloc_utils.fatal "Duplicate instruction no. %d while %s" id context;
+    then
+      Regalloc_utils.fatal "Duplicate instruction no. %a while %s"
+        InstructionId.format id context;
     Hashtbl.add seen_ids id ()
 
   let add_basic ~seen_ids ~successor_id t instr =
@@ -355,9 +392,9 @@ end = struct
     if is_regalloc_specific_basic instr.desc
     then
       Regalloc_utils.fatal
-        "Instruction no. %d is specific to the regalloc phase while creating \
+        "Instruction no. %a is specific to the regalloc phase while creating \
          pre-allocation description"
-        id;
+        InstructionId.format id;
     Hashtbl.add t.instructions id
       { successor_id;
         instr =
@@ -400,15 +437,15 @@ end = struct
     let reg_fun_args =
       (Cfg_with_layout.cfg cfg).fun_args
       |> Array.map (fun reg ->
-             let reg = Register.create reg in
-             (* Assert that [fun_args] are preassigned. *)
-             (match reg.reg_id with
-             | Preassigned _ -> ()
-             | Named _ ->
-               Regalloc_utils.fatal
-                 "Register in function arguments that isn't preassigned: %a"
-                 Register.print reg);
-             reg)
+          let reg = Register.create reg in
+          (* Assert that [fun_args] are preassigned. *)
+          (match reg.reg_id with
+          | Preassigned _ -> ()
+          | Named _ ->
+            Regalloc_utils.fatal
+              "Register in function arguments that isn't preassigned: %a"
+              Register.print reg);
+          reg)
     in
     let t =
       { instructions = Hashtbl.create basic_count;
@@ -433,7 +470,7 @@ end = struct
     t
 
   let create cfg =
-    match !Flambda_backend_flags.regalloc_validate with
+    match !Oxcaml_flags.regalloc_validate with
     | false -> None
     | true -> Some (do_create cfg)
 
@@ -454,17 +491,24 @@ end = struct
         | Preassigned { location = prev_loc }, Some new_loc ->
           Regalloc_utils.fatal
             "%s: changed preassigned register's location from %a to %a" context
-            Location.print prev_loc Location.print new_loc)
+            (Location.print (Register.typ reg_desc))
+            prev_loc
+            (Location.print loc_reg.Reg.typ)
+            new_loc)
       reg_arr loc_arr;
     ()
 
   let verify_reg_arrays (type a) ~id (instr : a Cfg.instruction)
       (old_instr : a Instruction.t) =
     verify_reg_array
-      ~context:(Printf.sprintf "In instruction's no %d arguments" id)
+      ~context:
+        (Printf.sprintf "In instruction's no %s arguments"
+           (InstructionId.to_string id))
       ~reg_arr:old_instr.arg ~loc_arr:instr.arg;
     verify_reg_array
-      ~context:(Printf.sprintf "In instruction's no %d results" id)
+      ~context:
+        (Printf.sprintf "In instruction's no %s results"
+           (InstructionId.to_string id))
       ~reg_arr:old_instr.res ~loc_arr:instr.res
 
   let verify_basic ~seen_ids ~successor_id t instr =
@@ -476,16 +520,24 @@ end = struct
     with
     (* The instruction was present before. *)
     | Some { instr = old_instr; successor_id = old_successor_id }, false ->
-      if not (Int.equal old_successor_id successor_id)
+      if not (InstructionId.equal old_successor_id successor_id)
       then
         Regalloc_utils.fatal
-          "The instruction's no. %d successor id has changed. Before \
-           allocation: %d. After allocation (ignoring instructions added by \
-           allocation): %d."
-          id old_successor_id successor_id;
-      (* CR-someday azewierzejew: Avoid using polymrphic compare. *)
-      if instr.desc <> old_instr.desc
-      then Regalloc_utils.fatal "The desc of instruction with id %d changed" id;
+          "The instruction's no. %a successor id has changed. Before \
+           allocation: %a. After allocation (ignoring instructions added by \
+           allocation): %a."
+          InstructionId.format id InstructionId.format old_successor_id
+          InstructionId.format successor_id;
+      (match instr.desc, old_instr.desc with
+      | Op (Name_for_debugger _), Op (Name_for_debugger _) ->
+        (* IRC uses `Reg.interf` to represent the adjacency lists for the
+           interference graph, which can lead to cycles. *)
+        ()
+      | _ ->
+        if not (Cfg.equal_basic instr.desc old_instr.desc)
+        then
+          Regalloc_utils.fatal "The desc of instruction with id %a changed"
+            InstructionId.format id);
       verify_reg_arrays ~id instr old_instr;
       (* Return new successor id which is the id of the current instruction. *)
       id
@@ -496,9 +548,9 @@ end = struct
       successor_id
     | Some _, true ->
       Regalloc_utils.fatal
-        "Register allocation changed existing instruction no. %d into a \
+        "Register allocation changed existing instruction no. %a into a \
          register allocation specific instruction"
-        id
+        InstructionId.format id
     | None, false -> (
       match instr.desc with
       | Op Move ->
@@ -507,21 +559,22 @@ end = struct
         successor_id
       | _ ->
         Regalloc_utils.fatal
-          "Register allocation added non-regalloc specific instruction no. %d"
-          id)
+          "Register allocation added non-regalloc specific instruction no. %a"
+          InstructionId.format id)
 
   let compare_terminators ~successor_ids ~id (old_instr : terminator)
       (instr : terminator) =
     let compare_label l1 l2 =
       let s1 = Label.Tbl.find successor_ids l1 in
       let s2 = Label.Tbl.find successor_ids l2 in
-      if not (Int.equal s1 s2)
+      if not (InstructionId.equal s1 s2)
       then
         Regalloc_utils.fatal
           "When checking equivalence of labels before and after allocation got \
-           different successor id's. Successor (label, instr id) before: (%d, \
-           %d). Successor (label, instr id) after: (%d, %d)."
-          l1 s1 l2 s2
+           different successor id's. Successor (label, instr id) before: (%a, \
+           %a). Successor (label, instr id) after: (%a, %a)."
+          Label.format l1 InstructionId.format s1 Label.format l2
+          InstructionId.format s2
     in
     match old_instr, instr with
     | Never, Never -> ()
@@ -534,8 +587,9 @@ end = struct
         Truth_test { ifso = ifso2; ifnot = ifnot2 } ) ->
       compare_label ifso1 ifso2;
       compare_label ifnot1 ifnot2
-    | ( Float_test { lt = lt1; eq = eq1; gt = gt1; uo = uo1 },
-        Float_test { lt = lt2; eq = eq2; gt = gt2; uo = uo2 } ) ->
+    | ( Float_test { width = w1; lt = lt1; eq = eq1; gt = gt1; uo = uo1 },
+        Float_test { width = w2; lt = lt2; eq = eq2; gt = gt2; uo = uo2 } )
+      when Cmm.equal_float_width w1 w2 ->
       compare_label lt1 lt2;
       compare_label eq1 eq2;
       compare_label gt1 gt2;
@@ -543,52 +597,50 @@ end = struct
     | ( Int_test { lt = lt1; eq = eq1; gt = gt1; is_signed = sign1; imm = imm1 },
         Int_test { lt = lt2; eq = eq2; gt = gt2; is_signed = sign2; imm = imm2 }
       )
-      when Bool.equal sign1 sign2 && Option.equal Int.equal imm1 imm2 ->
+      when Scalar.Signedness.equal sign1 sign2
+           && Option.equal Int.equal imm1 imm2 ->
       compare_label lt1 lt2;
       compare_label eq1 eq2;
       compare_label gt1 gt2
     | Switch labels1, Switch labels2 ->
       Array.iter2 (fun l1 l2 -> compare_label l1 l2) labels1 labels2
     | Return, Return -> ()
-    | Raise rk1, Raise rk2
-    (* CR-someday azewierzejew: Avoid using polymorphic comparison. *)
-      when Stdlib.compare rk1 rk2 = 0 ->
-      ()
+    | Raise rk1, Raise rk2 when Lambda.equal_raise_kind rk1 rk2 -> ()
     | Tailcall_self { destination = l1 }, Tailcall_self { destination = l2 } ->
       compare_label l1 l2
     | Tailcall_func call1, Tailcall_func call2
-    (* CR-someday azewierzejew: Avoid using polymorphic comparison. *)
-      when Stdlib.compare call1 call2 = 0 ->
+      when Cfg.equal_func_call_operation call1 call2 ->
       ()
     | Call_no_return call1, Call_no_return call2
-    (* CR-someday azewierzejew: Avoid using polymorphic comparison. *)
-      when Stdlib.compare call1 call2 = 0 ->
+      when Cfg.equal_external_call_operation call1 call2 ->
       ()
     | ( Call { op = call1; label_after = l1 },
         Call { op = call2; label_after = l2 } )
-    (* CR-someday azewierzejew: Avoid using polymorphic comparison. *)
-      when Stdlib.compare call1 call2 = 0 ->
+      when Cfg.equal_func_call_operation call1 call2 ->
       compare_label l1 l2
     | ( Prim { op = prim1; label_after = l1 },
         Prim { op = prim2; label_after = l2 } )
-    (* CR-someday azewierzejew: Avoid using polymorphic comparison. *)
-      when Stdlib.compare prim1 prim2 = 0 ->
+      when Cfg.equal_prim_call_operation prim1 prim2 ->
       compare_label l1 l2
-    | ( Specific_can_raise { op = op1; label_after = l1 },
-        Specific_can_raise { op = op2; label_after = l2 } )
-    (* CR-someday azewierzejew: Avoid using polymorphic comparison. *)
-      when Stdlib.compare op1 op2 = 0 ->
+    | ( Invalid { message = m1; label_after = None; _ },
+        Invalid { message = m2; label_after = None; _ } )
+      when String.compare m1 m2 = 0 ->
+      ()
+    | ( Invalid { message = m1; label_after = Some l1; _ },
+        Invalid { message = m2; label_after = Some l2; _ } )
+      when String.compare m1 m2 = 0 ->
       compare_label l1 l2
-    | Poll_and_jump l1, Poll_and_jump l2 -> compare_label l1 l2
     | _ ->
       Regalloc_utils.fatal
-        "The desc of terminator with id %d changed, before: %a, after: %a." id
+        "The desc of terminator with id %a changed, before: %a, after: %a."
+        InstructionId.format id
         (Cfg.dump_terminator ~sep:", ")
         old_instr
         (Cfg.dump_terminator ~sep:", ")
         instr
 
-  let verify_terminator ~seen_ids ~successor_ids t instr =
+  let verify_terminator ~seen_ids ~(successor_ids : InstructionId.t Label.Tbl.t)
+      t instr : InstructionId.t =
     let id = instr.id in
     add_instr_id ~seen_ids
       ~context:"checking a terminator instruction in the new CFG" id;
@@ -606,9 +658,9 @@ end = struct
         Label.Tbl.find successor_ids successor
       | _ ->
         Regalloc_utils.fatal
-          "Register allocation added a terminator no. %d but that's not \
+          "Register allocation added a terminator no. %a but that's not \
            allowed for this type of terminator: %a"
-          id Cfg.print_terminator instr)
+          InstructionId.format id Cfg.print_terminator instr)
 
   let compute_successor_ids t (cfg : Cfg.t) =
     let visited_labels = Label.Tbl.create (Label.Tbl.length cfg.blocks) in
@@ -621,10 +673,10 @@ end = struct
         if Label.Tbl.mem visited_labels block.start
         then
           Misc.fatal_errorf
-            "Visiting the same block %d without knowing the successor \
+            "Visiting the same block %a without knowing the successor \
              instruction's id. That means there's a loop consisting of only \
              instructions added by the register allocator."
-            block.start;
+            Label.format block.start;
         Label.Tbl.add visited_labels block.start ();
         let first_id = get_first_non_regalloc_id t block in
         Label.Tbl.add successor_ids block.start first_id;
@@ -650,14 +702,15 @@ end = struct
         | Always label, false -> get_id (Cfg.get_block_exn cfg label)
         | _, false ->
           Regalloc_utils.fatal
-            "Register allocation added a terminator no. %d but that's not \
+            "Register allocation added a terminator no. %a but that's not \
              allowed for this type of terminator: %a"
-            block.terminator.id Cfg.print_terminator block.terminator)
+            InstructionId.format block.terminator.id Cfg.print_terminator
+            block.terminator)
     in
     Label.Tbl.iter
       (fun _ block ->
         (* Force compuatation of the given id. *)
-        let (_ : int) = get_id block in
+        let (_ : InstructionId.t) = get_id block in
         ())
       cfg.blocks;
     successor_ids
@@ -682,31 +735,23 @@ end = struct
               verify_basic ~seen_ids ~successor_id t instr)
             block.body ~init:successor_id
         in
-        ignore (first_instruction_id : int))
+        ignore (first_instruction_id : InstructionId.t))
       (Cfg_with_layout.cfg cfg).Cfg.blocks;
     Hashtbl.iter
-      (fun id { instr; _ } ->
-        let can_be_removed =
-          match instr.Instruction.desc with
-          | Prologue ->
-            let ({ fun_contains_calls; fun_num_stack_slots; _ } : Cfg.t) =
-              Cfg_with_layout.cfg cfg
-            in
-            not
-              (Proc.prologue_required ~fun_contains_calls ~fun_num_stack_slots)
-          | _ -> false
-        in
-        if (not (Hashtbl.mem seen_ids id)) && not can_be_removed
+      (fun id _ ->
+        if not (Hashtbl.mem seen_ids id)
         then
           Regalloc_utils.fatal
-            "Instruction no. %d was deleted by register allocator" id)
+            "Instruction no. %a was deleted by register allocator"
+            InstructionId.format id)
       t.instructions;
     Hashtbl.iter
       (fun id _ ->
         if not (Hashtbl.mem seen_ids id)
         then
           Regalloc_utils.fatal
-            "Terminator no. %d was deleted by register allocator" id)
+            "Terminator no. %a was deleted by register allocator"
+            InstructionId.format id)
       t.terminators
 end
 
@@ -773,7 +818,9 @@ end = struct
     type t = Register.t * Location.t
 
     let print ppf (r, l) =
-      Format.fprintf ppf "%a=%a" Register.print r Location.print l
+      Format.fprintf ppf "%a=%a" Register.print r
+        (Location.print (Register.typ r))
+        l
   end
 
   exception Verification_failed of string
@@ -823,7 +870,7 @@ end = struct
   let is_empty t =
     let loc_res = Location.Map.is_empty t.for_loc in
     let reg_res = Register.Map.is_empty t.for_reg in
-    assert (loc_res = reg_res);
+    assert (Bool.equal loc_res reg_res);
     loc_res
 
   let subset t1 t2 =
@@ -872,11 +919,11 @@ end = struct
       then (
         Format.fprintf Format.str_formatter
           "Unsatisfiable equations when removing result equations.\n\
-           Existing equation has to agree one 0 or 2 sides (cannot on exactly \
+           Existing equation has to agree on 0 or 2 sides (cannot be exactly \
            1) with the removed equation.\n\
            Existing equation %a.\n\
-           Removed equation: %a." Equation.print (eq_reg, eq_loc) Equation.print
-          (reg, loc);
+           Removed equation: %a."
+          Equation.print (eq_reg, eq_loc) Equation.print (reg, loc);
         let message = Format.flush_str_formatter () in
         raise (Verification_failed message))
     in
@@ -913,9 +960,10 @@ end = struct
           | None -> ()
           | Some regs ->
             assert (not (Register.Set.is_empty regs));
+            let typ = Register.Set.choose regs |> Register.typ in
             Format.fprintf Format.str_formatter
-              "Destroying a location %a in which a live registers %a is stored"
-              Location.print destroyed_loc
+              "Destroying a location %a in which live registers %a are stored"
+              (Location.print typ) destroyed_loc
               (Format.pp_print_seq
                  ~pp_sep:(fun ppf () -> Format.fprintf ppf ", ")
                  Register.print)
@@ -964,9 +1012,9 @@ module type Description_value = sig
 end
 
 let print_reg_as_loc ppf reg =
-  Printmach.loc ~reg_class:(Proc.register_class reg)
+  Printreg.loc
     ~unknown:(fun ppf -> Format.fprintf ppf "<Unknown>")
-    ppf reg.Reg.loc
+    ppf reg.Reg.loc reg.Reg.typ
 
 module Domain : Cfg_dataflow.Domain_S with type t = Equation_set.t = struct
   (** This type corresponds to the set of equations in the dataflow from the
@@ -1034,7 +1082,8 @@ end = struct
         ( `Terminator (Instruction.to_prealloc ~alloced:t.loc_instr t.reg_instr),
           `Terminator t.loc_instr )
     in
-    Format.fprintf ppf "CFG REGALLOC Check failed in instr %d:\n" t.loc_instr.id;
+    Format.fprintf ppf "CFG REGALLOC Check failed in instr %a:\n"
+      InstructionId.format t.loc_instr.id;
     Format.fprintf ppf "Instruction's description before allocation: %a\n"
       Cfg.print_instruction reg_instr;
     Format.fprintf ppf "Instruction's description after allocation: %a\n"
@@ -1057,10 +1106,13 @@ end
 module Transfer (Desc_val : Description_value) :
   Cfg_dataflow.Backward_transfer
     with type domain = Domain.t
-     and type error = Transfer_error.t = struct
+     and type error = Transfer_error.t
+     and type context = unit = struct
   type domain = Domain.t
 
   type error = Transfer_error.t
+
+  type context = unit
 
   let description = Desc_val.description
 
@@ -1080,7 +1132,8 @@ module Transfer (Desc_val : Description_value) :
     Equation_set.rename_reg ~arg:reg_instr.arg.(0) ~res:reg_instr.res.(0)
       equations
 
-  (** For equations coming from exceptional path remove the expected equations. *)
+  (** For equations coming from exceptional path remove the expected equations.
+  *)
   let remove_exn_bucket equations =
     let phys_reg = Proc.loc_exn_bucket in
     let reg = Register.create phys_reg in
@@ -1091,7 +1144,7 @@ module Transfer (Desc_val : Description_value) :
     in
     Equation_set.remove_result equations ~reg_res:[| reg |] ~loc_res:[| loc |]
     |> Result.map_error (fun message ->
-           Printf.sprintf "While removing exn bucket: %s" message)
+        Printf.sprintf "While removing exn bucket: %s" message)
 
   (** This corresponds to case (7) in Fig. 1 of the paper [1] generalized for
       all other cases not handled by [rename_location] or [rename_register]. We
@@ -1112,57 +1165,54 @@ module Transfer (Desc_val : Description_value) :
     let exn =
       exn
       |> Option.map (fun exn ->
-             (* Handle the exceptional path specific conversions here because in
-                [exception_] we don't have enough information in order to give a
-                meaningful error message. *)
-             exn
-             (* Remove the equality for [exn_bucket] if it exists. *)
-             |> remove_exn_bucket
-             |> wrap_error
-             |> bind (fun equations ->
-                    (* Verify the destroyed registers for exceptional path
-                       only. *)
-                    equations
-                    |> Equation_set.verify_destroyed_locations
-                         ~destroyed:
-                           (Location.of_regs_exn Proc.destroyed_at_raise)
-                    |> Result.map_error (fun message ->
-                           Printf.sprintf
-                             "While verifying locations destroyed at raise: %s"
-                             message)
-                    |> wrap_error))
+          (* Handle the exceptional path specific conversions here because in
+             [exception_] we don't have enough information in order to give a
+             meaningful error message. *)
+          exn
+          (* Remove the equality for [exn_bucket] if it exists. *)
+          |> remove_exn_bucket
+          |> wrap_error
+          |> bind (fun equations ->
+              (* Verify the destroyed registers for exceptional path only. *)
+              equations
+              |> Equation_set.verify_destroyed_locations
+                   ~destroyed:(Location.of_regs_exn Proc.destroyed_at_raise)
+              |> Result.map_error (fun message ->
+                  Printf.sprintf
+                    "While verifying locations destroyed at raise: %s" message)
+              |> wrap_error))
       (* If instruction can't raise [Option.is_none exn] then use empty set of
          equations as that's the same as skipping the step. *)
       |> Option.value ~default:(Ok Domain.bot)
     in
     equations
-    |> (* First remove the result equations. *)
+    |>
+    (* First remove the result equations. *)
     Equation_set.remove_result ~reg_res:reg_instr.Instruction.res
       ~loc_res:(Location.of_regs_exn loc_instr.res)
     |> wrap_error
     |> bind (fun equations ->
-           (* Join the exceptional path equations. *)
-           exn
-           |> Result.map (fun exn_equations ->
-                  Equation_set.union equations exn_equations))
+        (* Join the exceptional path equations. *)
+        exn
+        |> Result.map (fun exn_equations ->
+            Equation_set.union equations exn_equations))
     |> bind (fun equations ->
-           (* Verify the destroyed registers (including the exceptional
-              path). *)
-           Equation_set.verify_destroyed_locations ~destroyed equations
-           |> wrap_error)
+        (* Verify the destroyed registers (including the exceptional path). *)
+        Equation_set.verify_destroyed_locations ~destroyed equations
+        |> wrap_error)
     |> Result.map (fun equations ->
-           (* Add all eqations for the arguments. *)
-           Equation_set.add_argument ~reg_arg:reg_instr.Instruction.arg
-             ~loc_arg:(Location.of_regs_exn loc_instr.arg)
-             equations)
+        (* Add all eqations for the arguments. *)
+        Equation_set.add_argument ~reg_arg:reg_instr.Instruction.arg
+          ~loc_arg:(Location.of_regs_exn loc_instr.arg)
+          equations)
 
-  let basic t instr : (domain, error) result =
+  let basic t instr () : (domain, error) result =
     match Description.find_basic description instr with
-    | None ->
-      (match instr.desc with
-      | Op (Spill | Reload | Move) -> ()
-      | _ -> assert false);
-      Result.ok @@ rename_location t ~loc_instr:instr
+    | None -> (
+      match instr.desc with
+      | Op (Spill | Reload | Move) ->
+        Result.ok @@ rename_location t ~loc_instr:instr
+      | _ -> assert false)
     | Some instr_before -> (
       match instr.desc with
       | Op Move
@@ -1178,7 +1228,7 @@ module Transfer (Desc_val : Description_value) :
           ~destroyed:(Proc.destroyed_at_basic instr.desc |> Location.of_regs_exn)
       )
 
-  let terminator t ~exn instr =
+  let terminator t ~exn instr () =
     match Description.find_terminator description instr with
     | Some instr_before ->
       (* CR-soon azewierzejew: This is kind of fragile for [Tailcall (Self _)]
@@ -1203,14 +1253,14 @@ module Transfer (Desc_val : Description_value) :
         t
       | _ ->
         Regalloc_utils.fatal
-          "Register allocation added a terminator no. %d but that's not \
+          "Register allocation added a terminator no. %a but that's not \
            allowed for this type of terminator: %a"
-          instr.id Cfg.print_terminator instr)
+          InstructionId.format instr.id Cfg.print_terminator instr)
 
   (* This should remove the equations for the exception value, but we do that in
      [Domain.append_equations] because there we have more information to give if
      there's an error. *)
-  let exception_ t = Ok t
+  let exception_ t () = Ok t
 end
 
 module Check_backwards (Desc_val : Description_value) =
@@ -1225,7 +1275,7 @@ let save_as_dot_with_equations ~desc ~res_instr ~res_block ?filename cfg msg =
             | `Basic instr -> instr.id
             | `Terminator instr -> instr.id
           in
-          Cfg_dataflow.Instr.Tbl.find_opt res_instr id
+          InstructionId.Tbl.find_opt res_instr id
           |> Format.pp_print_option
                ~none:(fun ppf () -> Format.fprintf ppf "Unknown")
                Equation_set.print ppf);
@@ -1268,7 +1318,7 @@ module Error : sig
 
   type t =
     { source : Source.t;
-      res_instr : Domain.t Cfg_dataflow.Instr.Tbl.t;
+      res_instr : Domain.t InstructionId.Tbl.t;
       res_block : Domain.t Label.Tbl.t;
       desc : Description.t;
       cfg : Cfg_with_layout.t
@@ -1306,14 +1356,14 @@ end = struct
         Format.fprintf ppf "Function argument locations: %a\n"
           (Format.pp_print_seq
              ~pp_sep:(fun ppf () -> Format.pp_print_string ppf ", ")
-             Location.print)
-          (Array.to_seq loc_fun_args);
+             (fun ppf (reg, loc) -> Location.print (Register.typ reg) ppf loc))
+          (Array.to_seq (Array.combine reg_fun_args loc_fun_args));
         ()
   end
 
   type t =
     { source : Source.t;
-      res_instr : Domain.t Cfg_dataflow.Instr.Tbl.t;
+      res_instr : Domain.t InstructionId.Tbl.t;
       res_block : Domain.t Label.Tbl.t;
       desc : Description.t;
       cfg : Cfg_with_layout.t
@@ -1346,23 +1396,22 @@ let verify_entrypoint (equations : Equation_set.t) (desc : Description.t)
   Equation_set.remove_result ~reg_res:reg_fun_args ~loc_res:loc_fun_args
     equations
   |> bind (fun equations ->
-         (* This check is stronger than the one in the paper [1]. That because C
-            allows to start with uninitialized variables as it's explained in
-            chapter 3.2 and of section "Dataflow Analysis and Its Uses". Such a
-            thing is not allowed in OCaml. Therefore after removing all
-            equations for arguments the should be no additional equations
-            left. *)
-         if Equation_set.is_empty equations
-         then Ok cfg
-         else (
-           Format.fprintf Format.str_formatter
-             "Some equations still present at entrypoint after removing \
-              parameter equations: [%a]"
-             Equation_set.print equations;
-           let message = Format.flush_str_formatter () in
-           Error message))
+      (* This check is stronger than the one in the paper [1]. That because C
+         allows to start with uninitialized variables as it's explained in
+         chapter 3.2 and of section "Dataflow Analysis and Its Uses". Such a
+         thing is not allowed in OCaml. Therefore after removing all equations
+         for arguments the should be no additional equations left. *)
+      if Equation_set.is_empty equations
+      then Ok cfg
+      else (
+        Format.fprintf Format.str_formatter
+          "Some equations still present at entrypoint after removing parameter \
+           equations: [%a]"
+          Equation_set.print equations;
+        let message = Format.flush_str_formatter () in
+        Error message))
   |> Result.map_error (fun message : Error.At_entrypoint.t ->
-         { message; equations; reg_fun_args; loc_fun_args })
+      { message; equations; reg_fun_args; loc_fun_args })
 
 let test (desc : Description.t) (cfg : Cfg_with_layout.t) :
     (Cfg_with_layout.t, Error.t) Result.t =
@@ -1408,18 +1457,19 @@ let test (desc : Description.t) (cfg : Cfg_with_layout.t) :
       let cfg = Cfg_with_layout.cfg cfg in
       let entry_block = Cfg.entry_label cfg |> Cfg.get_block_exn cfg in
       let entry_id = Cfg.first_instruction_id entry_block in
-      Cfg_dataflow.Instr.Tbl.find res_instr entry_id
+      InstructionId.Tbl.find res_instr entry_id
     in
     verify_entrypoint entrypoint_equations desc cfg
     |> Result.map_error (fun (error : Error.At_entrypoint.t) : Error.t ->
-           { source = At_entrypoint error; res_instr; res_block; desc; cfg })
+        { source = At_entrypoint error; res_instr; res_block; desc; cfg })
   | Error error ->
     Error { source = At_instruction error; res_instr; res_block; desc; cfg }
 
-let run desc cfg =
+let run desc cfg_with_infos =
+  let cfg = Cfg_with_infos.cfg_with_layout cfg_with_infos in
   match desc with
-  | None -> cfg
+  | None -> cfg_with_infos
   | Some desc -> (
     match test desc cfg with
-    | Ok cfg -> cfg
+    | Ok _ -> cfg_with_infos
     | Error error -> Regalloc_utils.fatal "%a%!" Error.dump error)

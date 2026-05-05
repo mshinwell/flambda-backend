@@ -27,16 +27,16 @@ type t =
       }
   | Non_inlinable_zero_arity of
       { handler : Rebuilt_expr.t Or_unknown.t
-            (** The handler, if available, is stored for
-                [Simplify_switch_expr]. *)
+            (** The handler, if available, is stored for [Simplify_switch_expr].
+            *)
       }
-  | Non_inlinable_non_zero_arity of { arity : Flambda_arity.t }
+  | Non_inlinable_non_zero_arity of { arity : [`Unarized] Flambda_arity.t }
   | Toplevel_or_function_return_or_exn_continuation of
-      { arity : Flambda_arity.t }
-  | Invalid of { arity : Flambda_arity.t }
+      { arity : [`Unarized] Flambda_arity.t }
+  | Invalid of { arity : [`Unarized] Flambda_arity.t }
       (** [Invalid] means that the code of the continuation handler is invalid,
           not that the continuation has zero uses. *)
 
 val print : Are_rebuilding_terms.t -> Format.formatter -> t -> unit
 
-val arity : t -> Flambda_arity.t
+val arity : t -> [`Unarized] Flambda_arity.t

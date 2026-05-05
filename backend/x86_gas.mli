@@ -15,4 +15,9 @@
 
 (** Emit assembly instructions for gas. *)
 
-val generate_asm: out_channel -> X86_ast.asm_line list -> unit
+[@@@ocaml.warning "+a-40-41-42"]
+
+val generate_asm : out_channel -> X86_ast.asm_program -> unit
+
+val format_asm_for_expect_asm :
+  name:string -> body:X86_ast.asm_line list -> string

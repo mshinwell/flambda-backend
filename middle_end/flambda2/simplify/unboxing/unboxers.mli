@@ -24,21 +24,47 @@ type number_decider =
 
 type unboxer =
   { var_name : string;
-    invalid_const : Const.t;
+    var_kind : Flambda_kind.t;
+    poison_const : Const.t;
     unboxing_prim : Simple.t -> P.t;
     prove_simple :
       TE.t -> min_name_mode:Name_mode.t -> T.t -> Simple.t T.meet_shortcut
   }
+
+module Field : sig
+  val unboxing_prim :
+    P.Block_access_kind.t -> block:Simple.t -> index:Target_ocaml_int.t -> P.t
+
+  val unboxer :
+    poison_const:Const.t ->
+    P.Block_access_kind.t ->
+    index:Target_ocaml_int.t ->
+    unboxer
+end
+
+module Closure_field : sig
+  val unboxing_prim : Function_slot.t -> closure:Simple.t -> Value_slot.t -> P.t
+
+  val unboxer :
+    Target_system.Machine_width.t -> Function_slot.t -> Value_slot.t -> unboxer
+end
+
+(* !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+   Each of these modules must be included in the global deciders list in
+   optimistic_unboxing_decision.ml
+   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! *)
 
 module type Number_S = sig
   val decider : number_decider
 
   val unboxing_prim : Simple.t -> P.t
 
-  val unboxer : unboxer
+  val unboxer : Target_system.Machine_width.t -> unboxer
 end
 
 module Immediate : Number_S
+
+module Float32 : Number_S
 
 module Float : Number_S
 
@@ -48,25 +74,8 @@ module Int64 : Number_S
 
 module Nativeint : Number_S
 
-module Field : sig
-  val unboxing_prim :
-    P.Block_access_kind.t -> block:Simple.t -> index:Targetint_31_63.t -> P.t
+module Vec128 : Number_S
 
-  val unboxer :
-    invalid_const:Const.t ->
-    P.Block_access_kind.t ->
-    index:Targetint_31_63.t ->
-    unboxer
-end
+module Vec256 : Number_S
 
-module Closure_field : sig
-  val unboxing_prim :
-    Function_slot.t ->
-    closure:Simple.t ->
-    Value_slot.t ->
-    Flambda_kind.With_subkind.t ->
-    P.t
-
-  val unboxer :
-    Function_slot.t -> Value_slot.t -> Flambda_kind.With_subkind.t -> unboxer
-end
+module Vec512 : Number_S

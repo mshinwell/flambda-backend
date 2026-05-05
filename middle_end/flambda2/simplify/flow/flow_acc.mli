@@ -20,7 +20,7 @@
     - removing unused parameters of *recursive* continuations;
 
     - moving allocations out of the hot path of recursive continuations (e.g.
-    the allocation of a float that was unboxed by the simplifier). *)
+      the allocation of a float that was unboxed by the simplifier). *)
 
 (** Type alias for convenience. *)
 type t = Flow_types.Acc.t
@@ -28,9 +28,15 @@ type t = Flow_types.Acc.t
 (** Printing *)
 val print : Format.formatter -> t -> unit
 
-(** "Consume" the extra args of an accumulator in order to add them to the
-    regular args and parameters in the continuation info of each continuation. *)
-val extend_args_with_extra_args : t -> t
+(** Normalize an accumulator before begin processed. Does two things:
+    - "Consume" the extra args of an accumulator in order to add them to the
+      regular args and parameters in the continuation info of each continuation
+    - Rewrite the callsites of specialized continuations *)
+val normalize_acc :
+  specialization_map:
+    Continuation.t Apply_cont_rewrite_id.Map.t Continuation.Map.t ->
+  t ->
+  t
 
 (** A name for the incorrec tdummy toplevel cont used to initialize the acc. *)
 val wrong_dummy_toplevel_cont_name : string
@@ -43,7 +49,7 @@ val empty : unit -> t
 (** Initialize the analysis so that the stack consists of a single toplevel
     continuation. *)
 val init_toplevel :
-  dummy_toplevel_cont:Continuation.t -> Bound_parameters.t -> t -> t
+  dummy_toplevel_cont:Continuation.t -> Bound_parameters.t -> t
 
 (** Add a new continuation on the stack. Used when entering a continuation
     handler. *)
@@ -58,6 +64,12 @@ val enter_continuation :
 (** Pop the current top of the stack. Used when exiting the current continuation
     handler. *)
 val exit_continuation : Continuation.t -> t -> t
+
+(** Record that the current expression defines some lifted constants; this is
+    not liked to the current continuation. Note: this should only be called at
+    top-level, where the constants will be placed, and not from the fonction
+    where the constants come from. *)
+val record_lifted_constants : Lifted_constant_state.t -> t -> t
 
 (** That variable is defined in the current handler *)
 val record_defined_var : Variable.t -> t -> t
@@ -97,7 +109,7 @@ val add_used_in_current_handler : Name_occurrences.t -> t -> t
 val add_apply_conts :
   result_cont:(Apply_cont_rewrite_id.t * Continuation.t) option ->
   exn_cont:Apply_cont_rewrite_id.t * Exn_continuation.t ->
-  result_arity:Flambda_arity.t ->
+  result_arity:[`Unarized] Flambda_arity.t ->
   t ->
   t
 

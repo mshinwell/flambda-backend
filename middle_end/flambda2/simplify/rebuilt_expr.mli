@@ -66,7 +66,7 @@ module Function_params_and_body : sig
     body:rebuilt_expr ->
     free_names_of_body:Name_occurrences.t ->
     my_closure:Variable.t ->
-    my_region:Variable.t ->
+    my_alloc_mode:Alloc_mode.For_applications.t ->
     my_depth:Variable.t ->
     t
 
@@ -93,6 +93,7 @@ module Continuation_handler : sig
     handler:rebuilt_expr ->
     free_names_of_handler:Name_occurrences.t ->
     is_exn_handler:bool ->
+    is_cold:bool ->
     t
 
   val create' :
@@ -100,6 +101,7 @@ module Continuation_handler : sig
     Bound_parameters.t ->
     handler:rebuilt_expr ->
     is_exn_handler:bool ->
+    is_cold:bool ->
     t
 end
 
@@ -130,7 +132,7 @@ val create_non_recursive_let_cont_without_free_names :
 val create_recursive_let_cont :
   Are_rebuilding_terms.t ->
   invariant_params:Bound_parameters.t ->
-  Continuation_handler.t Continuation.Map.t ->
+  Continuation_handler.t Continuation.Lmap.t ->
   body:t ->
   t
 

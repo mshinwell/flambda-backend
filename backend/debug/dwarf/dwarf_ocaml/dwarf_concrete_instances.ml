@@ -14,29 +14,44 @@
 
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
+open! Int_replace_polymorphic_compare
 open Asm_targets
 open Dwarf_high
-
-type fundecl =
-  { fun_name : string;
-    fun_dbg : Debuginfo.t;
-    fun_end_label : Asm_label.t
-  }
-
 module DAH = Dwarf_attribute_helpers
+module DS = Dwarf_state
+module L = Linear
 
-let for_fundecl ~get_file_id state fundecl =
+let for_fundecl ~get_file_id ~value_type_proto_die state (fundecl : L.fundecl)
+    ~fun_end_label available_ranges_vars inlined_frame_ranges =
   let parent = Dwarf_state.compilation_unit_proto_die state in
   let fun_name = fundecl.fun_name in
-  let linkage_name =
-    match fundecl.fun_dbg with
-    | [item] -> Debuginfo.Scoped_location.string_of_scopes item.dinfo_scopes
-    (* Not sure what to do in the cases below *)
+  let loc = Debuginfo.to_location fundecl.fun_dbg in
+  let demangled_name_from_debug () =
+    match Debuginfo.Dbg.to_list (Debuginfo.get_dbg fundecl.fun_dbg) with
+    | [item] ->
+      Debuginfo.Scoped_location.string_of_scopes ~include_zero_alloc:false
+        item.dinfo_scopes
+      |> Misc.remove_double_underscores
+    (* XXX Not sure what to do in the cases below; see comment in
+       [Debuginfo.to_structured_mangling_path] *)
     | [] | _ :: _ -> fun_name
   in
-  let start_sym = Asm_symbol.create fun_name in
+  let demangled_name =
+    match Compilation_unit.name_mangling_scheme_for_current_unit () with
+    | Flat -> Some (demangled_name_from_debug ())
+    | Structured -> None
+    (* When structured mangling is used, there is no need for a separate
+       [DW_AT_name] on non-inlined functions, because a human-readable name can
+       be reconstructed from the [DW_AT_linkage_name] (i.e. the assembly symbol
+       name). *)
+    (* CR sspies: This omits the demangled name for some symbols that still use
+       the old mangling scheme (see the comment in [make_symbol] in
+       cmm_helpers.ml). I observed this for the module entry point, but for
+       that one the symbol name is currently just "camlTest__entry", which is
+       already reasonably readable. *)
+  in
+  let start_sym = Asm_symbol.create_global fun_name in
   let location_attributes =
-    let loc = Debuginfo.to_location fundecl.fun_dbg in
     if Location.is_none loc
     then [DAH.create_artificial ()]
     else
@@ -52,22 +67,42 @@ let for_fundecl ~get_file_id state fundecl =
         :: DAH.create_decl_column startchar
         :: attributes
   in
-  let attribute_values =
-    location_attributes
-    @ [ DAH.create_name fun_name;
-        DAH.create_linkage_name ~linkage_name;
-        DAH.create_low_pc_from_symbol start_sym;
-        DAH.create_high_pc ~low_pc:start_sym fundecl.fun_end_label;
-        (* CR mshinwell: Probably no need to set this at the moment since the
-           low PC value should be assumed, which is correct. *)
-        DAH.create_entry_pc_from_symbol start_sym;
-        DAH.create_stmt_list
-          ~debug_line_label:(Asm_label.for_dwarf_section Asm_section.Debug_line)
-      ]
+  let _abstract_instance_root_proto_die, _abstract_instance_root_symbol =
+    (* Add the abstract instance root for this function *)
+    DS.Debug.log "*** Adding absint root for %s\n%!" fundecl.fun_name;
+    Dwarf_abstract_instances.add_root state ~parent ~demangled_name start_sym
+      ~location_attributes
   in
-  let _concrete_instance_proto_die =
+  let attribute_values =
+    [ DAH.create_low_pc_from_symbol start_sym;
+      DAH.create_high_pc ~low_pc:start_sym fun_end_label;
+      (* CR mshinwell: Probably no need to set this at the moment since the low
+         PC value should be assumed, which is correct. *)
+      DAH.create_entry_pc_from_symbol start_sym;
+      DAH.create_stmt_list
+        ~debug_line_label:(Asm_label.for_dwarf_section Asm_section.Debug_line);
+      DAH.create_abstract_origin ~die_symbol:_abstract_instance_root_symbol ]
+  in
+  let concrete_instance_proto_die =
     Proto_die.create ~parent:(Some parent) ~tag:Subprogram ~attribute_values ()
   in
+  let _inlined_frame_proto_dies =
+    Profile.record "dwarf_inlined_frames"
+      (fun () ->
+        Dwarf_inlined_frames.dwarf state fundecl ~function_symbol:start_sym
+          ~function_proto_die:concrete_instance_proto_die inlined_frame_ranges)
+      ~accumulate:true ()
+  in
+  (match value_type_proto_die with
+  | None -> ()
+  | Some value_type_proto_die ->
+    assert (not !Dwarf_flags.restrict_to_upstream_dwarf);
+    Profile.record "dwarf_variables_and_parameters"
+      (fun () ->
+        Dwarf_variables_and_parameters.dwarf state ~value_type_proto_die
+          ~function_symbol:start_sym
+          ~function_proto_die:concrete_instance_proto_die available_ranges_vars)
+      ~accumulate:true ());
   (* CR mshinwell: When cross-referencing of DIEs across files is necessary we
      need to be careful about symbol table size. let name = Printf.sprintf
      "__concrete_instance_%s" fun_name in Proto_die.set_name

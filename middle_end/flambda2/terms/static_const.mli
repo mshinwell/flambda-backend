@@ -14,8 +14,8 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(** Language terms that represent statically-allocated values, bound to
-    symbols. *)
+(** Language terms that represent statically-allocated values, bound to symbols.
+*)
 
 (* CR mshinwell: Store coercions so the CR in Simplify_static_const can be
    removed. *)
@@ -24,23 +24,46 @@
     with values computed at runtime. *)
 type t = private
   | Set_of_closures of Set_of_closures.t
-  | Block of Tag.Scannable.t * Mutability.t * Field_of_static_block.t list
+  | Block of
+      Tag.Scannable.t
+      * Mutability.t
+      * Flambda_kind.Scannable_block_shape.t
+      * Simple.With_debuginfo.t list
+  | Boxed_float32 of Numeric_types.Float32_by_bit_pattern.t Or_variable.t
   | Boxed_float of Numeric_types.Float_by_bit_pattern.t Or_variable.t
   | Boxed_int32 of Int32.t Or_variable.t
   | Boxed_int64 of Int64.t Or_variable.t
   | Boxed_nativeint of Targetint_32_64.t Or_variable.t
+  | Boxed_vec128 of Vector_types.Vec128.Bit_pattern.t Or_variable.t
+  | Boxed_vec256 of Vector_types.Vec256.Bit_pattern.t Or_variable.t
+  | Boxed_vec512 of Vector_types.Vec512.Bit_pattern.t Or_variable.t
   | Immutable_float_block of
       Numeric_types.Float_by_bit_pattern.t Or_variable.t list
   | Immutable_float_array of
       Numeric_types.Float_by_bit_pattern.t Or_variable.t list
-  | Immutable_value_array of Field_of_static_block.t list
-      (** [Immutable_value_array] and [Immutable_float_array] constructors
-          always have at least one field. For empty arrays, [Empty_array] must
-          be used, since it is not always possible to identify the kind (e.g.
-          when receiving [Pmakearray Pgenarray] from Lambda). This sort-of
-          doesn't matter at present but seems neater (also see comment on the
-          [Empty_array] case in [Simplify_static_const]). *)
-  | Empty_array
+  | Immutable_float32_array of
+      Numeric_types.Float32_by_bit_pattern.t Or_variable.t list
+  | Immutable_int_array of Target_ocaml_int.t Or_variable.t list
+  | Immutable_int8_array of Numeric_types.Int8.t Or_variable.t list
+  | Immutable_int16_array of Numeric_types.Int16.t Or_variable.t list
+  | Immutable_int32_array of Int32.t Or_variable.t list
+  | Immutable_int64_array of Int64.t Or_variable.t list
+  | Immutable_nativeint_array of Targetint_32_64.t Or_variable.t list
+  | Immutable_vec128_array of
+      Vector_types.Vec128.Bit_pattern.t Or_variable.t list
+  | Immutable_vec256_array of
+      Vector_types.Vec256.Bit_pattern.t Or_variable.t list
+  | Immutable_vec512_array of
+      Vector_types.Vec512.Bit_pattern.t Or_variable.t list
+  | Immutable_value_array of Simple.With_debuginfo.t list
+      (** [Immutable_*_array] constructors always have at least one field. For
+          empty arrays, [Empty_array] must be used. *)
+  | Empty_array of Empty_array_kind.t
+      (** [Empty_array] must specify the kind of the empty array. Arrays of
+          unboxed numbers such as int32 and int64 have a slightly different
+          representation (currently using custom blocks) from regular arrays of
+          values. This affects all operations, most importantly the computation
+          of the length of the array. *)
   | Mutable_string of { initial_value : string }
   | Immutable_string of string
 
@@ -52,7 +75,14 @@ include Contains_ids.S with type t := t
 
 val set_of_closures : Set_of_closures.t -> t
 
-val block : Tag.Scannable.t -> Mutability.t -> Field_of_static_block.t list -> t
+val block :
+  Tag.Scannable.t ->
+  Mutability.t ->
+  Flambda_kind.Scannable_block_shape.t ->
+  Simple.With_debuginfo.t list ->
+  t
+
+val boxed_float32 : Numeric_types.Float32_by_bit_pattern.t Or_variable.t -> t
 
 val boxed_float : Numeric_types.Float_by_bit_pattern.t Or_variable.t -> t
 
@@ -61,6 +91,12 @@ val boxed_int32 : Int32.t Or_variable.t -> t
 val boxed_int64 : Int64.t Or_variable.t -> t
 
 val boxed_nativeint : Targetint_32_64.t Or_variable.t -> t
+
+val boxed_vec128 : Vector_types.Vec128.Bit_pattern.t Or_variable.t -> t
+
+val boxed_vec256 : Vector_types.Vec256.Bit_pattern.t Or_variable.t -> t
+
+val boxed_vec512 : Vector_types.Vec512.Bit_pattern.t Or_variable.t -> t
 
 val immutable_float_block :
   Numeric_types.Float_by_bit_pattern.t Or_variable.t list -> t
@@ -72,13 +108,59 @@ val immutable_float_array :
 
 (** This function can accept empty lists of fields; [Empty_array] will be
     produced. *)
-val immutable_value_array : Field_of_static_block.t list -> t
+val immutable_float32_array :
+  Numeric_types.Float32_by_bit_pattern.t Or_variable.t list -> t
 
-val empty_array : t
+(** This function can accept empty lists of fields; [Empty_array] will be
+    produced. *)
+val immutable_int_array : Target_ocaml_int.t Or_variable.t list -> t
+
+(** This function can accept empty lists of fields; [Empty_array] will be
+    produced. *)
+val immutable_int8_array : Numeric_types.Int8.t Or_variable.t list -> t
+
+(** This function can accept empty lists of fields; [Empty_array] will be
+    produced. *)
+val immutable_int16_array : Numeric_types.Int16.t Or_variable.t list -> t
+
+(** This function can accept empty lists of fields; [Empty_array] will be
+    produced. *)
+val immutable_int32_array : Int32.t Or_variable.t list -> t
+
+(** This function can accept empty lists of fields; [Empty_array] will be
+    produced. *)
+val immutable_int64_array : Int64.t Or_variable.t list -> t
+
+(** This function can accept empty lists of fields; [Empty_array] will be
+    produced. *)
+val immutable_nativeint_array : Targetint_32_64.t Or_variable.t list -> t
+
+(** This function can accept empty lists of fields; [Empty_array] will be
+    produced. *)
+val immutable_vec128_array :
+  Vector_types.Vec128.Bit_pattern.t Or_variable.t list -> t
+
+(** This function can accept empty lists of fields; [Empty_array] will be
+    produced. *)
+val immutable_vec256_array :
+  Vector_types.Vec256.Bit_pattern.t Or_variable.t list -> t
+
+(** This function can accept empty lists of fields; [Empty_array] will be
+    produced. *)
+val immutable_vec512_array :
+  Vector_types.Vec512.Bit_pattern.t Or_variable.t list -> t
+
+(** This function can accept empty lists of fields; [Empty_array] will be
+    produced. *)
+val immutable_value_array : Simple.With_debuginfo.t list -> t
+
+val empty_array : Empty_array_kind.t -> t
 
 val mutable_string : initial_value:string -> t
 
 val immutable_string : string -> t
+
+val block_field_kind : t -> int -> Flambda_kind.t
 
 val is_block : t -> bool
 

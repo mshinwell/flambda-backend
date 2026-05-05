@@ -14,7 +14,9 @@
 
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
+open! Int_replace_polymorphic_compare [@@ocaml.warning "-66"]
 open Asm_targets
+module A = Asm_directives
 
 type t =
   { name : Asm_label.t;
@@ -25,7 +27,11 @@ type t =
    location list by increasing virtual memory address on the start addresses of
    the entries. *)
 let sort entries =
-  List.sort Dwarf_4_location_list_entry.compare_ascending_vma entries
+  Dwarf_4_entry_sorting.sort_preserving_base_addresses
+    ~is_base_address_selection_entry:
+      Dwarf_4_location_list_entry.is_base_address_selection_entry
+    ~compare_ascending_vma:Dwarf_4_location_list_entry.compare_ascending_vma
+    entries
 
 let create ~location_list_entries =
   { name = Asm_label.create (DWARF Debug_loc);
@@ -54,7 +60,6 @@ let compare_increasing_vma t1 t2 =
   | _ -> failwith "Location_list.compare on empty location list(s)"
 
 let emit ~asm_directives t =
-  let module A = (val asm_directives : Asm_directives.S) in
   A.new_line ();
   A.comment "Location list:";
   A.define_label t.name;

@@ -15,8 +15,8 @@
 (**************************************************************************)
 
 (** The left-hand sides of [Let]-expressions that bind statically-allocated
-    constants and pieces of code. Used via [Bound_pattern] in the term
-    language. *)
+    constants and pieces of code. Used via [Bound_pattern] in the term language.
+*)
 
 module Pattern : sig
   type t = private
@@ -62,6 +62,8 @@ val symbols_being_defined : t -> Symbol.Set.t
 val code_being_defined : t -> Code_id.Set.t
 
 val everything_being_defined : t -> Code_id_or_symbol.Set.t
+
+val everything_being_defined_as_list : t -> Code_id_or_symbol.t list
 
 val concat : t -> t -> t
 

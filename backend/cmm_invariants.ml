@@ -12,9 +12,10 @@
 (*                                                                        *)
 (**************************************************************************)
 
-[@@@ocaml.warning "-40"]
+[@@@ocaml.warning "+a-40-41-42"]
 
-module Int = Numbers.Int
+open! Int_replace_polymorphic_compare
+
 
 (* Check a number of continuation-related invariants *)
 
@@ -23,21 +24,21 @@ module Env : sig
 
   val init : unit -> t
 
-  val handler : t -> cont:int -> arg_num:int -> t
+  val handler : t -> cont:Static_label.t -> arg_num:int -> t
 
   val jump : t -> exit_label:Cmm.exit_label -> arg_num:int -> unit
 
   val report : Format.formatter -> bool
 end = struct
   type t = {
-    bound_handlers : int Int.Map.t;
+    bound_handlers : int Static_label.Map.t;
   }
 
   type error =
-    | Unbound_handler of { cont: int }
-    | Multiple_handlers of { cont: int; }
+    | Unbound_handler of { cont: Static_label.t }
+    | Multiple_handlers of { cont: Static_label.t; }
     | Wrong_arguments_number of
-        { cont: int; handler_args: int; jump_args: int; }
+        { cont: Static_label.t; handler_args: int; jump_args: int; }
 
   module Error = struct
     type t = error
@@ -48,12 +49,12 @@ end = struct
   module ErrorSet = Set.Make(Error)
 
   type persistent_state = {
-    mutable all_handlers : Int.Set.t;
+    mutable all_handlers : Static_label.Set.t;
     mutable errors : ErrorSet.t;
   }
 
   let state = {
-    all_handlers = Int.Set.empty;
+    all_handlers = Static_label.Set.empty;
     errors = ErrorSet.empty;
   }
 
@@ -70,23 +71,23 @@ end = struct
     record_error (Wrong_arguments_number { cont; handler_args; jump_args; })
 
   let init () =
-    state.all_handlers <- Int.Set.empty;
+    state.all_handlers <- Static_label.Set.empty;
     state.errors <- ErrorSet.empty;
     {
-      bound_handlers = Int.Map.empty;
+      bound_handlers = Static_label.Map.empty;
     }
 
   let handler t ~cont ~arg_num =
-    if Int.Set.mem cont state.all_handlers then multiple_handler cont;
-    state.all_handlers <- Int.Set.add cont state.all_handlers;
-    let bound_handlers = Int.Map.add cont arg_num t.bound_handlers in
+    if Static_label.Set.mem cont state.all_handlers then multiple_handler cont;
+    state.all_handlers <- Static_label.Set.add cont state.all_handlers;
+    let bound_handlers = Static_label.Map.add cont arg_num t.bound_handlers in
     { bound_handlers; }
 
   let jump t ~exit_label ~arg_num =
     match (exit_label : Cmm.exit_label) with
     | Return_lbl -> ()
     | Lbl cont ->
-      match Int.Map.find cont t.bound_handlers with
+      match Static_label.Map.find cont t.bound_handlers with
       | handler_args ->
         if arg_num <> handler_args then
           wrong_arguments cont handler_args arg_num
@@ -95,22 +96,22 @@ end = struct
   let print_error ppf error =
     match error with
     | Unbound_handler { cont } ->
-      if Int.Set.mem cont state.all_handlers then
+      if Static_label.Set.mem cont state.all_handlers then
         Format.fprintf ppf
-          "Continuation %d was used outside the scope of its handler"
-          cont
+          "Continuation %a was used outside the scope of its handler"
+          Static_label.format cont
       else
         Format.fprintf ppf
-          "Continuation %d was used but never bound"
-          cont
+          "Continuation %a was used but never bound"
+          Static_label.format cont
     | Multiple_handlers { cont; } ->
       Format.fprintf ppf
-        "Continuation %d was declared in more than one handler"
-        cont
+        "Continuation %a was declared in more than one handler"
+        Static_label.format cont
     | Wrong_arguments_number { cont; handler_args; jump_args } ->
       Format.fprintf ppf
-        "Continuation %d was declared with %d arguments but called with %d"
-        cont
+        "Continuation %a was declared with %d arguments but called with %d"
+        Static_label.format cont
         handler_args
         jump_args
 
@@ -127,16 +128,14 @@ end
 
 let rec check env (expr : Cmm.expression) =
   match expr with
-  | Cconst_int _ | Cconst_natint _ | Cconst_float _ | Cconst_symbol _
-  | Cvar _ ->
+  | Cconst_int _ | Cconst_natint _ | Cconst_float32 _ | Cconst_float _
+  | Cconst_symbol _ | Cconst_vec128 _ | Cconst_vec256 _ | Cconst_vec512 _
+  | Cvar _ | Cinvalid _ ->
     ()
-  | Clet (_, expr, body)
-  | Clet_mut (_, _, expr, body) ->
+  | Clet (_, expr, body) ->
     check env expr;
     check env body
   | Cphantom_let (_, _, expr) ->
-    check env expr
-  | Cassign (_, expr) ->
     check env expr
   | Ctuple exprs ->
     List.iter (check env) exprs
@@ -145,39 +144,30 @@ let rec check env (expr : Cmm.expression) =
   | Csequence (expr1, expr2) ->
     check env expr1;
     check env expr2
-  | Cifthenelse (test, _, ifso, _, ifnot, _, _) ->
+  | Cifthenelse (test, _, ifso, _, ifnot, _) ->
     check env test;
     check env ifso;
     check env ifnot
-  | Cswitch (body, _, branches, _, _) ->
+  | Cswitch (body, _, branches, _) ->
     check env body;
     Array.iter (fun (expr, _) -> check env expr) branches
-  | Ccatch (rec_flag, handlers, body, _) ->
+  | Ccatch (flag, handlers, body) ->
     let env_extended =
       List.fold_left
-        (fun env (cont, args, _, _) ->
-           Env.handler env ~cont ~arg_num:(List.length args))
+        (fun env Cmm.{label = cont; params = args; _} ->
+           Env.handler env ~cont:cont ~arg_num:(List.length args))
         env
         handlers
     in
     check env_extended body;
     let env_handler =
-      match rec_flag with
+      match flag with
       | Recursive -> env_extended
-      | Nonrecursive -> env
+      | Normal | Exn_handler -> env
     in
-    List.iter (fun (_, _, handler, _) -> check env_handler handler) handlers
+    List.iter (fun Cmm.{body = handler; _} -> check env_handler handler) handlers
   | Cexit (exit_label, args, _trap_actions) ->
     Env.jump env ~exit_label ~arg_num:(List.length args)
-  | Ctrywith (body, _trywith_kind, _, handler, _, _) ->
-    (* Jumping from inside a trywith body to outside isn't very nice,
-       but it's handled correctly by Linearize, as it happens
-       when compiling match ... with exception ..., for instance, so it is
-       not reported as an error. *)
-    check env body;
-    check env handler
-  | Cregion e -> check env e
-  | Ctail e -> check env e
 
 let run ppf (fundecl : Cmm.fundecl) =
   let env = Env.init () in

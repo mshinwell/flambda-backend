@@ -1,45 +1,18 @@
+[@@@ocaml.warning "+a-40-41-42"]
+
 open Cfg_intf.S
+open! Int_replace_polymorphic_compare [@@warning "-66"]
 
 let from_basic (basic : basic) : Linear.instruction_desc =
   match basic with
   | Prologue -> Lprologue
+  (* [Epilogue] is changed into [Lepilogue_open], which is not complete. The
+     corresponding [Lepilogue_close] is added in
+     [Cfg_to_linear.linearize_terminator], as it needs to come after the
+     terminator instruction. *)
+  | Epilogue -> Lepilogue_open
   | Reloadretaddr -> Lreloadretaddr
   | Pushtrap { lbl_handler } -> Lpushtrap { lbl_handler }
-  | Poptrap -> Lpoptrap
-  | Op op ->
-    let op : Mach.operation =
-      match op with
-      | Move -> Imove
-      | Spill -> Ispill
-      | Reload -> Ireload
-      | Const_int n -> Iconst_int n
-      | Const_float n -> Iconst_float n
-      | Const_symbol n -> Iconst_symbol n
-      | Stackoffset n -> Istackoffset n
-      | Load (c, m, i) -> Iload (c, m, i)
-      | Store (c, m, b) -> Istore (c, m, b)
-      | Intop op -> Iintop op
-      | Intop_imm (op, i) -> Iintop_imm (op, i)
-      | Intop_atomic { op; size; addr } -> Iintop_atomic { op; size; addr }
-      | Negf -> Inegf
-      | Absf -> Iabsf
-      | Addf -> Iaddf
-      | Subf -> Isubf
-      | Mulf -> Imulf
-      | Divf -> Idivf
-      | Compf c -> Icompf c
-      | Csel c -> Icsel c
-      | Floatofint -> Ifloatofint
-      | Intoffloat -> Iintoffloat
-      | Valueofint -> Ivalueofint
-      | Intofvalue -> Iintofvalue
-      | Probe_is_enabled { name } -> Iprobe_is_enabled { name }
-      | Opaque -> Iopaque
-      | Specific op -> Ispecific op
-      | Begin_region -> Ibeginregion
-      | End_region -> Iendregion
-      | Name_for_debugger { ident; which_parameter; provenance; is_assignment }
-        ->
-        Iname_for_debugger { ident; which_parameter; provenance; is_assignment }
-    in
-    Lop op
+  | Poptrap { lbl_handler } -> Lpoptrap { lbl_handler }
+  | Stack_check { max_frame_size_bytes } -> Lstackcheck { max_frame_size_bytes }
+  | Op op -> Lop op

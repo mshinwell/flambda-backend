@@ -83,7 +83,7 @@ let equal_value_slot_info (info1 : value_slot_info) (info2 : value_slot_info) =
   | Dead_value_slot, Dead_value_slot -> true
   | ( Live_value_slot { offset = o1; size = s1; is_scanned = v1 },
       Live_value_slot { offset = o2; size = s2; is_scanned = v2 } ) ->
-    o1 = o2 && s1 = s2 && v1 = v2
+    o1 = o2 && s1 = s2 && Bool.equal v1 v2
   | Dead_value_slot, Live_value_slot _ | Live_value_slot _, Dead_value_slot ->
     false
 
@@ -151,8 +151,9 @@ let reexport_function_slots function_slot_set offsets =
   let imported_offsets = imported_offsets () in
   Function_slot.Set.fold
     (fun function_slot offsets ->
-      if Compilation_unit.is_current
-           (Function_slot.get_compilation_unit function_slot)
+      if
+        Compilation_unit.is_current
+          (Function_slot.get_compilation_unit function_slot)
       then offsets
       else
         match function_slot_offset imported_offsets function_slot with
@@ -168,8 +169,8 @@ let reexport_value_slots value_slot_set offsets =
   let imported_offsets = imported_offsets () in
   Value_slot.Set.fold
     (fun value_slot offsets ->
-      if Compilation_unit.is_current
-           (Value_slot.get_compilation_unit value_slot)
+      if
+        Compilation_unit.is_current (Value_slot.get_compilation_unit value_slot)
       then offsets
       else
         match value_slot_offset imported_offsets value_slot with

@@ -35,10 +35,12 @@ val create_let_binding :
   Rebuilt_expr.t * Upwards_acc.t
 
 type binding_to_place =
-  { let_bound : Bound_pattern.t;
-    simplified_defining_expr : Simplified_named.t;
-    original_defining_expr : Named.t option
-  }
+  | Keep_binding of
+      { let_bound : Bound_pattern.t;
+        simplified_defining_expr : Simplified_named.t;
+        original_defining_expr : Named.t option
+      }
+  | Delete_binding of { original_defining_expr : Named.t option }
 
 (** Create [Let] binding(s) around a given body. (The type of this function
     prevents it from being used to create "let symbol" bindings; use the other
@@ -84,7 +86,7 @@ val create_switch :
   Upwards_acc.t ->
   condition_dbg:Debuginfo.t ->
   scrutinee:Simple.t ->
-  arms:Apply_cont.t Targetint_31_63.Map.t ->
+  arms:Apply_cont.t Target_ocaml_int.Map.t ->
   Rebuilt_expr.t * Upwards_acc.t
 
 type new_let_cont =
@@ -110,6 +112,7 @@ val rebuild_invalid :
 (** Handling of the rewriting of continuation use sites. *)
 
 type rewrite_apply_cont_result = private
+  | Invalid of { message : string }
   | Apply_cont of Apply_cont.t
   | Expr of
       (apply_cont_to_expr:
@@ -117,10 +120,12 @@ type rewrite_apply_cont_result = private
       Rebuilt_expr.t * Cost_metrics.t * Name_occurrences.t)
 
 type rewrite_switch_arm_result = private
+  | Invalid of { message : string }
   | Apply_cont of Apply_cont.t
   | New_wrapper of new_let_cont
 
-val no_rewrite_apply_cont : Apply_cont.t -> rewrite_apply_cont_result
+val no_rewrite_apply_cont :
+  Upwards_env.t -> Apply_cont.t -> rewrite_apply_cont_result
 
 val rewrite_apply_cont :
   Upwards_acc.t ->
@@ -133,13 +138,13 @@ val rewrite_switch_arm :
   Upwards_acc.t ->
   Apply_cont.t ->
   use_id:Apply_cont_rewrite_id.t ->
-  Flambda_arity.t ->
+  [`Unarized] Flambda_arity.t ->
   rewrite_switch_arm_result
 
 val rewrite_fixed_arity_apply :
   Upwards_acc.t ->
-  use_id:Apply_cont_rewrite_id.t ->
-  Flambda_arity.t ->
+  use_id:Apply_cont_rewrite_id.t option ->
+  [`Unarized] Flambda_arity.t ->
   Apply.t ->
   Upwards_acc.t * Rebuilt_expr.t
 

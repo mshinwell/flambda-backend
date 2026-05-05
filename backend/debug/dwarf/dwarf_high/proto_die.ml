@@ -12,6 +12,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
+open! Int_replace_polymorphic_compare [@@ocaml.warning "-66"]
 open Asm_targets
 open Dwarf_low
 
@@ -39,6 +40,9 @@ type t =
     location_list_in_debug_loc_table : Dwarf_4_location_list.t option
   }
 
+(* CR mshinwell/xclerc: maybe this could avoid using phys-equal? *)
+let equal t1 t2 = t1 == t2
+
 let attribute_values_map attribute_values =
   List.fold_left
     (fun map attribute_value ->
@@ -51,7 +55,7 @@ let create ?reference ?(sort_priority = -1) ?location_list_in_debug_loc_table
     ~parent ~tag ~attribute_values () =
   (match parent with
   | None ->
-    if tag <> Dwarf_tag.Compile_unit
+    if Dwarf_tag.compare tag Dwarf_tag.Compile_unit <> 0
     then failwith "only compilation unit proto-DIEs may be without parents"
   | Some _parent -> ());
   let reference =
@@ -99,6 +103,10 @@ let add_or_replace_attribute_value t attribute_value =
       attribute_value t.attribute_values
   in
   t.attribute_values <- attribute_values
+
+let replace_all_attribute_values t attribute_values =
+  let attribute_values = attribute_values_map attribute_values in
+  { t with attribute_values }
 
 let set_name t name = t.name <- Some name
 

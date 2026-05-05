@@ -76,6 +76,8 @@ and let_expr =
     defining_expr : named
   }
 
+(* CR mshinwell/xclerc: use a different [Debuginfo.t] type (not least so that
+   freshening of uids etc causes less allocation) *)
 and named =
   | Simple of Simple.t
   | Prim of Flambda_primitive.t * Debuginfo.t
@@ -87,7 +89,8 @@ and let_cont_expr =
   | Non_recursive of
       { handler : non_recursive_let_cont_handler;
         num_free_occurrences : Num_occurrences.t Or_unknown.t;
-        is_applied_with_traps : bool
+        is_applied_with_traps : bool;
+        can_be_lifted : bool
       }
   | Recursive of recursive_let_cont_handlers
 
@@ -112,13 +115,14 @@ and continuation_handler_t0 =
 and continuation_handler =
   { cont_handler_abst :
       (Bound_parameters.t, continuation_handler_t0) Name_abstraction.t;
-    is_exn_handler : bool
+    is_exn_handler : bool;
+    is_cold : bool
   }
 
 and continuation_handlers_t0 =
   (Bound_parameters.t, continuation_handlers) Name_abstraction.t
 
-and continuation_handlers = continuation_handler Continuation.Map.t
+and continuation_handlers = continuation_handler Continuation.Lmap.t
 
 and function_params_and_body_base =
   { expr : expr;
@@ -210,7 +214,8 @@ and apply_renaming_let_expr ({ let_abst; defining_expr } as t) renaming =
 
 and apply_renaming_let_cont_expr let_cont renaming =
   match let_cont with
-  | Non_recursive { handler; num_free_occurrences; is_applied_with_traps } ->
+  | Non_recursive
+      { handler; num_free_occurrences; is_applied_with_traps; can_be_lifted } ->
     let handler' =
       apply_renaming_non_recursive_let_cont_handler handler renaming
     in
@@ -218,7 +223,11 @@ and apply_renaming_let_cont_expr let_cont renaming =
     then let_cont
     else
       Non_recursive
-        { handler = handler'; num_free_occurrences; is_applied_with_traps }
+        { handler = handler';
+          num_free_occurrences;
+          is_applied_with_traps;
+          can_be_lifted
+        }
   | Recursive handlers ->
     let handlers' =
       apply_renaming_recursive_let_cont_handlers handlers renaming
@@ -264,7 +273,7 @@ and apply_renaming_continuation_handler_t0
     }
 
 and apply_renaming_continuation_handler
-    ({ cont_handler_abst; is_exn_handler } as t) renaming =
+    ({ cont_handler_abst; is_exn_handler; is_cold } as t) renaming =
   let cont_handler_abst' =
     Name_abstraction.apply_renaming
       (module Bound_parameters)
@@ -273,7 +282,7 @@ and apply_renaming_continuation_handler
   in
   if cont_handler_abst == cont_handler_abst'
   then t
-  else { cont_handler_abst = cont_handler_abst'; is_exn_handler }
+  else { cont_handler_abst = cont_handler_abst'; is_exn_handler; is_cold }
 
 and apply_renaming_continuation_handlers t renaming =
   Name_abstraction.apply_renaming
@@ -281,12 +290,13 @@ and apply_renaming_continuation_handlers t renaming =
     t renaming ~apply_renaming_to_term:apply_renaming_continuations_handlers_t0
 
 and apply_renaming_continuations_handlers_t0 t renaming =
-  Continuation.Map.fold
-    (fun k handler result ->
-      let k = Renaming.apply_continuation renaming k in
-      let handler = apply_renaming_continuation_handler handler renaming in
-      Continuation.Map.add k handler result)
-    t Continuation.Map.empty
+  Continuation.Lmap.of_list
+  @@ List.map
+       (fun (k, handler) ->
+         let k = Renaming.apply_continuation renaming k in
+         let handler = apply_renaming_continuation_handler handler renaming in
+         k, handler)
+       (Continuation.Lmap.bindings t)
 
 and apply_renaming_function_params_and_body_base { expr; free_names } renaming =
   let expr = apply_renaming expr renaming in
@@ -335,7 +345,7 @@ let rec ids_for_export_continuation_handler_t0
   ids_for_export handler
 
 and ids_for_export_continuation_handler
-    { cont_handler_abst; is_exn_handler = _ } =
+    { cont_handler_abst; is_exn_handler = _; is_cold = _ } =
   Name_abstraction.ids_for_export
     (module Bound_parameters)
     cont_handler_abst
@@ -347,7 +357,7 @@ and ids_for_export_continuation_handlers t =
     t ~ids_for_export_of_term:ids_for_export_continuation_handlers_t0
 
 and ids_for_export_continuation_handlers_t0 t =
-  Continuation.Map.fold
+  Continuation.Lmap.fold
     (fun k handler ids ->
       Ids_for_export.union ids
         (Ids_for_export.add_continuation
@@ -388,7 +398,11 @@ and ids_for_export_named t =
 and ids_for_export_let_cont_expr t =
   match t with
   | Non_recursive
-      { handler; num_free_occurrences = _; is_applied_with_traps = _ } ->
+      { handler;
+        num_free_occurrences = _;
+        is_applied_with_traps = _;
+        can_be_lifted = _
+      } ->
     ids_for_export_non_recursive_let_cont_handler handler
   | Recursive handlers -> ids_for_export_recursive_let_cont_handlers handlers
 
@@ -455,17 +469,15 @@ let rec named_must_be_static_consts (named : named) =
       named
 
 and match_against_bound_static_pattern_static_const_or_code :
-      'a.
-      static_const_or_code ->
-      Bound_static.Pattern.t ->
-      code:(Code_id.t -> function_params_and_body Code0.t -> 'a) ->
-      deleted_code:(Code_id.t -> 'a) ->
-      set_of_closures:
-        (closure_symbols:Symbol.t Function_slot.Lmap.t ->
-        Set_of_closures.t ->
-        'a) ->
-      block_like:(Symbol.t -> Static_const.t -> 'a) ->
-      'a =
+    'a.
+    static_const_or_code ->
+    Bound_static.Pattern.t ->
+    code:(Code_id.t -> function_params_and_body Code0.t -> 'a) ->
+    deleted_code:(Code_id.t -> 'a) ->
+    set_of_closures:
+      (closure_symbols:Symbol.t Function_slot.Lmap.t -> Set_of_closures.t -> 'a) ->
+    block_like:(Symbol.t -> Static_const.t -> 'a) ->
+    'a =
  fun static_const_or_code (pat : Bound_static.Pattern.t) ~code:code_callback
      ~deleted_code:deleted_code_callback ~set_of_closures ~block_like ->
   match static_const_or_code, pat with
@@ -487,22 +499,23 @@ and match_against_bound_static_pattern_static_const_or_code :
       static_const_or_code
 
 and match_against_bound_static__static_const_group :
-      'a.
-      static_const_group ->
-      Bound_static.t ->
-      init:'a ->
-      code:('a -> Code_id.t -> function_params_and_body Code0.t -> 'a) ->
-      deleted_code:('a -> Code_id.t -> 'a) ->
-      set_of_closures:
-        ('a ->
-        closure_symbols:Symbol.t Function_slot.Lmap.t ->
-        Set_of_closures.t ->
-        'a) ->
-      block_like:('a -> Symbol.t -> Static_const.t -> 'a) ->
-      'a =
+    'a.
+    static_const_group ->
+    Bound_static.t ->
+    init:'a ->
+    code:('a -> Code_id.t -> function_params_and_body Code0.t -> 'a) ->
+    deleted_code:('a -> Code_id.t -> 'a) ->
+    set_of_closures:
+      ('a ->
+      closure_symbols:Symbol.t Function_slot.Lmap.t ->
+      Set_of_closures.t ->
+      'a) ->
+    block_like:('a -> Symbol.t -> Static_const.t -> 'a) ->
+    'a =
  fun t bound_static ~init ~code:code_callback
      ~deleted_code:deleted_code_callback
-     ~set_of_closures:set_of_closures_callback ~block_like:block_like_callback ->
+     ~set_of_closures:set_of_closures_callback
+     ~block_like:block_like_callback ->
   let bound_static_pats = Bound_static.to_list bound_static in
   if List.compare_lengths t bound_static_pats <> 0
   then
@@ -526,28 +539,37 @@ and print ppf (t : expr) =
   | Let let_expr -> print_let_expr ppf let_expr
   | Let_cont let_cont -> print_let_cont_expr ppf let_cont
   | Apply apply ->
-    Format.fprintf ppf "@[<hov 1>(%tapply%t@ %a)@]" Flambda_colours.expr_keyword
-      Flambda_colours.pop Apply.print apply
+    let name =
+      match Apply.call_kind apply with
+      | Function _ | Method _ | C_call _ -> "apply"
+      | Effect _ -> "effect"
+    in
+    Format.fprintf ppf "@[<hov 1>(%t%s%t@ %a)@]" Flambda_colours.expr_keyword
+      name Flambda_colours.pop Apply.print apply
   | Apply_cont apply_cont -> Apply_cont.print ppf apply_cont
   | Switch switch -> Switch.print ppf switch
   | Invalid { message } ->
-    fprintf ppf "@[(%tinvalid%t@ @[<hov 1>%s@])@]"
-      Flambda_colours.invalid_keyword Flambda_colours.pop message
+    fprintf ppf "@[<hov 1>(%tinvalid%t@ @[<v>%a@])@]"
+      Flambda_colours.invalid_keyword Flambda_colours.pop
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space Format.pp_print_string)
+      (String.split_on_char '\n' message)
 
 and print_continuation_handler (recursive : Recursive.t) invariant_params ppf k
-    ({ cont_handler_abst = _; is_exn_handler } as t) occurrences ~first =
+    ({ cont_handler_abst = _; is_exn_handler; is_cold } as t) occurrences ~first
+    =
   let fprintf = Format.fprintf in
   if not first then fprintf ppf "@ ";
   let print params ~handler =
     (match descr handler with
     | Apply_cont _ | Invalid _ -> fprintf ppf "@[<hov 0>"
     | Let _ | Let_cont _ | Apply _ | Switch _ -> fprintf ppf "@[<v 0>");
-    fprintf ppf "@[<hov 1>%t%a%t%t%s%t%t%s%t"
+    fprintf ppf "@[<hov 1>%t%a%t%t%s%t%t%s%s%t"
       Flambda_colours.continuation_definition Continuation.print k
       Flambda_colours.pop Flambda_colours.expr_keyword
       (match recursive with Non_recursive -> "" | Recursive -> " (rec)")
       Flambda_colours.pop Flambda_colours.continuation_annotation
       (if is_exn_handler then "[eh]" else "")
+      (if is_cold then "[cold]" else "")
       Flambda_colours.pop;
     if not (Bound_parameters.is_empty invariant_params)
     then fprintf ppf "(invariant %a)" Bound_parameters.print invariant_params;
@@ -567,20 +589,27 @@ and print_continuation_handler (recursive : Recursive.t) invariant_params ppf k
 
 and print_function_params_and_body ppf t =
   let print ~return_continuation ~exn_continuation params ~body ~my_closure
-      ~is_my_closure_used:_ ~my_region ~my_depth ~free_names_of_body:_ =
+      ~is_my_closure_used:_ ~my_region ~my_ghost_region ~my_depth
+      ~free_names_of_body:_ =
     let my_closure =
-      Bound_parameter.create my_closure (K.With_subkind.create K.value Anything)
+      Bound_parameter.create my_closure
+        (K.With_subkind.create K.value Anything Non_nullable)
+        Flambda_debug_uid.none
     in
     fprintf ppf
       "@[<hov 1>(%t@<1>\u{03bb}%t@[<hov \
        1>@<1>\u{3008}%a@<1>\u{3009}@<1>\u{300a}%a@<1>\u{300b}\u{27c5}%t%a%t\u{27c6}@ \
-       %a %a %t%a%t %t.%t@]@ %a))@]"
+       \u{27c5}%t%a%t\u{27c6}@ %a %a %t%a%t %t.%t@]@ %a))@]"
       Flambda_colours.lambda Flambda_colours.pop Continuation.print
       return_continuation Continuation.print exn_continuation
-      Flambda_colours.parameter Variable.print my_region Flambda_colours.pop
-      Bound_parameters.print params Bound_parameter.print my_closure
-      Flambda_colours.depth_variable Variable.print my_depth Flambda_colours.pop
-      Flambda_colours.elide Flambda_colours.pop print body
+      Flambda_colours.parameter
+      (Format.pp_print_option Variable.print)
+      my_region Flambda_colours.pop Flambda_colours.parameter
+      (Format.pp_print_option Variable.print)
+      my_ghost_region Flambda_colours.pop Bound_parameters.print params
+      Bound_parameter.print my_closure Flambda_colours.depth_variable
+      Variable.print my_depth Flambda_colours.pop Flambda_colours.elide
+      Flambda_colours.pop print body
   in
   let module BFF = Bound_for_function in
   Name_abstraction.pattern_match_for_printing
@@ -592,13 +621,18 @@ and print_function_params_and_body ppf t =
         ~exn_continuation:(BFF.exn_continuation bff) (BFF.params bff) ~body:expr
         ~my_closure:(BFF.my_closure bff)
         ~is_my_closure_used:t.is_my_closure_used ~my_region:(BFF.my_region bff)
-        ~my_depth:(BFF.my_depth bff) ~free_names_of_body:free_names)
+        ~my_ghost_region:(BFF.my_ghost_region bff) ~my_depth:(BFF.my_depth bff)
+        ~free_names_of_body:free_names)
 
 and print_let_cont_expr ppf t =
   let rec gather_let_conts let_conts let_cont =
     match let_cont with
-    | Non_recursive { handler; num_free_occurrences; is_applied_with_traps = _ }
-      ->
+    | Non_recursive
+        { handler;
+          num_free_occurrences;
+          is_applied_with_traps = _;
+          can_be_lifted = _
+        } ->
       let print k ~body =
         let let_conts, body =
           match descr body with
@@ -634,7 +668,7 @@ and print_let_cont_expr ppf t =
                 invariant_params,
                 handler,
                 Or_unknown.Unknown ))
-            (Continuation.Map.bindings handlers)
+            (Continuation.Lmap.bindings handlers)
         in
         new_let_conts @ let_conts, body
       in
@@ -680,9 +714,11 @@ and flatten_for_printing0 bound_static defining_exprs =
         }
       in
       flattened_acc @ [flattened], true)
-    ~set_of_closures:
-      (fun (flattened_acc, second_or_later_rec_binding) ~closure_symbols
-           set_of_closures ->
+    ~set_of_closures:(fun
+        (flattened_acc, second_or_later_rec_binding)
+        ~closure_symbols
+        set_of_closures
+      ->
       let flattened =
         if Set_of_closures.is_empty set_of_closures
         then []
@@ -694,8 +730,8 @@ and flatten_for_printing0 bound_static defining_exprs =
             } ]
       in
       flattened_acc @ flattened, true)
-    ~block_like:
-      (fun (flattened_acc, second_or_later_rec_binding) symbol defining_expr ->
+    ~block_like:(fun
+        (flattened_acc, second_or_later_rec_binding) symbol defining_expr ->
       let flattened =
         { second_or_later_binding_within_one_set = false;
           second_or_later_rec_binding;
@@ -887,7 +923,7 @@ module Continuation_handler = struct
   module A = Name_abstraction.Make (Bound_parameters) (T0)
 
   let create params ~handler ~(free_names_of_handler : _ Or_unknown.t)
-      ~is_exn_handler =
+      ~is_exn_handler ~is_cold =
     Bound_parameters.check_no_duplicates params;
     let num_normal_occurrences_of_params =
       match free_names_of_handler with
@@ -904,7 +940,7 @@ module Continuation_handler = struct
     in
     let t0 : T0.t = { num_normal_occurrences_of_params; handler } in
     let cont_handler_abst = A.create params t0 in
-    { cont_handler_abst; is_exn_handler }
+    { cont_handler_abst; is_exn_handler; is_cold }
 
   let pattern_match t ~f =
     let open A in
@@ -931,10 +967,10 @@ module Continuation_handler = struct
             then
               A.pattern_match_pair t1.cont_handler_abst t2.cont_handler_abst
                 ~f:(fun
-                     params
-                     ({ handler = handler1; _ } : T0.t)
-                     ({ handler = handler2; _ } : T0.t)
-                   -> Ok (f params ~handler1 ~handler2))
+                    params
+                    ({ handler = handler1; _ } : T0.t)
+                    ({ handler = handler2; _ } : T0.t)
+                  -> Ok (f params ~handler1 ~handler2))
             else
               Error
                 Pattern_match_pair_error.Parameter_lists_have_different_lengths))
@@ -945,6 +981,8 @@ module Continuation_handler = struct
 
   let is_exn_handler t = t.is_exn_handler
 
+  let is_cold t = t.is_cold
+
   let apply_renaming = apply_renaming_continuation_handler
 end
 
@@ -953,10 +991,10 @@ module Continuation_handlers = struct
 
   let to_map t = t
 
-  let domain t = Continuation.Map.keys t
+  let domain t = Continuation.Lmap.keys t
 
   let contains_exn_handler t =
-    Continuation.Map.exists
+    Continuation.Lmap.exists
       (fun _cont handler -> Continuation_handler.is_exn_handler handler)
       t
 end
@@ -975,7 +1013,7 @@ module Function_params_and_body = struct
   type t = function_params_and_body
 
   let create ~return_continuation ~exn_continuation params ~body
-      ~free_names_of_body ~my_closure ~my_region ~my_depth =
+      ~free_names_of_body ~my_closure ~my_alloc_mode ~my_depth =
     Bound_parameters.check_no_duplicates params;
     let is_my_closure_used =
       Or_unknown.map free_names_of_body ~f:(fun free_names_of_body ->
@@ -984,7 +1022,7 @@ module Function_params_and_body = struct
     let base : Base.t = { expr = body; free_names = free_names_of_body } in
     let bound_for_function =
       Bound_for_function.create ~return_continuation ~exn_continuation ~params
-        ~my_closure ~my_region ~my_depth
+        ~my_closure ~my_alloc_mode ~my_depth
     in
     let abst = A.create bound_for_function base in
     { abst; is_my_closure_used }
@@ -999,16 +1037,16 @@ module Function_params_and_body = struct
       ~return_continuation:(BFF.return_continuation bff)
       ~exn_continuation:(BFF.exn_continuation bff) (BFF.params bff) ~body:expr
       ~my_closure:(BFF.my_closure bff) ~is_my_closure_used:t.is_my_closure_used
-      ~my_region:(BFF.my_region bff) ~my_depth:(BFF.my_depth bff)
+      ~my_alloc_mode:(BFF.my_alloc_mode bff) ~my_depth:(BFF.my_depth bff)
       ~free_names_of_body:free_names
 
   let pattern_match_pair t1 t2 ~f =
     A.pattern_match_pair t1.abst t2.abst
       ~f:(fun
-           bound_for_function
-           { expr = body1; free_names = _ }
-           { expr = body2; free_names = _ }
-         ->
+          bound_for_function
+          { expr = body1; free_names = _ }
+          { expr = body2; free_names = _ }
+        ->
         f
           ~return_continuation:
             (Bound_for_function.return_continuation bound_for_function)
@@ -1017,7 +1055,7 @@ module Function_params_and_body = struct
           (Bound_for_function.params bound_for_function)
           ~body1 ~body2
           ~my_closure:(Bound_for_function.my_closure bound_for_function)
-          ~my_region:(Bound_for_function.my_region bound_for_function)
+          ~my_alloc_mode:(Bound_for_function.my_alloc_mode bound_for_function)
           ~my_depth:(Bound_for_function.my_depth bound_for_function))
 
   let apply_renaming = apply_renaming_function_params_and_body
@@ -1176,7 +1214,7 @@ end
 
 module Recursive_let_cont_handlers = struct
   module T0 = struct
-    type t = continuation_handler Continuation.Map.t
+    type t = continuation_handler Continuation.Lmap.t
 
     let apply_renaming = apply_renaming_continuations_handlers_t0
 
@@ -1201,7 +1239,7 @@ module Recursive_let_cont_handlers = struct
   let create ~body ~invariant_params handlers =
     let bound = Continuation_handlers.domain handlers in
     let handlers0 = T1.create ~body (A0.create invariant_params handlers) in
-    let conts = Bound_continuations.create (Continuation.Set.elements bound) in
+    let conts = Bound_continuations.create bound in
     A1.create conts handlers0
 
   let pattern_match t ~f =
@@ -1214,10 +1252,10 @@ module Recursive_let_cont_handlers = struct
   let pattern_match_pair t1 t2 ~f =
     A1.pattern_match_pair t1 t2
       ~f:(fun
-           _
-           (handlers0_1 : recursive_let_cont_handlers_t0)
-           (handlers0_2 : recursive_let_cont_handlers_t0)
-         ->
+          _
+          (handlers0_1 : recursive_let_cont_handlers_t0)
+          (handlers0_2 : recursive_let_cont_handlers_t0)
+        ->
         let body1 = handlers0_1.body in
         let body2 = handlers0_2.body in
         A0.pattern_match_pair handlers0_1.handlers handlers0_2.handlers
@@ -1336,6 +1374,8 @@ module Named = struct
 
   let create_simple simple = Simple simple
 
+  let create_var var = Simple (Simple.var var)
+
   let create_prim prim dbg = Prim (prim, dbg)
 
   let create_set_of_closures set_of_closures = Set_of_closures set_of_closures
@@ -1364,25 +1404,53 @@ module Named = struct
     | Static_consts _ -> true
     | Rec_info _ -> true
 
-  let dummy_value (kind : K.t) : t =
+  let dummy_value ~machine_width (kind : K.t) : t =
     let simple =
       match kind with
-      | Value -> Simple.const_zero
+      | Value -> Simple.const_zero machine_width
       | Naked_number Naked_immediate ->
-        Simple.const (Reg_width_const.naked_immediate Targetint_31_63.zero)
+        Simple.const
+          (Reg_width_const.naked_immediate
+             (Target_ocaml_int.zero machine_width))
       | Naked_number Naked_float ->
         Simple.const
           (Reg_width_const.naked_float Numeric_types.Float_by_bit_pattern.zero)
+      | Naked_number Naked_float32 ->
+        Simple.const
+          (Reg_width_const.naked_float32
+             Numeric_types.Float32_by_bit_pattern.zero)
+      | Naked_number Naked_int8 ->
+        Simple.const (Reg_width_const.naked_int8 Numeric_types.Int8.zero)
+      | Naked_number Naked_int16 ->
+        Simple.const (Reg_width_const.naked_int16 Numeric_types.Int16.zero)
       | Naked_number Naked_int32 ->
         Simple.const (Reg_width_const.naked_int32 Int32.zero)
       | Naked_number Naked_int64 ->
         Simple.const (Reg_width_const.naked_int64 Int64.zero)
       | Naked_number Naked_nativeint ->
-        Simple.const (Reg_width_const.naked_nativeint Targetint_32_64.zero)
+        Simple.const
+          (Reg_width_const.naked_nativeint (Targetint_32_64.zero machine_width))
+      | Naked_number Naked_vec128 ->
+        Simple.const
+          (Reg_width_const.naked_vec128 Vector_types.Vec128.Bit_pattern.zero)
+      | Naked_number Naked_vec256 ->
+        Simple.const
+          (Reg_width_const.naked_vec256 Vector_types.Vec256.Bit_pattern.zero)
+      | Naked_number Naked_vec512 ->
+        Simple.const
+          (Reg_width_const.naked_vec512 Vector_types.Vec512.Bit_pattern.zero)
       | Region -> Misc.fatal_error "[Region] kind not expected here"
       | Rec_info -> Misc.fatal_error "[Rec_info] kind not expected here"
     in
     Simple simple
+
+  let kind t =
+    match t with
+    | Simple s -> Simple.kind s
+    | Prim (p, _dbg) -> Flambda_primitive.result_kind' p
+    | Rec_info _ -> K.rec_info
+    | Set_of_closures _ | Static_consts _ ->
+      Misc.fatal_errorf "No valid kind for non-singleton named %a" print t
 
   let is_dynamically_allocated_set_of_closures t =
     match t with
@@ -1409,11 +1477,16 @@ module Named = struct
              | Code code -> f_code acc code
              | Deleted_code
              | Static_const
-                 ( Block _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
-                 | Boxed_nativeint _ | Immutable_float_block _
-                 | Immutable_float_array _ | Mutable_string _
-                 | Immutable_string _ | Empty_array | Immutable_value_array _ )
-               ->
+                 ( Block _ | Boxed_float _ | Boxed_float32 _ | Boxed_int32 _
+                 | Boxed_int64 _ | Boxed_vec128 _ | Boxed_vec256 _
+                 | Boxed_vec512 _ | Boxed_nativeint _ | Immutable_float_block _
+                 | Immutable_float_array _ | Immutable_float32_array _
+                 | Mutable_string _ | Immutable_string _ | Empty_array _
+                 | Immutable_value_array _ | Immutable_int_array _
+                 | Immutable_int8_array _ | Immutable_int16_array _
+                 | Immutable_int32_array _ | Immutable_int64_array _
+                 | Immutable_nativeint_array _ | Immutable_vec128_array _
+                 | Immutable_vec256_array _ | Immutable_vec512_array _ ) ->
                acc)
            init
 end
@@ -1424,6 +1497,18 @@ module Invalid = struct
     | Apply_cont_of_unreachable_continuation of Continuation.t
     | Defining_expr_of_let of Bound_pattern.t * Named.t
     | Closure_type_was_invalid of Apply_expr.t
+    | Direct_application_parameter_kind_mismatch of
+        { params_arity : [`Complex] Flambda_arity.t;
+          args_arity : [`Complex] Flambda_arity.t;
+          apply : Apply_expr.t
+        }
+    | Application_argument_kind_mismatch of
+        [`Unarized] Flambda_arity.t * Apply_expr.t
+    | Application_result_kind_mismatch of
+        [`Unarized] Flambda_arity.t * Apply_expr.t
+    | Partial_application_mode_mismatch of Apply_expr.t * Code_metadata.t
+    | Partial_application_mode_mismatch_in_lambda of Debuginfo.t
+    | Calling_local_returning_closure_with_normal_apply of Apply_expr.t
     | Zero_switch_arms
     | Code_not_rebuilt
     | To_cmm_dummy_body
@@ -1447,6 +1532,38 @@ module Invalid = struct
     | Closure_type_was_invalid apply_expr ->
       Format.asprintf
         "@[<hov 1>(Closure_type_was_invalid@ @[<hov 1>(apply_expr@ %a)@])@]"
+        Apply_expr.print apply_expr
+    | Direct_application_parameter_kind_mismatch
+        { params_arity; args_arity; apply } ->
+      Format.asprintf
+        "@[<hov 1>(Direct_application_parameter_kind_mismatch@ @[<hov \
+         1>(params_arity %a)@ (args_arity@ %a)@ (apply_expr@ %a)@])@]"
+        Flambda_arity.print params_arity Flambda_arity.print args_arity
+        Apply_expr.print apply
+    | Application_argument_kind_mismatch (args_arity, apply_expr) ->
+      Format.asprintf
+        "@[<hov 1>(Application_argument_kind_mismatch@ @[<hov 1>(args_arity@ \
+         %a)@ (apply_expr@ %a)@])@]"
+        Flambda_arity.print args_arity Apply_expr.print apply_expr
+    | Application_result_kind_mismatch (result_arity, apply_expr) ->
+      Format.asprintf
+        "@[<hov 1>(Application_result_kind_mismatch@ @[<hov 1>(result_arity@ \
+         %a)@ (apply_expr@ %a)@])@]"
+        Flambda_arity.print result_arity Apply_expr.print apply_expr
+    | Partial_application_mode_mismatch (apply_expr, code_metadata) ->
+      Format.asprintf
+        "@[<hov 1>(Partial_application_mode_mismatch@ @[<hov 1>(apply_expr@ \
+         %a)@ (callee's_code_metadata@ (%a))@])@]"
+        Apply_expr.print apply_expr Code_metadata.print code_metadata
+    | Partial_application_mode_mismatch_in_lambda dbg ->
+      Format.asprintf
+        "@[<hov 1>(Partial_application_mode_mismatch_in_lambda@ @[<hov 1>(dbg@ \
+         %a)@])@]"
+        Debuginfo.print_compact dbg
+    | Calling_local_returning_closure_with_normal_apply apply_expr ->
+      Format.asprintf
+        "@[<hov 1>(Calling_local_returning_closure_with_normal_apply@ @[<hov \
+         1>(apply_expr@ %a)@])@]"
         Apply_expr.print apply_expr
     | Zero_switch_arms -> "Zero_switch_arms"
     | Code_not_rebuilt -> "Code_not_rebuilt"
@@ -1497,14 +1614,21 @@ module Let_cont_expr = struct
 
   let print = print_let_cont_expr
 
-  let create_non_recursive' ~cont handler ~body
+  let create0 ~can_be_lifted ~cont handler ~body
       ~num_free_occurrences_of_cont_in_body:num_free_occurrences
       ~is_applied_with_traps =
     let handler = Non_recursive_let_cont_handler.create cont handler ~body in
     Expr.create_let_cont
-      (Non_recursive { handler; num_free_occurrences; is_applied_with_traps })
+      (Non_recursive
+         { handler; num_free_occurrences; is_applied_with_traps; can_be_lifted })
 
-  let create_non_recursive cont handler ~body ~free_names_of_body =
+  let create_non_recursive' ~cont handler ~body
+      ~num_free_occurrences_of_cont_in_body ~is_applied_with_traps =
+    create0 ~can_be_lifted:true ~cont handler ~body
+      ~num_free_occurrences_of_cont_in_body ~is_applied_with_traps
+
+  let create_non_recursive0 ~can_be_lifted cont handler ~body
+      ~free_names_of_body =
     let num_free_occurrences_of_cont_in_body, is_applied_with_traps =
       (* Only the continuations of [free_names_of_body] are used.
          [Closure_conversion_aux] relies on this property. *)
@@ -1516,8 +1640,12 @@ module Let_cont_expr = struct
           Name_occurrences.continuation_is_applied_with_traps free_names_of_body
             cont )
     in
-    create_non_recursive' ~cont handler ~body
+    create0 ~can_be_lifted ~cont handler ~body
       ~num_free_occurrences_of_cont_in_body ~is_applied_with_traps
+
+  let create_non_recursive = create_non_recursive0 ~can_be_lifted:true
+
+  let create_non_liftable = create_non_recursive0 ~can_be_lifted:false
 
   let create_recursive ~invariant_params handlers ~body =
     if Continuation_handlers.contains_exn_handler handlers

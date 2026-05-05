@@ -18,6 +18,7 @@
    The code size of a given term should be a rough estimate of the size of the
    generated machine code. *)
 
+(** Values of type [t] may be negative *)
 type t
 
 (* Both are only there temporarly *)
@@ -29,13 +30,25 @@ val zero : t
 
 val ( + ) : t -> t -> t
 
+val ( - ) : t -> t -> t
+
 val ( <= ) : t -> t -> bool
 
 val equal : t -> t -> bool
 
 val print : Format.formatter -> t -> unit
 
-val prim : Flambda_primitive.t -> t
+val box_number :
+  machine_width:Target_system.Machine_width.t ->
+  Flambda_kind.Boxable_number.t ->
+  t
+
+val block : int -> t
+
+val array : int -> t
+
+val prim :
+  machine_width:Target_system.Machine_width.t -> Flambda_primitive.t -> t
 
 val simple : Simple.t -> t
 

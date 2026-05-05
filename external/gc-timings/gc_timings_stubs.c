@@ -11,11 +11,11 @@
 
 #ifdef HAS_MACH_ABSOLUTE_TIME
 #include <mach/mach_time.h>
-#elif HAS_POSIX_MONOTONIC_CLOCK
+#elif defined(HAS_POSIX_MONOTONIC_CLOCK)
 #include <time.h>
 #endif
 
-/* [time_counter] is extracted from ocaml/runtime/eventlog.c */
+/* [time_counter] is extracted from runtime/eventlog.c */
 int64_t time_counter(void)
 {
 #ifdef _WIN32
@@ -62,19 +62,19 @@ int64_t time_counter(void)
 int64_t caml_timing_major_gc = 0.;
 int64_t caml_timing_minor_gc = 0.;
 
-void caml_timing_collect_gc_minor_begin_hook() {
+void caml_timing_collect_gc_minor_begin_hook(void) {
   caml_timing_minor_gc -= time_counter();
 }
 
-void caml_timing_collect_gc_minor_end_hook() {
+void caml_timing_collect_gc_minor_end_hook(void) {
   caml_timing_minor_gc += time_counter();
 }
 
-void caml_timing_collect_gc_major_begin_hook() {
+void caml_timing_collect_gc_major_begin_hook(void) {
   caml_timing_major_gc -= time_counter();
 }
 
-void caml_timing_collect_gc_major_end_hook() {
+void caml_timing_collect_gc_major_end_hook(void) {
   caml_timing_major_gc += time_counter();
 }
 

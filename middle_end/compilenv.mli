@@ -21,96 +21,52 @@
 
 open Cmx_format
 
-(* CR-soon mshinwell: this is a bit ugly
-   mshinwell: deferred CR, this has been addressed in the export info
-   improvement feature.
-*)
-val imported_sets_of_closures_table
-  : Simple_value_approx.function_declarations option Set_of_closures_id.Tbl.t
-        (* flambda-only *)
-
-val reset : Compilation_unit.t -> unit
+val reset : Unit_info.t -> unit
         (* Reset the environment and record the name of the unit being
            compiled (including any associated -for-pack prefix). *)
 
 val reset_info_tables: unit -> unit
 
-val current_unit_infos: unit -> unit_infos
+val current_unit_infos: unit -> unit unit_infos_gen
         (* Return the infos for the unit being compiled *)
 
-val global_approx: Compilation_unit.t -> Clambda.value_approximation
-        (* Return the approximation for the given global identifier
-           clambda-only *)
-val set_global_approx: Clambda.value_approximation -> unit
-        (* Record the approximation of the unit being compiled
-           clambda-only *)
-val record_global_approx_toplevel: unit -> unit
-        (* Record the current approximation for the current toplevel phrase
-           clambda-only *)
-
-val set_export_info: Export_info.t -> unit
-        (* Record the information of the unit being compiled
-           flambda-only *)
-val approx_env: unit -> Export_info.t
-        (* Returns all the information loaded from external compilation units
-           flambda-only *)
-val approx_for_global: Compilation_unit.t -> Export_info.t option
-        (* Loads the exported information declaring the compilation_unit
-           flambda-only *)
-
-val get_global_export_info : Compilation_unit.t -> Cmx_format.export_info option
-        (* Middle-end-agnostic means of getting the export info found in the
+val get_global_export_info : Compilation_unit.t
+  -> Flambda2_cmx.Flambda_cmx_format.t option
+        (* Means of getting the export info found in the
            .cmx file of the given unit. *)
 
 val get_unit_export_info
-  : Compilation_unit.t -> Cmx_format.export_info option
+  : Compilation_unit.t -> Flambda2_cmx.Flambda_cmx_format.t option
 
-val flambda2_set_export_info : Flambda2_cmx.Flambda_cmx_format.t -> unit
-        (* Set the export information for the current unit (Flambda 2 only). *)
+val set_export_info : Flambda2_cmx.Flambda_cmx_format.t -> unit
+        (* Set the export information for the current unit. *)
 
 val need_curry_fun:
   Lambda.function_kind -> Cmm.machtype list -> Cmm.machtype -> unit
 val need_apply_fun:
-  Cmm.machtype list -> Cmm.machtype -> Lambda.alloc_mode -> unit
+  Cmm.machtype list -> Cmm.machtype -> Cmx_format.alloc_mode -> unit
 val need_send_fun:
-  Cmm.machtype list -> Cmm.machtype -> Lambda.alloc_mode -> unit
+  Cmm.machtype list -> Cmm.machtype -> Cmx_format.alloc_mode -> unit
         (* Record the need of a currying (resp. application,
            message sending) function with the given arity *)
 
-val cached_checks : Checks.t
+val cached_zero_alloc_info : Zero_alloc_info.t
         (* Return cached information about functions
            (from other complication units) that satisfy certain properties. *)
 
-val cache_checks : Checks.t -> unit
-        (* [cache_checks c] adds [c] to [cached_checks] *)
+val cache_zero_alloc_info : Zero_alloc_info.t -> unit
+        (* [cache_zero_alloc_info c] adds [c] to [cached_zero_alloc_info] *)
 
 val new_const_symbol : unit -> string
-
-val new_structured_constant:
-  Clambda.ustructured_constant ->
-  shared:bool -> (* can be shared with another structurally equal constant *)
-  string
-val structured_constants:
-  unit -> Clambda.preallocated_constant list
-val clear_structured_constants: unit -> unit
-
-val structured_constant_of_symbol:
-  string -> Clambda.ustructured_constant option
-
-val add_exported_constant: string -> unit
-        (* clambda-only *)
-type structured_constants
-        (* clambda-only *)
-val snapshot: unit -> structured_constants
-        (* clambda-only *)
-val backtrack: structured_constants -> unit
-        (* clambda-only *)
 
 val read_unit_info: string -> unit_infos * Digest.t
         (* Read infos and MD5 from a [.cmx] file. *)
 val write_unit_info: unit_infos -> string -> unit
         (* Save the given infos in the given file *)
-val save_unit_info: string -> unit
+val save_unit_info:
+  string -> main_module_block_format:Lambda.main_module_block_format ->
+  arg_descr:Lambda.arg_descr option ->
+  unit
         (* Save the infos for the current unit in the given file *)
 val cache_unit_info: unit_infos -> unit
         (* Enter the given infos in the cache.  The infos will be
@@ -122,6 +78,8 @@ val require_global: Compilation_unit.t -> unit
            unit to the required module *)
 
 val read_library_info: string -> library_infos
+
+val record_external_symbols : unit -> unit
 
 (* CR mshinwell: see comment in .ml
 val ensure_sharing_between_cmi_and_cmx_imports :
@@ -137,4 +95,5 @@ type error =
 
 exception Error of error
 
-val report_error: Format.formatter -> error -> unit
+val report_error: error Format_doc.format_printer
+val report_error_doc: error Format_doc.printer

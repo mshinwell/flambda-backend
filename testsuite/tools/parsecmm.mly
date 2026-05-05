@@ -26,18 +26,11 @@ let rec make_letdef def body =
       unbind_ident id;
       Clet(id, def, make_letdef rem body)
 
-let rec make_letmutdef def body =
-  match def with
-    [] -> body
-  | (id, ty, def) :: rem ->
-      unbind_ident id;
-      Clet_mut(id, ty, def, make_letmutdef rem body)
-
 let make_switch n selector caselist =
   let index = Array.make n 0 in
   let casev = Array.of_list caselist in
   let dbg = Debuginfo.none in
-  let actv = Array.make (Array.length casev) (Cexit(Cmm.Lbl 0,[],[]), dbg) in
+  let actv = Array.make (Array.length casev) (Cexit(0,[]), dbg) in
   for i = 0 to Array.length casev - 1 do
     let (posl, e) = casev.(i) in
     List.iter (fun pos -> index.(pos) <- i) posl;
@@ -81,7 +74,6 @@ let access_array base numelt size =
 %token DIVF
 %token DIVI
 %token EOF
-%token EQA
 %token EQF
 %token EQI
 %token EXIT
@@ -92,13 +84,13 @@ let access_array base numelt size =
 %token <string> FLOATCONST
 %token FLOATOFINT
 %token FUNCTION
-%token GEA
 %token GEF
 %token GEI
+%token GEU
 %token GLOBAL
-%token GTA
 %token GTF
 %token GTI
+%token GTU
 %token HALF
 %token <string> IDENT
 %token IF
@@ -106,27 +98,25 @@ let access_array base numelt size =
 %token INT32
 %token <int> INTCONST
 %token INTOFFLOAT
-%token INTOFVALUE
 %token KSTRING
 %token LBRACKET
-%token LEA
 %token LEF
 %token LEI
 %token LET
+%token LEU
 %token LETMUT
 %token LOAD
 %token <Location.t> LOCATION
 %token LPAREN
 %token LSL
 %token LSR
-%token LTA
 %token LTF
 %token LTI
+%token LTU
 %token MODI
 %token MULF
 %token MULH
 %token MULI
-%token NEA
 %token NEF
 %token NEI
 %token NGEF
@@ -151,7 +141,6 @@ let access_array base numelt size =
 %token UNIT
 %token UNSIGNED
 %token VAL
-%token VALUEOFINT
 %token WHILE
 %token WITH
 %token XOR
@@ -174,7 +163,7 @@ phrase:
 ;
 fundecl:
     LPAREN FUNCTION fun_name LPAREN params RPAREN sequence RPAREN
-      { List.iter (fun (id, ty) -> unbind_ident id) $5;
+      { List.iter (fun (id, _ty) -> unbind_ident id) $5;
         {fun_name = $3; fun_args = $5; fun_body = $7;
          fun_codegen_options =
            if Config.flambda then [
@@ -186,8 +175,8 @@ fundecl:
          fun_dbg = debuginfo ()} }
 ;
 fun_name:
-    STRING              { Cmm.global_symbol $1 }
-  | IDENT               { Cmm.global_symbol $1 }
+    STRING              { $1 }
+  | IDENT               { $1 }
 params:
     oneparam params     { $1 :: $2 }
   | /**/                { [] }
@@ -209,30 +198,20 @@ componentlist:
     component                    { [$1] }
   | componentlist STAR component { $3 :: $1 }
 ;
-traps:
-    LPAREN INTCONST RPAREN       { List.init $2 (fun _ -> Pop Pop_generic) }
-  | /**/                         { [] }
 expr:
     INTCONST    { Cconst_int ($1, debuginfo ()) }
   | FLOATCONST  { Cconst_float (float_of_string $1, debuginfo ()) }
-  | STRING      { Cconst_symbol (Cmm.global_symbol $1, debuginfo ()) }
+  | STRING      { Cconst_symbol ($1, debuginfo ()) }
   | IDENT       { Cvar(find_ident $1) }
   | LBRACKET RBRACKET { Ctuple [] }
   | LPAREN LET letdef sequence RPAREN { make_letdef $3 $4 }
-  | LPAREN LETMUT letmutdef sequence RPAREN { make_letmutdef $3 $4 }
-  | LPAREN ASSIGN IDENT expr RPAREN { Cassign(find_ident $3, $4) }
   | LPAREN APPLY location expr exprlist machtype RPAREN
                 { Cop(Capply ($6, Lambda.Rc_normal),
                       $4 :: List.rev $5, debuginfo ?loc:$3 ()) }
   | LPAREN EXTCALL STRING exprlist machtype RPAREN
-               {Cop(Cextcall {func=$3; ty=$5; alloc=false;
-                              builtin=false;
-                              returns=true;
-                              effects=Arbitrary_effects;
-                              coeffects=Has_coeffects;
-                              ty_args=[];},
-                     List.rev $4, debuginfo ())}
-  | LPAREN ALLOC exprlist RPAREN { Cop(Calloc Lambda.alloc_heap, List.rev $3, debuginfo ()) }
+               {Cop(Cextcall($3, $5, [], false), List.rev $4, debuginfo ())}
+  | LPAREN ALLOC exprlist RPAREN { Cop(Calloc (Lambda.alloc_heap,Cmm.Alloc_block_kind_other),
+                                       List.rev $3, debuginfo ()) }
   | LPAREN SUBF expr RPAREN { Cop(Cnegf, [$3], debuginfo ()) }
   | LPAREN SUBF expr expr RPAREN { Cop(Csubf, [$3; $4], debuginfo ()) }
   | LPAREN unaryop expr RPAREN { Cop($2, [$3], debuginfo ()) }
@@ -240,7 +219,7 @@ expr:
   | LPAREN SEQ sequence RPAREN { $3 }
   | LPAREN IF expr expr expr RPAREN
       { Cifthenelse($3, debuginfo (), $4, debuginfo (), $5, debuginfo (),
-                    Any) }
+                   Any) }
   | LPAREN SWITCH INTCONST expr caselist RPAREN { make_switch $3 $4 $5 }
   | LPAREN WHILE expr sequence RPAREN
       {
@@ -250,46 +229,52 @@ expr:
           match $3 with
             Cconst_int (x, _) when x <> 0 -> $4
           | _ -> Cifthenelse($3, debuginfo (), $4, debuginfo (),
-                             (Cexit(Cmm.Lbl lbl0,[],[])),
+                             (Cexit(lbl0,[])),
                              debuginfo (), Any) in
-        Ccatch(Nonrecursive, [lbl0, [], Ctuple [], debuginfo ()],
+        Ccatch(Normal, [lbl0, [], Ctuple [], debuginfo ()],
           Ccatch(Recursive,
-            [lbl1, [], Csequence(body, Cexit(Cmm.Lbl lbl1, [], [])), debuginfo ()],
-            Cexit(Cmm.Lbl lbl1, [], []), Any), Any) }
-  | LPAREN EXIT traps IDENT exprlist RPAREN
-    { Cexit(Cmm.Lbl (find_label $4), List.rev $5, $3) }
+            [lbl1, [], Csequence(body, Cexit(lbl1, [])), debuginfo ()],
+            Cexit(lbl1, []), Any), Any) }
+  | LPAREN EXIT IDENT exprlist RPAREN
+    { Cexit(find_label $3, List.rev $4) }
   | LPAREN CATCH sequence WITH catch_handlers RPAREN
     { let handlers = $5 in
       List.iter (fun (_, l, _, _) ->
         List.iter (fun (x, _) -> unbind_ident x) l) handlers;
       Ccatch(Recursive, handlers, $3, Any) }
-  | EXIT        { Cexit(Cmm.Lbl 0,[],[]) }
+  | EXIT        { Cexit(0,[]) }
   | LPAREN TRY sequence WITH bind_ident sequence RPAREN
-      { unbind_ident $5; Ctrywith($3, Regular, $5, $6, debuginfo (),
-                                  Any) }
+                { unbind_ident $5;
+                  ctrywith ($3, $5, [], $6, debuginfo (), Any) }
   | LPAREN VAL expr expr RPAREN
       { let open Asttypes in
-        Cop(Cload (Word_val, Mutable), [access_array $3 $4 Arch.size_addr],
+        Cop(Cload {memory_chunk=Word_val;
+                   mutability=Mutable;
+                   is_atomic=false}, [access_array $3 $4 Arch.size_addr],
           debuginfo ()) }
   | LPAREN ADDRAREF expr expr RPAREN
       { let open Asttypes in
-        Cop(Cload (Word_val, Mutable), [access_array $3 $4 Arch.size_addr],
+        Cop(Cload {memory_chunk=Word_val;
+                   mutability=Mutable;
+                   is_atomic=false}, [access_array $3 $4 Arch.size_addr],
           Debuginfo.none) }
   | LPAREN INTAREF expr expr RPAREN
       { let open Asttypes in
-        Cop(Cload (Word_int, Mutable), [access_array $3 $4 Arch.size_int],
+        Cop(Cload {memory_chunk=Word_int;
+                   mutability=Mutable;
+                   is_atomic=false}, [access_array $3 $4 Arch.size_int],
           Debuginfo.none) }
   | LPAREN FLOATAREF expr expr RPAREN
       { let open Asttypes in
-        Cop(Cload (Double, Mutable), [access_array $3 $4 Arch.size_float],
+        Cop(Cload {memory_chunk=Double;
+                   mutability=Mutable;
+                   is_atomic=false}, [access_array $3 $4 Arch.size_float],
           Debuginfo.none) }
   | LPAREN ADDRASET expr expr expr RPAREN
-      { let open Lambda in
-        Cop(Cstore (Word_val, Assignment),
+      { Cop(Cstore (Word_val, Assignment),
             [access_array $3 $4 Arch.size_addr; $5], Debuginfo.none) }
   | LPAREN INTASET expr expr expr RPAREN
-      { let open Lambda in
-        Cop(Cstore (Word_int, Assignment),
+      { Cop(Cstore (Word_int, Assignment),
             [access_array $3 $4 Arch.size_int; $5], Debuginfo.none) }
   | LPAREN FLOATASET expr expr expr RPAREN
       { let open Lambda in
@@ -337,11 +322,11 @@ chunk:
   | VAL                         { Word_val }
 ;
 unaryop:
-    LOAD chunk                  { Cload ($2, Asttypes.Mutable) }
+    LOAD chunk                  { Cload {memory_chunk=$2;
+                                         mutability=Asttypes.Mutable;
+                                         is_atomic=false} }
   | FLOATOFINT                  { Cfloatofint }
   | INTOFFLOAT                  { Cintoffloat }
-  | VALUEOFINT                  { Cvalueofint }
-  | INTOFVALUE                  { Cintofvalue }
   | RAISE                       { Craise $1 }
   | ABSF                        { Cabsf }
 ;
@@ -366,12 +351,10 @@ binaryop:
   | GEI                         { Ccmpi Cge }
   | ADDA                        { Cadda }
   | ADDV                        { Caddv }
-  | EQA                         { Ccmpa Ceq }
-  | NEA                         { Ccmpa Cne }
-  | LTA                         { Ccmpa Clt }
-  | LEA                         { Ccmpa Cle }
-  | GTA                         { Ccmpa Cgt }
-  | GEA                         { Ccmpa Cge }
+  | LTU                         { Ccmpi Cult }
+  | LEU                         { Ccmpi Cule }
+  | GTU                         { Ccmpi Cugt }
+  | GEU                         { Ccmpi Cuge }
   | ADDF                        { Caddf }
   | MULF                        { Cmulf }
   | DIVF                        { Cdivf }
@@ -386,8 +369,7 @@ binaryop:
   | GEF                         { Ccmpf CFge }
   | NGEF                        { Ccmpf CFnge }
   | CHECKBOUND                  { Ccheckbound }
-  | MULH                        { (Cmulhi {signed = true}) }
-  | MULH UNSIGNED               { (Cmulhi {signed = false}) }
+  | MULH                        { Cmulhi }
 ;
 sequence:
     expr sequence               { Csequence($1, $2) }
@@ -413,16 +395,17 @@ datalist:
   | /**/                        { [] }
 ;
 dataitem:
-    STRING COLON                { Cdefine_symbol (Cmm.global_symbol $1) }
+    STRING COLON                { Cdefine_symbol $1 }
   | BYTE INTCONST               { Cint8 $2 }
   | HALF INTCONST               { Cint16 $2 }
   | INT INTCONST                { Cint(Nativeint.of_int $2) }
   | FLOAT FLOATCONST            { Cdouble (float_of_string $2) }
-  | ADDR STRING                 { Csymbol_address (Cmm.global_symbol $2) }
-  | VAL STRING                 { Csymbol_address (Cmm.global_symbol $2) }
+  | ADDR STRING                 { Csymbol_address $2 }
+  | VAL STRING                 { Csymbol_address $2 }
   | KSTRING STRING              { Cstring $2 }
   | SKIP INTCONST               { Cskip $2 }
   | ALIGN INTCONST              { Calign $2 }
+  | GLOBAL STRING               { Cglobal_symbol $2 }
 ;
 catch_handlers:
   | catch_handler

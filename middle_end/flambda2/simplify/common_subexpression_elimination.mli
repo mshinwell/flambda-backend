@@ -22,6 +22,7 @@ module P = Flambda_primitive
 module RI = Apply_cont_rewrite_id
 module T = Flambda2_types
 module TE = Flambda2_types.Typing_env
+module TEE = Flambda2_types.Typing_env_extension
 
 type t
 
@@ -31,8 +32,8 @@ val empty : t
 
 (** If the [t] already has an equation for the given primitive, then [add] does
     nothing. (Expected usage is that this will correspond to outermost bindings
-    taking precedence, but for simplicity, this function does not enforce
-    that.) *)
+    taking precedence, but for simplicity, this function does not enforce that.)
+*)
 val add : t -> P.Eligible_for_cse.t -> bound_to:Simple.t -> Scope.t -> t
 
 val find : t -> P.Eligible_for_cse.t -> Simple.t option
@@ -41,7 +42,7 @@ module Join_result : sig
   type nonrec t = private
     { cse_at_join_point : t;
       extra_params : EPA.t;
-      extra_equations : T.t Name.Map.t;
+      env_extension : TEE.t;
       extra_allowed_names : Name_occurrences.t
     }
 end

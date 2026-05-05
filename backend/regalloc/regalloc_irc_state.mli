@@ -1,4 +1,4 @@
-[@@@ocaml.warning "+a-4-30-40-41-42"]
+[@@@ocaml.warning "+a-30-40-41-42"]
 
 open Regalloc_utils
 open Regalloc_irc_utils
@@ -8,7 +8,7 @@ type t
 val make :
   initial:Reg.t list ->
   stack_slots:Regalloc_stack_slots.t ->
-  next_instruction_id:Instruction.id ->
+  affinity:Regalloc_affinity.t ->
   unit ->
   t
 
@@ -16,7 +16,23 @@ val add_initial_one : t -> Reg.t -> unit
 
 val add_initial_list : t -> Reg.t list -> unit
 
-val reset : t -> new_temporaries:Reg.t list -> unit
+val reset :
+  t ->
+  new_inst_temporaries:Reg.t list ->
+  new_block_temporaries:Reg.t list ->
+  unit
+
+val reg_work_list : t -> Reg.t -> RegWorkList.t
+
+val color : t -> Reg.t -> Color.t option
+
+val set_color : t -> Reg.t -> Color.t option -> unit
+
+val degree : t -> Reg.t -> int
+
+val set_degree : t -> Reg.t -> int -> unit
+
+val get_max_degree : t -> int
 
 val is_precolored : t -> Reg.t -> bool
 
@@ -96,13 +112,15 @@ val mem_adj_set : t -> Reg.t -> Reg.t -> bool
 
 val adj_list : t -> Reg.t -> Reg.t list
 
-val adj_set : t -> RegisterStamp.PairSet.t
-
 val add_edge : t -> Reg.t -> Reg.t -> unit
 
 val iter_adjacent : t -> Reg.t -> f:(Reg.t -> unit) -> unit
 
 val for_all_adjacent : t -> Reg.t -> f:(Reg.t -> bool) -> bool
+
+val cardinal_edges : t -> int
+
+val iter_edges : t -> f:(Edge.t -> unit) -> unit
 
 val is_empty_node_moves : t -> Reg.t -> bool
 
@@ -126,14 +144,23 @@ val add_alias : t -> Reg.t -> Reg.t -> unit
 
 val stack_slots : t -> Regalloc_stack_slots.t
 
-val get_and_incr_instruction_id : t -> Instruction.id
+val affinity : t -> Regalloc_affinity.t
 
-val add_introduced_temporaries_one : t -> Reg.t -> unit
+val add_inst_temporaries_list : t -> Reg.t list -> unit
 
-val add_introduced_temporaries_list : t -> Reg.t list -> unit
+val add_block_temporaries_list : t -> Reg.t list -> unit
 
-val mem_introduced_temporaries : t -> Reg.t -> bool
+val mem_inst_temporaries : t -> Reg.t -> bool
 
-val introduced_temporaries : t -> Reg.Set.t
+val mem_all_introduced_temporaries : t -> Reg.t -> bool
+
+val diff_all_introduced_temporaries : t -> Reg.Set.t -> Reg.Set.t
+
+val set_instr_work_list :
+  t -> instruction_id:InstructionId.t -> work_list:InstrWorkList.t -> unit
+
+val get_instr_work_list : t -> instruction_id:InstructionId.t -> InstrWorkList.t
+
+val update_register_locations : t -> unit
 
 val invariant : t -> unit

@@ -1,34 +1,28 @@
-[@@@ocaml.warning "+a-4-30-40-41-42"]
+[@@@ocaml.warning "+a-30-40-41-42"]
 
+open! Int_replace_polymorphic_compare
 open! Regalloc_utils
-module DLL = Flambda_backend_utils.Doubly_linked_list
+module DLL = Oxcaml_utils.Doubly_linked_list
+module Substitution = Regalloc_substitution
 
 module type State = sig
   type t
 
   val stack_slots : t -> Regalloc_stack_slots.t
-
-  val get_and_incr_instruction_id : t -> Instruction.id
 end
 
 module type Utils = sig
-  val debug : bool
+  val log : ?no_eol:unit -> ('a, Format.formatter, unit) format -> 'a
 
-  val invariants : bool Lazy.t
+  val indent : unit -> unit
 
-  val log :
-    indent:int -> ?no_eol:unit -> ('a, Format.formatter, unit) format -> 'a
+  val dedent : unit -> unit
 
   val log_body_and_terminator :
-    indent:int ->
     Cfg.basic_instruction_list ->
     Cfg.terminator Cfg.instruction ->
     liveness ->
     unit
-
-  val is_spilled : Reg.t -> bool
-
-  val set_spilled : Reg.t -> unit
 end
 
 type direction =
@@ -37,52 +31,149 @@ type direction =
   | Load_after_list of Cfg.basic_instruction_list
   | Store_before_list of Cfg.basic_instruction_list
 
-let rewrite_gen :
-    type s.
+(* Applies an optimization on the CFG outputted by [rewrite_gen] having one
+   temporary per variable per block rather than one per use of the variable,
+   reducing the number of spills and reloads needed for variables used multiple
+   times in a block. It iterates over each block and builds a substitution from
+   the first used temporary for each variable to all the other temporaries used
+   later for that variable, deleting now redundant reload/spill instructions
+   along the way.
+
+   This optimization is unsound when spilled nodes are used directly in
+   instructions (if allowed by the ISA) without a new temporary being created
+   (hence stack operands are not used in [rewrite_gen] if this optimization is
+   enabled). Spills in blocks inserted by [rewrite_gen] (due to spills in block
+   terminators) do not share temporaries with the body of the original block and
+   are hence not considered in this optimization.
+
+   No new temporaries are created by this optimization. Some temporaries are
+   promoted to block temporaries (and so moved from the list of new instruction
+   temporaries to the list of new block temporaries). Instruction temporaries
+   that are now redundant (due to being replaced by block temporaries) are
+   removed from the list of new instruction temporaries. *)
+let coalesce_temp_spills_and_reloads (block : Cfg.basic_block)
+    ~new_inst_temporaries ~new_block_temporaries =
+  (* CR-soon mitom: Avoid cases where optimisation worsens spills and reloads
+     due to assigning block temporaries for spilled registers that have live
+     ranges interfering with things that have already been register allocated *)
+  let removed_inst_temporaries = Reg.Tbl.create 128 in
+  let var_to_block_temp = Reg.Tbl.create 8 in
+  let replacements = Reg.Tbl.create 8 in
+  let last_spill = Reg.Tbl.create 8 in
+  let replace to_replace replace_with =
+    if not (Reg.same to_replace replace_with)
+    then Reg.Tbl.add replacements to_replace replace_with
+  in
+  let update_info_using_inst (inst_cell : Cfg.basic Cfg.instruction DLL.cell) =
+    let inst = DLL.value inst_cell in
+    match inst.desc with
+    | Op Reload -> (
+      let var = inst.arg.(0) in
+      let temp = inst.res.(0) in
+      match Reg.Tbl.find_opt var_to_block_temp var with
+      | None -> Reg.Tbl.add var_to_block_temp var temp
+      | Some block_temp ->
+        DLL.delete_curr inst_cell;
+        replace temp block_temp)
+    | Op Spill -> (
+      let var = inst.res.(0) in
+      let temp = inst.arg.(0) in
+      (match Reg.Tbl.find_opt last_spill var with
+      | None -> ()
+      | Some prev_inst_cell -> DLL.delete_curr prev_inst_cell);
+      Reg.Tbl.replace last_spill var inst_cell;
+      match Reg.Tbl.find_opt var_to_block_temp var with
+      | None -> Reg.Tbl.add var_to_block_temp var temp
+      | Some block_temp -> replace temp block_temp)
+    | Reloadretaddr | Prologue | Epilogue | Pushtrap _ | Poptrap _
+    | Stack_check _
+    | Op
+        ( Move | Opaque | Begin_region | End_region | Dls_get | Tls_get
+        | Domain_index | Poll | Pause | Const_int _ | Const_float32 _
+        | Const_float _ | Const_symbol _ | Const_vec128 _ | Const_vec256 _
+        | Const_vec512 _ | Stackoffset _ | Load _
+        | Store (_, _, _)
+        | Intop _ | Int128op _
+        | Intop_imm (_, _)
+        | Intop_atomic _
+        | Floatop (_, _)
+        | Csel _ | Reinterpret_cast _ | Static_cast _ | Probe_is_enabled _
+        | Specific _ | Name_for_debugger _ | Alloc _ ) ->
+      ()
+  in
+  DLL.iter_cell block.body ~f:update_info_using_inst;
+  if Reg.Tbl.length replacements <> 0
+  then (
+    Substitution.apply_block_in_place replacements block;
+    Reg.Tbl.iter
+      (fun temp block_temp ->
+        Reg.Tbl.replace removed_inst_temporaries temp ();
+        Reg.Tbl.replace removed_inst_temporaries block_temp ();
+        new_block_temporaries := block_temp :: !new_block_temporaries)
+      replacements);
+  new_inst_temporaries
+    := List.filter
+         ~f:(fun temp -> not (Reg.Tbl.mem removed_inst_temporaries temp))
+         !new_inst_temporaries
+
+type move_kind =
+  | Load
+  | Store
+
+let equal_move_kind left right =
+  match left, right with
+  | Load, Load -> true
+  | Store, Store -> true
+  | (Load | Store), _ -> false
+
+let rewrite_gen : type s.
     (module State with type t = s) ->
     (module Utils) ->
     s ->
-    Cfg_with_liveness.t ->
+    Cfg_with_infos.t ->
     spilled_nodes:Reg.t list ->
-    Reg.t list =
- fun (module State : State with type t = s) (module Utils) state
-     cfg_with_liveness ~spilled_nodes ->
-  if Utils.debug then Utils.log ~indent:1 "rewrite";
+    block_temporaries:bool ->
+    Reg.t list * Reg.t list * bool =
+ fun (module State : State with type t = s) (module Utils) state cfg_with_infos
+     ~spilled_nodes ~block_temporaries ->
+  let should_coalesce_temp_spills_and_reloads =
+    Lazy.force Regalloc_utils.block_temporaries && block_temporaries
+  in
+  if debug
+  then (
+    Utils.log "rewrite";
+    Utils.indent ());
+  let block_insertion = ref false in
   let spilled_map : Reg.t Reg.Tbl.t =
     List.fold_left spilled_nodes ~init:(Reg.Tbl.create 17)
       ~f:(fun spilled_map reg ->
-        if Utils.debug then assert (Utils.is_spilled reg);
-        let spilled = Reg.create reg.Reg.typ in
-        Utils.set_spilled spilled;
+        let spilled = Reg.create_with_typ_and_name reg in
         (* for printing *)
-        if not (Reg.anonymous reg) then spilled.Reg.raw_name <- reg.Reg.raw_name;
         let slot =
           Regalloc_stack_slots.get_or_create (State.stack_slots state) reg
         in
-        spilled.Reg.loc <- Reg.(Stack (Local slot));
-        if Utils.debug
-        then
-          Utils.log ~indent:2 "spilling %a to %a" Printmach.reg reg
-            Printmach.reg spilled;
+        Reg.set_loc spilled Reg.(Stack (Local slot));
+        if debug
+        then Utils.log "spilling %a to %a" Printreg.reg reg Printreg.reg spilled;
         Reg.Tbl.replace spilled_map reg spilled;
         spilled_map)
   in
-  let new_temporaries : Reg.t list ref = ref [] in
+  let is_spilled reg = Reg.Tbl.mem spilled_map reg in
+  let new_inst_temporaries : Reg.t list ref = ref [] in
+  let new_block_temporaries = ref [] in
   let make_new_temporary ~(move : Move.t) (reg : Reg.t) : Reg.t =
-    let res =
-      make_temporary ~same_class_and_base_name_as:reg ~name_prefix:"temp"
-    in
-    new_temporaries := res :: !new_temporaries;
-    if Utils.debug
+    let res = Reg.create_with_typ_and_name ~prefix_if_var:"temp" reg in
+    new_inst_temporaries := res :: !new_inst_temporaries;
+    if debug
     then
-      Utils.log ~indent:2 "adding temporary %a (to %s %a)" Printmach.reg res
-        (Move.to_string move) Printmach.reg reg;
+      Utils.log "adding temporary %a (to %s %a)" Printreg.reg res
+        (Move.to_string move) Printreg.reg reg;
     res
   in
   let[@inline] array_contains_spilled (arr : Reg.t array) : bool =
     let len = Array.length arr in
     let i = ref 0 in
-    while !i < len && not (Utils.is_spilled (Array.unsafe_get arr !i)) do
+    while !i < len && not (is_spilled (Array.unsafe_get arr !i)) do
       incr i
     done;
     !i < len
@@ -91,10 +182,10 @@ let rewrite_gen :
     array_contains_spilled instr.arg || array_contains_spilled instr.res
   in
   let rewrite_instruction ~(direction : direction)
-      ~(sharing : (Reg.t * [`load | `store]) Reg.Tbl.t)
-      (instr : _ Cfg.instruction) : unit =
-    let f (reg : Reg.t) : Reg.t =
-      if Utils.is_spilled reg
+      ~(sharing : (Reg.t * move_kind) Reg.Tbl.t) (instr : _ Cfg.instruction) :
+      unit =
+    let[@inline] rewrite_reg (reg : Reg.t) : Reg.t =
+      if is_spilled reg
       then (
         let spilled =
           match Reg.Tbl.find_opt spilled_map reg with
@@ -103,8 +194,8 @@ let rewrite_gen :
         in
         let move, move_dir =
           match direction with
-          | Load_before_cell _ | Load_after_list _ -> Move.Load, `load
-          | Store_after_cell _ | Store_before_list _ -> Move.Store, `store
+          | Load_before_cell _ | Load_after_list _ -> Move.Load, Load
+          | Store_after_cell _ | Store_before_list _ -> Move.Store, Store
         in
         let add_instr, temp =
           match Reg.Tbl.find_opt sharing reg with
@@ -112,87 +203,126 @@ let rewrite_gen :
             let new_temp = make_new_temporary ~move reg in
             Reg.Tbl.add sharing reg (new_temp, move_dir);
             true, new_temp
-          | Some (r, dir) -> dir <> move_dir, r
+          | Some (r, dir) -> not (equal_move_kind dir move_dir), r
         in
         (if add_instr
-        then
-          let from, to_ =
-            match move_dir with
-            | `load -> spilled, temp
-            | `store -> temp, spilled
-          in
-          let new_instr =
-            Move.make_instr move
-              ~id:(State.get_and_incr_instruction_id state)
-              ~copy:instr ~from ~to_
-          in
-          match direction with
-          | Load_before_cell cell -> DLL.insert_before cell new_instr
-          | Store_after_cell cell -> DLL.insert_after cell new_instr
-          | Load_after_list list -> DLL.add_end list new_instr
-          | Store_before_list list -> DLL.add_begin list new_instr);
+         then
+           let from, to_ =
+             match move_dir with
+             | Load -> spilled, temp
+             | Store -> temp, spilled
+           in
+           let id =
+             InstructionId.get_and_incr
+               (Cfg_with_infos.cfg cfg_with_infos).next_instruction_id
+           in
+           let new_instr = Move.make_instr move ~id ~copy:instr ~from ~to_ in
+           match direction with
+           | Load_before_cell cell -> DLL.insert_before cell new_instr
+           | Store_after_cell cell ->
+             (* See comment before Insert_skipping_name_for_debugger *)
+             Insert_skipping_name_for_debugger.insert_after cell new_instr
+               ~reg:from
+           | Load_after_list list -> DLL.add_end list new_instr
+           | Store_before_list list ->
+             (* See comment before Insert_skipping_name_for_debugger *)
+             Insert_skipping_name_for_debugger.add_begin list new_instr
+               ~reg:from);
         temp)
       else reg
     in
+    let rewrite_array (arr : Reg.t array) : unit =
+      let len = Array.length arr in
+      for i = 0 to pred len do
+        let reg = Array.unsafe_get arr i in
+        Array.unsafe_set arr i (rewrite_reg reg)
+      done
+    in
     match direction with
-    | Load_before_cell _ | Load_after_list _ ->
-      if array_contains_spilled instr.arg
-      then instr.arg <- Array.map instr.arg ~f
-    | Store_after_cell _ | Store_before_list _ ->
-      if array_contains_spilled instr.res
-      then instr.res <- Array.map instr.res ~f
+    | Load_before_cell _ | Load_after_list _ -> rewrite_array instr.arg
+    | Store_after_cell _ | Store_before_list _ -> rewrite_array instr.res
   in
-  let liveness = Cfg_with_liveness.liveness cfg_with_liveness in
-  Cfg.iter_blocks (Cfg_with_liveness.cfg cfg_with_liveness)
-    ~f:(fun label block ->
-      if Utils.debug
+  let liveness = Cfg_with_infos.liveness cfg_with_infos in
+  Cfg.iter_blocks (Cfg_with_infos.cfg cfg_with_infos) ~f:(fun label block ->
+      if debug
       then (
-        Utils.log ~indent:2 "body of #%d, before:" label;
-        Utils.log_body_and_terminator ~indent:3 block.body block.terminator
-          liveness);
+        Utils.log "body of #%a, before:" Label.format label;
+        Utils.indent ();
+        Utils.log_body_and_terminator block.body block.terminator liveness;
+        Utils.dedent ());
+      let block_rewritten = ref false in
       DLL.iter_cell block.body ~f:(fun cell ->
           let instr = DLL.value cell in
           if instruction_contains_spilled instr
           then
-            match Regalloc_stack_operands.basic spilled_map instr with
-            | All_spilled_registers_rewritten -> ()
-            | May_still_have_spilled_registers ->
+            (* CR-soon mitom: Use stack operands regardless of whether
+               coalescing temporaries when it allows using the memory address of
+               a variable used exactly once in a block directly in an
+               instruction. Currently, if the "block" temporary for this
+               variable is register allocated, an extra spill/reload instruction
+               is added compared to using it directly in the instruction (if
+               possible).
+
+               For variables used 2+ times in the block, short circuiting here
+               is fine. If the block temporary we create gets register
+               allocated, then that is better than using stack operands to use
+               the memory address directly in the instruction. If the block
+               temporary is spilled, stack operands will apply to it in the next
+               round in the same way it would have done to the original
+               variable. *)
+            if
+              should_coalesce_temp_spills_and_reloads
+              || Regalloc_utils.equal_stack_operands_rewrite
+                   (Regalloc_stack_operands.basic spilled_map instr)
+                   May_still_have_spilled_registers
+            then (
+              block_rewritten := true;
               let sharing = Reg.Tbl.create 8 in
               rewrite_instruction ~direction:(Load_before_cell cell) ~sharing
                 instr;
               rewrite_instruction ~direction:(Store_after_cell cell) ~sharing
-                instr);
+                instr));
       if instruction_contains_spilled block.terminator
       then
-        match
-          Regalloc_stack_operands.terminator spilled_map block.terminator
-        with
-        | All_spilled_registers_rewritten -> ()
-        | May_still_have_spilled_registers ->
-          (let sharing = Reg.Tbl.create 8 in
-           rewrite_instruction ~direction:(Load_after_list block.body)
-             ~sharing:(Reg.Tbl.create 8) block.terminator;
-           let new_instrs = DLL.make_empty () in
-           rewrite_instruction ~direction:(Store_before_list new_instrs)
-             ~sharing block.terminator;
-           if not (DLL.is_empty new_instrs)
-           then
-             (* insert block *)
-             let (_ : Cfg.basic_block list) =
-               Regalloc_utils.insert_block
-                 (Cfg_with_liveness.cfg_with_layout cfg_with_liveness)
-                 new_instrs ~after:block ~before:None
-                 ~next_instruction_id:(fun () ->
-                   State.get_and_incr_instruction_id state)
-             in
-             ());
-          if Utils.debug
-          then (
-            Utils.log ~indent:2 "and after:";
-            Utils.log_body_and_terminator ~indent:3 block.body block.terminator
-              liveness;
-            Utils.log ~indent:2 "end"));
-  !new_temporaries
+        (* CR-soon mitom: Same issue as short circuiting in basic instruction
+           rewriting *)
+        if
+          should_coalesce_temp_spills_and_reloads
+          || Regalloc_utils.equal_stack_operands_rewrite
+               (Regalloc_stack_operands.terminator spilled_map block.terminator)
+               May_still_have_spilled_registers
+        then (
+          block_rewritten := true;
+          let sharing = Reg.Tbl.create 8 in
+          rewrite_instruction ~direction:(Load_after_list block.body)
+            ~sharing:(Reg.Tbl.create 8) block.terminator;
+          let new_instrs = DLL.make_empty () in
+          rewrite_instruction ~direction:(Store_before_list new_instrs) ~sharing
+            block.terminator;
+          if not (DLL.is_empty new_instrs)
+          then
+            (* insert block *)
+            (* CR-soon xclerc for xclerc: now that we preprocess critical nodes,
+               no block insertion should occur here. *)
+            let (_ : Cfg.basic_block list) =
+              Cfg_with_layout.insert_block
+                (Cfg_with_infos.cfg_with_layout cfg_with_infos)
+                new_instrs ~after:block ~before:None
+            in
+            block_insertion := true);
+      if !block_rewritten && should_coalesce_temp_spills_and_reloads
+      then
+        coalesce_temp_spills_and_reloads block ~new_inst_temporaries
+          ~new_block_temporaries;
+      if debug
+      then (
+        Utils.log "and after:";
+        Utils.indent ();
+        Utils.log_body_and_terminator block.body block.terminator liveness;
+        Utils.dedent ();
+        Utils.log "end"));
+  if debug then Utils.dedent ();
+  !new_inst_temporaries, !new_block_temporaries, !block_insertion
 
 (* CR-soon xclerc for xclerc: investigate exactly why this threshold is
    necessary. *)
@@ -201,23 +331,110 @@ let rewrite_gen :
    above. *)
 let threshold_split_live_ranges = 1024
 
+(* A critical edge is an edge such that the source has several successors and
+   the destination has several predecessors. Such edges are problematic because
+   if an instruction needs to be inserted between the source and the
+   destination, a block will need to be inserted. *)
+let compute_critical_edges : Cfg.t -> Cfg_edge.Set.t =
+ fun cfg ->
+  Cfg.fold_blocks cfg ~init:Cfg_edge.Set.empty
+    ~f:(fun label block critical_edges ->
+      match block.exn with
+      | Some _ -> critical_edges
+      | None -> (
+        let successor_labels =
+          Cfg.successor_labels ~normal:true ~exn:false block
+        in
+        match Label.Set.cardinal successor_labels with
+        | 0 | 1 -> critical_edges
+        | _ ->
+          Label.Set.fold
+            (fun successor_label critical_edges ->
+              let successor_block = Cfg.get_block_exn cfg successor_label in
+              if
+                (not (Cfg.can_raise_terminator block.terminator.desc))
+                && (not (Label.equal label successor_label))
+                && Label.Set.cardinal successor_block.predecessors > 1
+              then (
+                assert (not successor_block.is_trap_handler);
+                Cfg_edge.Set.add
+                  { Cfg_edge.src = label; dst = successor_label }
+                  critical_edges)
+              else critical_edges)
+            successor_labels critical_edges))
+
+(* A destruction edge is an edge following a destruction point. We are inserting
+   blocks on such edges to work around a bug in the split processing phase where
+   such an edge points to a block with another predecessor and that predecessor
+   has not spilled the temporaries destroyed at the destruction point. *)
+let compute_destruction_edges : Cfg.t -> Cfg_edge.Set.t =
+ fun cfg ->
+  Cfg.fold_blocks cfg ~init:Cfg_edge.Set.empty
+    ~f:(fun label block critical_edges ->
+      match Regalloc_split_utils.destruction_point_at_end block with
+      | None | Some Destruction_only_on_exceptional_path -> critical_edges
+      | Some Destruction_on_all_paths ->
+        let successor_labels : Label.Set.t =
+          Cfg.successor_labels ~normal:true ~exn:false block
+        in
+        Label.Set.fold
+          (fun successor_label critical_edges ->
+            Cfg_edge.Set.add
+              { Cfg_edge.src = label; dst = successor_label }
+              critical_edges)
+          successor_labels critical_edges)
+
 let prelude :
     (module Utils) ->
     on_fatal_callback:(unit -> unit) ->
-    Cfg_with_liveness.t ->
-    cfg_infos * Regalloc_stack_slots.t =
- fun (module Utils) ~on_fatal_callback cfg_with_liveness ->
-  let cfg_with_layout = Cfg_with_liveness.cfg_with_layout cfg_with_liveness in
+    Cfg_with_infos.t ->
+    cfg_infos * Regalloc_stack_slots.t * Regalloc_affinity.t =
+ fun (module Utils) ~on_fatal_callback cfg_with_infos ->
+  let cfg_with_layout = Cfg_with_infos.cfg_with_layout cfg_with_infos in
   on_fatal ~f:on_fatal_callback;
-  if Utils.debug
-  then
-    Utils.log ~indent:0 "run (%S)"
-      (Cfg_with_layout.cfg cfg_with_layout).fun_name;
-  Reg.reinit ();
-  if Utils.debug && Lazy.force Utils.invariants
+  let cfg = Cfg_with_layout.cfg cfg_with_layout in
+  (* Extract function-specific regalloc params from codegen_options *)
+  let params =
+    List.concat_map cfg.fun_codegen_options ~f:(function
+      | Cfg.Use_regalloc_param params -> params
+      | Cfg.Reduce_code_size | Cfg.No_CSE | Cfg.Use_linscan_regalloc
+      | Cfg.Use_regalloc _ | Cfg.Cold | Cfg.Assume_zero_alloc _
+      | Cfg.Check_zero_alloc _ ->
+        [])
+  in
+  set_function_specific_params params;
+  if debug
   then (
-    Utils.log ~indent:0 "precondition";
+    Utils.log "run (%S)" cfg.fun_name;
+    match params with
+    | [] -> ()
+    | params ->
+      Utils.log "function_specific_params: %s" (String.concat ", " params));
+  Reg.reinit_relocatable_regs ();
+  if debug && Lazy.force invariants
+  then (
+    Utils.log "precondition";
     Regalloc_invariants.precondition cfg_with_layout);
+  (* We identify critical edges, and pre-emptively insert block so that the
+     register allocator will not have to change the shape of the CFG. *)
+  let critical_edges =
+    Cfg_edge.Set.union
+      (compute_critical_edges cfg)
+      (compute_destruction_edges cfg)
+  in
+  if not (Cfg_edge.Set.is_empty critical_edges)
+  then (
+    Cfg_edge.Set.iter
+      (fun { Cfg_edge.src; dst } ->
+        let (_inserted_blocks : Cfg.basic_block list) =
+          Cfg_with_layout.insert_block cfg_with_layout (DLL.make_empty ())
+            ~after:(Cfg.get_block_exn cfg src)
+            ~before:(Some (Cfg.get_block_exn cfg dst))
+        in
+        ())
+      critical_edges;
+    Cfg_with_infos.invalidate_liveness cfg_with_infos;
+    Cfg_with_infos.invalidate_dominators_and_loop_infos cfg_with_infos);
   let cfg_infos = collect_cfg_infos cfg_with_layout in
   let num_temporaries =
     (* note: this should probably be `Reg.Set.cardinal (Reg.Set.union
@@ -225,47 +442,54 @@ let prelude :
        the same results without computing the union. *)
     Reg.Set.cardinal cfg_infos.arg
   in
-  if Utils.debug
-  then Utils.log ~indent:0 "#temporaries(before):%d" num_temporaries;
-  if num_temporaries >= threshold_split_live_ranges
-  then cfg_infos, Regalloc_stack_slots.make ()
-  else if Lazy.force Regalloc_split_utils.split_live_ranges
-  then
-    let stack_slots =
-      Profile.record ~accumulate:true "split"
-        (fun () -> Regalloc_split.split_live_ranges cfg_with_liveness cfg_infos)
-        ()
-    in
-    let cfg_infos = collect_cfg_infos cfg_with_layout in
-    cfg_infos, stack_slots
-  else cfg_infos, Regalloc_stack_slots.make ()
+  if debug then Utils.log "#temporaries(before):%d" num_temporaries;
+  let cfg_infos, stack_slots, phi_moves =
+    if
+      num_temporaries >= threshold_split_live_ranges
+      || Flambda2_ui.Flambda_features.classic_mode ()
+    then cfg_infos, Regalloc_stack_slots.make (), []
+    else if Lazy.force Regalloc_split_utils.split_live_ranges
+    then
+      let stack_slots, phi_moves =
+        Profile.record ~accumulate:true "split"
+          (fun () -> Regalloc_split.split_live_ranges cfg_with_infos)
+          ()
+      in
+      collect_cfg_infos cfg_with_layout, stack_slots, phi_moves
+    else cfg_infos, Regalloc_stack_slots.make (), []
+  in
+  cfg_infos, stack_slots, Regalloc_affinity.compute cfg_with_infos phi_moves
 
-let postlude :
-    type s.
+let postlude : type s.
     (module State with type t = s) ->
     (module Utils) ->
     s ->
     f:(unit -> unit) ->
-    Cfg_with_liveness.t ->
+    Cfg_with_infos.t ->
     unit =
  fun (module State : State with type t = s) (module Utils) state ~f
-     cfg_with_liveness ->
-  let cfg_with_layout = Cfg_with_liveness.cfg_with_layout cfg_with_liveness in
+     cfg_with_infos ->
+  let cfg_with_layout = Cfg_with_infos.cfg_with_layout cfg_with_infos in
   (* note: slots need to be updated before prologue removal *)
-  if Lazy.force stack_slots_optim
-  then Regalloc_stack_slots.optimize (State.stack_slots state) cfg_with_liveness;
+  Profile.record ~accumulate:true "stack_slots_optimize"
+    (fun () ->
+      Regalloc_stack_slots.optimize (State.stack_slots state) cfg_with_infos)
+    ();
   Regalloc_stack_slots.update_cfg_with_layout (State.stack_slots state)
     cfg_with_layout;
-  if Utils.debug
-  then
-    Array.iteri (Cfg_with_layout.cfg cfg_with_layout).fun_num_stack_slots
-      ~f:(fun reg_class num_stack_slots ->
-        Utils.log ~indent:1 "stack_slots[%d]=%d" reg_class num_stack_slots);
-  remove_prologue_if_not_required cfg_with_layout;
-  update_live_fields cfg_with_layout
-    (Cfg_with_liveness.liveness cfg_with_liveness);
-  f ();
-  if Utils.debug && Lazy.force Utils.invariants
+  if debug
   then (
-    Utils.log ~indent:0 "postcondition";
-    Regalloc_invariants.postcondition_liveness cfg_with_liveness)
+    Utils.indent ();
+    Stack_class.Tbl.iter
+      (Cfg_with_layout.cfg cfg_with_layout).fun_num_stack_slots
+      ~f:(fun stack_class num_stack_slots ->
+        Utils.log "stack_slots[%a]=%d" Stack_class.print stack_class
+          num_stack_slots);
+    Utils.dedent ());
+  update_live_fields cfg_with_layout (Cfg_with_infos.liveness cfg_with_infos);
+  f ();
+  (Cfg_with_layout.cfg cfg_with_layout).register_locations_are_set <- true;
+  if debug && Lazy.force invariants
+  then (
+    Utils.log "postcondition";
+    Regalloc_invariants.postcondition_liveness cfg_with_infos)

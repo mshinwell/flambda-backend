@@ -20,7 +20,7 @@ module U = One_continuation_use
 
 type t =
   { continuation : Continuation.t;
-    arity : Flambda_arity.t;
+    arity : [`Unarized] Flambda_arity.t;
     uses : U.t list
   }
 
@@ -36,15 +36,15 @@ let [@ocamlformat "disable"] print ppf { continuation; arity; uses; } =
     Flambda_arity.print arity
     (Format.pp_print_list ~pp_sep:Format.pp_print_space U.print) uses
 
-let add_use t kind ~env_at_use id ~arg_types =
+let add_use t use =
   try
-    let arity = T.arity_of_list arg_types in
+    let arity = T.arity_of_list (U.arg_types use) in
+    (* Kinds will always match at join points *)
     if not (Flambda_arity.equal_ignoring_subkinds arity t.arity)
     then
       Misc.fatal_errorf
         "Arity of use (%a) doesn't match continuation's arity (%a)"
         Flambda_arity.print arity Flambda_arity.print t.arity;
-    let use = U.create kind ~env_at_use id ~arg_types in
     { t with uses = use :: t.uses }
   with Misc.Fatal_error ->
     let bt = Printexc.get_raw_backtrace () in
@@ -55,12 +55,26 @@ let add_use t kind ~env_at_use id ~arg_types =
       Flambda_colours.error Flambda_colours.pop Continuation.print
       t.continuation
       (Format.pp_print_list ~pp_sep:Format.pp_print_space T.print)
-      arg_types print t DE.print env_at_use;
+      (U.arg_types use) print t DE.print (U.env_at_use use);
     Printexc.raise_with_backtrace Misc.Fatal_error bt
 
 let union t1 t2 =
-  assert (Continuation.equal t1.continuation t2.continuation);
-  assert (Flambda_arity.equal_ignoring_subkinds t1.arity t2.arity);
+  if not (Continuation.equal t1.continuation t2.continuation)
+  then
+    Misc.fatal_errorf
+      "Cannot union continuation uses for different continuations %a and %a.@ \
+       Continuation uses t1:@ %a@ and@ t2:@ %a"
+      Continuation.print t1.continuation Continuation.print t2.continuation
+      print t1 print t2;
+  if
+    Flambda_features.kind_checks ()
+    && not (Flambda_arity.equal_ignoring_subkinds t1.arity t2.arity)
+  then
+    Misc.fatal_errorf
+      "Arity of continuation uses (%a) doesn't match arity of continuation \
+       uses (%a).  Continuation uses t1:@ %a@ and@ t2:@ %a"
+      Flambda_arity.print t1.arity Flambda_arity.print t2.arity print t1 print
+      t2;
   { continuation = t1.continuation; arity = t1.arity; uses = t1.uses @ t2.uses }
 
 let number_of_uses t = List.length t.uses
@@ -75,6 +89,9 @@ type arg_at_use =
   }
 
 type arg_types_by_use_id = arg_at_use Apply_cont_rewrite_id.Map.t list
+
+let print_arg_type_at_use ppf { arg_type; typing_env = _ } =
+  Flambda2_types.print ppf arg_type
 
 let add_value_to_arg_map arg_map arg_type ~use =
   let env_at_use = U.env_at_use use in
@@ -95,7 +112,7 @@ let add_uses_to_arg_maps arg_maps uses =
 let empty_arg_maps arity : arg_types_by_use_id =
   List.map
     (fun _ -> Apply_cont_rewrite_id.Map.empty)
-    (Flambda_arity.to_list arity)
+    (Flambda_arity.unarized_components arity)
 
 let get_arg_types_by_use_id t =
   add_uses_to_arg_maps (empty_arg_maps t.arity) t.uses
@@ -106,11 +123,14 @@ let get_arg_types_by_use_id t =
 let get_arg_types_by_use_id_for_invariant_params arity l =
   List.fold_left
     (fun arg_maps t ->
-      if not
-           (Misc.Stdlib.List.is_prefix
-              ~equal:Flambda_kind.With_subkind.equal_ignoring_subkind
-              (Flambda_arity.to_list arity)
-              ~of_:(Flambda_arity.to_list t.arity))
+      if
+        not
+          (Misc.Stdlib.List.is_prefix ~equal:Flambda_kind.equal
+             (Flambda_arity.unarized_components arity
+             |> List.map Flambda_kind.With_subkind.kind)
+             ~of_:
+               (Flambda_arity.unarized_components t.arity
+               |> List.map Flambda_kind.With_subkind.kind))
       then
         Misc.fatal_errorf
           "Arity of invariant params@ (%a) is not a prefix of the arity of the \
@@ -134,3 +154,5 @@ let get_typing_env_no_more_than_one_use t =
 
 let mark_non_inlinable t =
   { t with uses = List.map U.mark_non_inlinable t.uses }
+
+let clear_uses t = { t with uses = [] }

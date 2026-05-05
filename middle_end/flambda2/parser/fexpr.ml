@@ -54,10 +54,18 @@ type region =
 type const =
   | Naked_immediate of immediate
   | Tagged_immediate of immediate
+  | Naked_float32 of float
   | Naked_float of float
+  | Naked_int8 of Numeric_types.Int8.t
+  | Naked_int16 of Numeric_types.Int16.t
+    (* CR bclement/keryan: we could consider using Reg_width_const.t directly *)
   | Naked_int32 of int32
   | Naked_int64 of int64
+  | Naked_vec128 of Vector_types.Vec128.Bit_pattern.bits
+  | Naked_vec256 of Vector_types.Vec256.Bit_pattern.bits
+  | Naked_vec512 of Vector_types.Vec512.Bit_pattern.bits
   | Naked_nativeint of targetint
+  | Null
 
 type field_of_block =
   | Symbol of symbol
@@ -75,6 +83,8 @@ type mutability = Mutability.t =
   | Immutable
   | Immutable_unique
 
+type empty_array_kind = Empty_array_kind.t
+
 type 'a or_variable =
   | Const of 'a
   | Var of variable
@@ -85,25 +95,31 @@ type static_data =
         mutability : mutability;
         elements : field_of_block list
       }
+  | Boxed_float32 of float or_variable
   | Boxed_float of float or_variable
   | Boxed_int32 of int32 or_variable
   | Boxed_int64 of int64 or_variable
   | Boxed_nativeint of targetint or_variable
+  | Boxed_vec128 of Vector_types.Vec128.Bit_pattern.bits or_variable
+  | Boxed_vec256 of Vector_types.Vec256.Bit_pattern.bits or_variable
+  | Boxed_vec512 of Vector_types.Vec512.Bit_pattern.bits or_variable
   | Immutable_float_block of float or_variable list
   | Immutable_float_array of float or_variable list
   | Immutable_value_array of field_of_block list
-  | Empty_array
+  | Empty_array of empty_array_kind
   | Mutable_string of { initial_value : string }
   | Immutable_string of string
 
-type kind = Flambda_kind.t
-
 type subkind =
   | Anything
+  | Boxed_float32
   | Boxed_float
   | Boxed_int32
   | Boxed_int64
   | Boxed_nativeint
+  | Boxed_vec128
+  | Boxed_vec256
+  | Boxed_vec512
   | Tagged_immediate
   | Variant of
       { consts : targetint list;
@@ -168,204 +184,46 @@ type simple =
   | Const of const
   | Coerce of simple * coercion
 
-type array_kind = Flambda_primitive.Array_kind.t =
-  | Immediates
-  | Values
-  | Naked_floats
-
-type box_kind = Flambda_kind.Boxable_number.t =
-  | Naked_float
-  | Naked_int32
-  | Naked_int64
-  | Naked_nativeint
-
-type generic_array_specialisation =
-  | No_specialisation
-  | Full_of_naked_floats
-  | Full_of_immediates
-  | Full_of_arbitrary_values_but_not_floats
-
-type block_access_field_kind = Flambda_primitive.Block_access_field_kind.t =
-  | Any_value
-  | Immediate
-
-type block_access_kind =
-  | Values of
-      { tag : tag_scannable option;
-        size : targetint option;
-        field_kind : block_access_field_kind
-      }
-  | Naked_floats of { size : targetint option }
-
-type standard_int = Flambda_kind.Standard_int.t =
-  | Tagged_immediate
-  | Naked_immediate
-  | Naked_int32
-  | Naked_int64
-  | Naked_nativeint
-
-type standard_int_or_float = Flambda_kind.Standard_int_or_float.t =
-  | Tagged_immediate
-  | Naked_immediate
-  | Naked_float
-  | Naked_int32
-  | Naked_int64
-  | Naked_nativeint
-
-type string_or_bytes = Flambda_primitive.string_or_bytes =
-  | String
-  | Bytes
+type cont_extra_arg = simple * kind_with_subkind
 
 type alloc_mode_for_allocations =
   | Heap
   | Local of { region : region }
 
-type alloc_mode_for_types =
+type alloc_mode_for_applications =
   | Heap
-  | Heap_or_local
-  | Local
+  | Local of
+      { region : region;
+        ghost_region : region
+      }
 
 type alloc_mode_for_assignments =
   | Heap
   | Local
 
-type init_or_assign =
-  | Initialization
-  | Assignment of alloc_mode_for_assignments
-
-type 'signed_or_unsigned comparison =
-      'signed_or_unsigned Flambda_primitive.comparison =
-  | Eq
-  | Neq
-  | Lt of 'signed_or_unsigned
-  | Gt of 'signed_or_unsigned
-  | Le of 'signed_or_unsigned
-  | Ge of 'signed_or_unsigned
-
-type equality_comparison = Flambda_primitive.equality_comparison =
-  | Eq
-  | Neq
-
-type signed_or_unsigned = Flambda_primitive.signed_or_unsigned =
-  | Signed
-  | Unsigned
-
-type nullop = Begin_region
-
-type unary_int_arith_op = Flambda_primitive.unary_int_arith_op =
-  | Neg
-  | Swap_byte_endianness
-
-type unop =
-  | Array_length
-  | Begin_try_region
-  | Boolean_not
-  | Box_number of box_kind * alloc_mode_for_allocations
-  | End_region
-  | Get_tag
-  | Int_arith of standard_int * unary_int_arith_op
-  | Is_flat_float_array
-  | Is_int
-  | Num_conv of
-      { src : standard_int_or_float;
-        dst : standard_int_or_float
+type prim_param =
+  | Labeled of
+      { label : string;
+        value : string located
       }
-  | Opaque_identity
-  | Project_value_slot of
-      { project_from : function_slot;
-        value_slot : value_slot
-      }
-  | Project_function_slot of
-      { move_from : function_slot;
-        move_to : function_slot
-      }
-  | String_length of string_or_bytes
-  | Unbox_number of box_kind
-  | Untag_immediate
-  | Tag_immediate
+  | Positional of string located
+  | Flag of string
 
-type 'signed_or_unsigned comparison_behaviour =
-      'signed_or_unsigned Flambda_primitive.comparison_behaviour =
-  | Yielding_bool of 'signed_or_unsigned comparison
-  | Yielding_int_like_compare_functions of 'signed_or_unsigned
+type prim_op =
+  { prim : string;
+    params : prim_param list
+  }
 
-type binary_int_arith_op = Flambda_primitive.binary_int_arith_op =
-  | Add
-  | Sub
-  | Mul
-  | Div
-  | Mod
-  | And
-  | Or
-  | Xor
-
-type int_shift_op = Flambda_primitive.int_shift_op =
-  | Lsl
-  | Lsr
-  | Asr
-
-type binary_float_arith_op = Flambda_primitive.binary_float_arith_op =
-  | Add
-  | Sub
-  | Mul
-  | Div
-
-type string_accessor_width = Flambda_primitive.string_accessor_width =
-  | Eight
-  | Sixteen
-  | Thirty_two
-  | Sixty_four
-
-type string_like_value = Flambda_primitive.string_like_value =
-  | String
-  | Bytes
-  | Bigstring
-
-type bytes_like_value = Flambda_primitive.bytes_like_value =
-  | Bytes
-  | Bigstring
-
-type infix_binop =
-  | Int_arith of binary_int_arith_op (* on tagged immediates *)
-  | Int_shift of int_shift_op (* on tagged immediates *)
-  | Int_comp of signed_or_unsigned comparison_behaviour (* on tagged imms *)
-  | Float_arith of binary_float_arith_op
-  | Float_comp of unit comparison_behaviour
-
-type binop =
-  | Array_load of array_kind * mutability
-  | Block_load of block_access_kind * mutability
-  | Phys_equal of equality_comparison
-  | Int_arith of standard_int * binary_int_arith_op
-  | Int_comp of standard_int * signed_or_unsigned comparison_behaviour
-  | Int_shift of standard_int * int_shift_op
-  | Infix of infix_binop
-  | String_or_bigstring_load of string_like_value * string_accessor_width
-
-type ternop =
-  | Array_set of array_kind * init_or_assign
-  | Block_set of block_access_kind * init_or_assign
-  | Bytes_or_bigstring_set of bytes_like_value * string_accessor_width
-
-type varop =
-  | Make_block of tag_scannable * mutability * alloc_mode_for_allocations
-
-type prim =
-  | Nullary of nullop
-  | Unary of unop * simple
-  | Binary of binop * simple * simple
-  | Ternary of ternop * simple * simple * simple
-  | Variadic of varop * simple list
+type prim = prim_op * simple list
 
 type arity = kind_with_subkind list
 
 type function_call =
   | Direct of
       { code_id : code_id;
-        function_slot : function_slot option;
-        alloc : alloc_mode_for_types
+        function_slot : function_slot option
       }
-  | Indirect of alloc_mode_for_types
+  | Indirect
 (* Will translate to indirect_known_arity or indirect_unknown_arity depending on
    whether the apply record's arities field has a value *)
 
@@ -408,15 +266,15 @@ type loopify_attribute = Loopify_attribute.t =
   | Default_loopify_and_not_tailrec
 
 type apply =
-  { func : simple;
+  { func : simple option;
     continuation : result_continuation;
-    exn_continuation : continuation;
+    exn_continuation : continuation * cont_extra_arg list;
     args : simple list;
     call_kind : call_kind;
+    alloc_mode : alloc_mode_for_applications;
     arities : function_arities option;
     inlined : inlined_attribute option;
-    inlining_state : inlining_state option;
-    region : region
+    inlining_state : inlining_state option
   }
 
 type size = int
@@ -426,6 +284,10 @@ type apply_cont =
     trap_action : trap_action option;
     args : simple list
   }
+
+type is_cont_recursive =
+  | Nonrecursive
+  | Recursive of kinded_parameter list
 
 type expr =
   | Let of let_
@@ -471,7 +333,7 @@ and fun_decl =
   }
 
 and let_cont =
-  { recursive : is_recursive;
+  { recursive : is_cont_recursive;
     body : expr;
     bindings : continuation_binding list
   }
@@ -512,7 +374,8 @@ and code =
     params_and_body : params_and_body;
     code_size : code_size;
     is_tupled : bool;
-    loopify : loopify_attribute option
+    loopify : loopify_attribute option;
+    result_mode : alloc_mode_for_assignments
   }
 
 and code_size = int
@@ -521,6 +384,7 @@ and params_and_body =
   { params : kinded_parameter list;
     closure_var : variable;
     region_var : variable;
+    ghost_region_var : variable;
     depth_var : variable;
     ret_cont : continuation_id;
     exn_cont : continuation_id;
@@ -533,14 +397,3 @@ and static_closure_binding =
   }
 
 type flambda_unit = { body : expr }
-
-type expect_test_spec =
-  { before : flambda_unit;
-    after : flambda_unit
-  }
-
-type markdown_node =
-  | Text of string
-  | Expect of expect_test_spec
-
-type markdown_doc = markdown_node list

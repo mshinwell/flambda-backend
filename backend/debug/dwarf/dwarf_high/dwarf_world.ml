@@ -4,7 +4,7 @@
 (*                                                                        *)
 (*                  Mark Shinwell, Jane Street Europe                     *)
 (*                                                                        *)
-(*   Copyright 2016--2018 Jane Street Group LLC                           *)
+(*   Copyright 2016--2023 Jane Street Group LLC                           *)
 (*                                                                        *)
 (*   All rights reserved.  This file is distributed under the terms of    *)
 (*   the GNU Lesser General Public License version 2.1, with the          *)
@@ -12,14 +12,16 @@
 (*                                                                        *)
 (**************************************************************************)
 
+open! Int_replace_polymorphic_compare
 open Asm_targets
 open Dwarf_low
+module A = Asm_directives
 
-[@@@ocaml.warning "+a-4-30-40-41-42"]
+let emit0_delayed ~asm_directives:_ = ()
 
-let emit ~asm_directives ~compilation_unit_proto_die
-    ~compilation_unit_header_label ~debug_line =
-  let module A = (val asm_directives : Asm_directives.S) in
+let emit0 ~asm_directives ~compilation_unit_proto_die
+    ~compilation_unit_header_label ~debug_line ~debug_loc_table
+    ~debug_ranges_table ~address_table ~location_list_table =
   if Dwarf_flags.debug_thing Dwarf_flags.Debug_source_lines
   then
     Profile.record "dwarf_world_emit"
@@ -39,7 +41,11 @@ let emit ~asm_directives ~compilation_unit_proto_die
           Assign_abbrevs.run ~proto_die_root:compilation_unit_proto_die)
         ()
     in
-    let debug_abbrev_label = Asm_label.for_section (DWARF Debug_abbrev) in
+    List.iter
+      (fun location_list ->
+        Debug_loc_table.insert debug_loc_table location_list)
+      assigned_abbrevs.dwarf_4_location_lists;
+    let debug_abbrev_label = Asm_label.for_dwarf_section Debug_abbrev in
     let debug_info =
       Profile.record "debug_info_section"
         (fun () ->
@@ -58,5 +64,43 @@ let emit ~asm_directives ~compilation_unit_proto_die
           (Abbreviations_table.emit ~asm_directives)
           assigned_abbrevs.abbrev_table;
         A.switch_to_section (DWARF Debug_str);
-        A.emit_cached_strings ())
+        A.emit_cached_strings ();
+        match !Dwarf_flags.gdwarf_version with
+        | Four ->
+          A.switch_to_section (DWARF Debug_loc);
+          Profile.record "debug_loc"
+            (Debug_loc_table.emit ~asm_directives)
+            debug_loc_table;
+          A.switch_to_section (DWARF Debug_ranges);
+          Profile.record "debug_ranges"
+            (Debug_ranges_table.emit ~asm_directives)
+            debug_ranges_table
+        | Five ->
+          Profile.record "addr_table"
+            (Address_table.emit ~asm_directives)
+            address_table;
+          A.switch_to_section (DWARF Debug_loclists);
+          Profile.record "loclists_table"
+            (Location_list_table.emit ~asm_directives)
+            location_list_table)
       ()
+
+let emit ~asm_directives ~compilation_unit_proto_die
+    ~compilation_unit_header_label ~debug_line ~debug_loc_table
+    ~debug_ranges_table ~address_table ~location_list_table
+    ~binary_backend_available =
+  if
+    (* CR mshinwell: support the internal assembler *)
+    binary_backend_available
+  then ()
+  else
+    emit0 ~asm_directives ~compilation_unit_proto_die
+      ~compilation_unit_header_label ~debug_line ~debug_loc_table
+      ~debug_ranges_table ~address_table ~location_list_table
+
+let emit_delayed ~asm_directives ~binary_backend_available =
+  if
+    (* CR mshinwell: support the internal assembler *)
+    binary_backend_available
+  then ()
+  else emit0_delayed ~asm_directives

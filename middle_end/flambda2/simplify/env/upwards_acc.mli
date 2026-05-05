@@ -46,6 +46,8 @@ val with_lifted_constants : t -> Lifted_constant_state.t -> t
 
 val no_lifted_constants : t -> bool
 
+val add_lifted_constant : t -> Lifted_constant.t -> t
+
 (** Map the environment component of the given upwards accumulator. *)
 val map_uenv : t -> f:(Upwards_env.t -> Upwards_env.t) -> t
 
@@ -111,3 +113,5 @@ val mutable_unboxing_result : t -> Flow_types.Mutable_unboxing_result.t
 val set_resimplify : t -> t
 
 val resimplify : t -> bool
+
+val specialization_map : t -> Continuation.t Continuation_callsite_map.t

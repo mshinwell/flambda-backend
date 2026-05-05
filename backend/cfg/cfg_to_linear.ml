@@ -23,35 +23,39 @@
  * SOFTWARE.                                                                      *
  *                                                                                *
  **********************************************************************************)
-[@@@ocaml.warning "+a-30-40-41-42"]
+[@@@ocaml.warning "+a-40-41-42"]
 
+open! Int_replace_polymorphic_compare
 module CL = Cfg_with_layout
 module L = Linear
-module DLL = Flambda_backend_utils.Doubly_linked_list
+module DLL = Oxcaml_utils.Doubly_linked_list
 
 let to_linear_instr ?(like : _ Cfg.instruction option) desc ~next :
     L.instruction =
-  let arg, res, dbg, live, fdo =
+  let arg, res, dbg, live, fdo, available_before, available_across =
     match like with
-    | None -> [||], [||], Debuginfo.none, Reg.Set.empty, Fdo_info.none
-    | Some like -> like.arg, like.res, like.dbg, like.live, like.fdo
+    | None ->
+      ( [||],
+        [||],
+        Debuginfo.none,
+        Reg.Set.empty,
+        Fdo_info.none,
+        Reg_availability_set.Unreachable,
+        Reg_availability_set.Unreachable )
+    | Some like ->
+      ( like.arg,
+        like.res,
+        like.dbg,
+        like.live,
+        like.fdo,
+        like.available_before,
+        like.available_across )
   in
-  { desc; next; arg; res; dbg; live; fdo }
+  { desc; next; arg; res; dbg; live; fdo; available_before; available_across }
 
 let basic_to_linear (i : _ Cfg.instruction) ~next =
   let desc = Cfg_to_linear_desc.from_basic i.desc in
   to_linear_instr ~like:i desc ~next
-
-let mk_int_test ~lt ~eq ~gt : Cmm.integer_comparison =
-  match eq, lt, gt with
-  | true, false, false -> Ceq
-  | false, true, false -> Clt
-  | false, false, true -> Cgt
-  | false, true, true -> Cne
-  | true, true, false -> Cle
-  | true, false, true -> Cge
-  | true, true, true -> assert false
-  | false, false, false -> assert false
 
 (* Certain "unordered" outcomes of float comparisons are not expressible as a
    single Cmm.float_comparison operator, or a disjunction of disjoint
@@ -92,21 +96,25 @@ let mk_float_cond ~lt ~eq ~gt ~uo =
   | true, false, false, true -> Must_be_last
 
 let cross_section cfg_with_layout src dst =
-  if !Flambda_backend_flags.basic_block_sections
-     && not (Label.equal dst Linear_utils.labelled_insn_end.label)
+  if
+    !Oxcaml_flags.basic_block_sections
+    && not (Label.equal dst Linear_utils.labelled_insn_end.label)
   then
     let src_section = CL.get_section cfg_with_layout src in
     let dst_section = CL.get_section cfg_with_layout dst in
     match src_section, dst_section with
     | None, None -> false
     | Some src_name, Some dst_name -> not (String.equal src_name dst_name)
-    | Some _, None -> Misc.fatal_errorf "Missing section for %d" dst
-    | None, Some _ -> Misc.fatal_errorf "Missing section for %d" src
+    | Some _, None ->
+      Misc.fatal_errorf "Missing section for %a" Label.format dst
+    | None, Some _ ->
+      Misc.fatal_errorf "Missing section for %a" Label.format src
   else false
 
 let linearize_terminator cfg_with_layout (func : string) start
     (terminator : Cfg.terminator Cfg.instruction)
-    ~(next : Linear_utils.labelled_insn) : L.instruction * Label.t option =
+    ~(next : Linear_utils.labelled_insn) ~has_epilogue :
+    L.instruction * Label.t option =
   (* CR-someday gyorsh: refactor, a lot of redundant code for different cases *)
   (* CR-someday gyorsh: for successor labels that are not fallthrough, order of
      branch instructions should depend on perf data and possibly the relative
@@ -116,8 +124,9 @@ let linearize_terminator cfg_with_layout (func : string) start
   (* If one of the successors is a fallthrough label, do not emit a jump for it.
      Otherwise, the last jump is unconditional. *)
   let branch_or_fallthrough d lbl =
-    if (not (Label.equal next.label lbl))
-       || cross_section cfg_with_layout start lbl
+    if
+      (not (Label.equal next.label lbl))
+      || cross_section cfg_with_layout start lbl
     then d @ [L.Lbranch lbl]
     else d
   in
@@ -142,41 +151,80 @@ let linearize_terminator cfg_with_layout (func : string) start
     match terminator.desc with
     | Return -> [L.Lreturn], None
     | Raise kind -> [L.Lraise kind], None
-    | Tailcall_func Indirect -> [L.Lop Itailcall_ind], None
+    | Tailcall_func (Indirect _) -> [L.Lcall_op Ltailcall_ind], None
     | Tailcall_func (Direct func_symbol) ->
-      [L.Lop (Itailcall_imm { func = func_symbol })], None
+      [L.Lcall_op (Ltailcall_imm { func = func_symbol })], None
     | Tailcall_self { destination } ->
-      ( [ L.Lop
-            (Itailcall_imm { func = { sym_name = func; sym_global = Local } })
+      ( [ L.Lcall_op
+            (Ltailcall_imm { func = { sym_name = func; sym_global = Local } })
         ],
         Some destination )
-    | Call_no_return { func_symbol; alloc; ty_args; ty_res } ->
+    | Call_no_return
+        { func_symbol;
+          alloc;
+          ty_args;
+          ty_res;
+          stack_ofs;
+          stack_align;
+          effects = _
+        } ->
       single
-        (L.Lop
-           (Iextcall
-              { func = func_symbol; alloc; ty_args; ty_res; returns = false }))
+        (L.Lcall_op
+           (Lextcall
+              { func = func_symbol;
+                alloc;
+                ty_args;
+                ty_res;
+                returns = false;
+                stack_ofs;
+                stack_align
+              }))
+    | Invalid { message = _; stack_ofs; stack_align; label_after = None; _ } ->
+      single
+        (L.Lcall_op
+           (Lextcall
+              { func = Cmm.caml_flambda2_invalid;
+                alloc = false;
+                ty_args = (* Arg is a statically allocated symbol. *) [XInt];
+                ty_res = Cmm.typ_void;
+                returns = false;
+                stack_ofs;
+                stack_align
+              }))
+    | Invalid { label_after = Some _; _ } ->
+      Misc.fatal_error "Cannot linearize terminator: Invalid with a successor"
     | Call { op; label_after } ->
-      let op : Mach.operation =
+      let op : Linear.call_operation =
         match op with
-        | Indirect -> Icall_ind
-        | Direct func_symbol -> Icall_imm { func = func_symbol }
+        | Indirect _ -> Lcall_ind
+        | Direct func_symbol -> Lcall_imm { func = func_symbol }
       in
-      branch_or_fallthrough [L.Lop op] label_after, None
+      branch_or_fallthrough [L.Lcall_op op] label_after, None
     | Prim { op; label_after } ->
-      let op : Mach.operation =
+      let op : Linear.call_operation =
         match op with
-        | External { func_symbol; alloc; ty_args; ty_res } ->
-          Iextcall
-            { func = func_symbol; alloc; ty_args; ty_res; returns = true }
-        | Checkbound { immediate = None } -> Iintop Icheckbound
-        | Checkbound { immediate = Some i } -> Iintop_imm (Icheckbound, i)
-        | Alloc { bytes; dbginfo; mode } -> Ialloc { bytes; dbginfo; mode }
+        | External
+            { func_symbol;
+              alloc;
+              ty_args;
+              ty_res;
+              stack_ofs;
+              stack_align;
+              effects = _
+            } ->
+          Lextcall
+            { func = func_symbol;
+              alloc;
+              ty_args;
+              ty_res;
+              returns = true;
+              stack_ofs;
+              stack_align
+            }
         | Probe { name; handler_code_sym; enabled_at_init } ->
-          Iprobe { name; handler_code_sym; enabled_at_init }
+          Lprobe { name; handler_code_sym; enabled_at_init }
       in
-      branch_or_fallthrough [L.Lop op] label_after, None
-    | Specific_can_raise { op; label_after } ->
-      branch_or_fallthrough [L.Lop (Ispecific op)] label_after, None
+      branch_or_fallthrough [L.Lcall_op op] label_after, None
     | Switch labels -> single (L.Lswitch labels)
     | Never -> Misc.fatal_error "Cannot linearize terminator: Never"
     | Always label -> branch_or_fallthrough [] label, None
@@ -184,7 +232,7 @@ let linearize_terminator cfg_with_layout (func : string) start
       emit_bool (Ieventest, ifso) (Ioddtest, ifnot), None
     | Truth_test { ifso; ifnot } ->
       emit_bool (Itruetest, ifso) (Ifalsetest, ifnot), None
-    | Float_test { lt; eq; gt; uo } -> (
+    | Float_test { width; lt; eq; gt; uo } -> (
       let successor_labels =
         Label.Set.singleton lt |> Label.Set.add gt |> Label.Set.add eq
         |> Label.Set.add uo
@@ -214,12 +262,14 @@ let linearize_terminator cfg_with_layout (func : string) start
               (* arbitrary choice (also see CR above) *)
               Label.Set.min_elt successor_labels
           | [lbl] ->
-            Printf.eprintf "One success label must be last: %d\n" lbl;
+            Printf.eprintf "One success label must be last: %s\n"
+              (Label.to_string lbl);
             (* CR-someday gyorsh: fail for safety, until we see a case that
                exhibits this behavior.. This behavior should not be possible
                with the current cfg construction. *)
             Misc.fatal_errorf
-              "Illegal branch: one successor label must be last %d" lbl ()
+              "Illegal branch: one successor label must be last %a" Label.format
+              lbl ()
           | _ ->
             Misc.fatal_error
               "Illegal branch: more than one successor label that must be last"
@@ -229,7 +279,7 @@ let linearize_terminator cfg_with_layout (func : string) start
             (fun (c, lbl) ->
               if Label.equal lbl last
               then None
-              else Some (L.Lcondbranch (Ifloattest c, lbl)))
+              else Some (L.Lcondbranch (Ifloattest (width, c), lbl)))
             any
         in
         branches @ branch_or_fallthrough [] last, None
@@ -256,15 +306,16 @@ let linearize_terminator cfg_with_layout (func : string) start
            #8677 *)
         let can_emit_Lcondbranch3 =
           match is_signed, imm with
-          | false, Some 1 -> true
-          | false, Some _ | false, None | true, _ -> false
+          | Unsigned, Some 1 -> true
+          | Unsigned, Some _ | Unsigned, None | Signed, _ -> false
         in
         if Label.Set.cardinal cond_successor_labels = 2 && can_emit_Lcondbranch3
         then
           (* generates one cmp instruction for all conditional jumps here *)
           let find l =
-            if (not (cross_section cfg_with_layout start l))
-               && Label.equal next.label l
+            if
+              (not (cross_section cfg_with_layout start l))
+              && Label.equal next.label l
             then None
             else Some l
           in
@@ -273,31 +324,50 @@ let linearize_terminator cfg_with_layout (func : string) start
           let init = branch_or_fallthrough [] last in
           ( Label.Set.fold
               (fun lbl acc ->
-                let cond =
-                  mk_int_test ~lt:(Label.equal lt lbl) ~eq:(Label.equal eq lbl)
+                match
+                  Scalar.Integer_comparison.create is_signed
+                    ~lt:(Label.equal lt lbl) ~eq:(Label.equal eq lbl)
                     ~gt:(Label.equal gt lbl)
-                in
-                let comp =
-                  match is_signed with
-                  | true -> Mach.Isigned cond
-                  | false -> Mach.Iunsigned cond
-                in
-                let test =
-                  match imm with
-                  | None -> Mach.Iinttest comp
-                  | Some n -> Mach.Iinttest_imm (comp, n)
-                in
-                L.Lcondbranch (test, lbl) :: acc)
+                with
+                | Error result ->
+                  Misc.fatal_errorf
+                    "Cannot linearize terminator: meaningless specification of \
+                     comparison, always has result %b:@ %a"
+                    result Cfg.print_terminator terminator
+                | Ok comp ->
+                  let test =
+                    match imm with
+                    | None -> Operation.Iinttest comp
+                    | Some n -> Operation.Iinttest_imm (comp, n)
+                  in
+                  L.Lcondbranch (test, lbl) :: acc)
               cond_successor_labels init,
             None )
       | _ -> assert false)
-    | Poll_and_jump return_label ->
-      [L.Lop (Ipoll { return_label = Some return_label })], None
   in
-  ( List.fold_left
-      (fun next desc -> to_linear_instr ~like:terminator desc ~next)
-      next.insn (List.rev desc_list),
-    tailrec_label )
+  let desc_list =
+    match has_epilogue with
+    | true ->
+      (* The corresponding [Lepilogue_open] was already added when converting
+         the body of the block, replacing a [Cfg.Epilogue] instruction. The
+         [Lepilogue_open] should be the last instruction in the block body,
+         immediately preceding the terminator. *)
+      desc_list @ [L.Lepilogue_close]
+    | false -> desc_list
+  in
+  let instr =
+    List.fold_left
+      (fun next desc ->
+        let instr = to_linear_instr desc ~next ~like:terminator in
+        match has_epilogue with
+        (* In order to match the debug info generated when the epilogue was not
+           a linear instruction, we need to explicitly remove debug info, as
+           they were already added to Lepilogue_open. *)
+        | true -> { instr with L.dbg = Debuginfo.none }
+        | false -> instr)
+      next.insn (List.rev desc_list)
+  in
+  instr, tailrec_label
 
 let need_starting_label (cfg_with_layout : CL.t) (block : Cfg.basic_block)
     ~(prev_block : Cfg.basic_block) =
@@ -313,19 +383,13 @@ let need_starting_label (cfg_with_layout : CL.t) (block : Cfg.basic_block)
       (* This block has a single predecessor which appears in the layout
          immediately prior to this block. *)
       (* No need for the label, unless the predecessor's terminator is [Switch]
-         when the label is needed for the jump table; or [Poll_and_jump], in
-         which case there will always be a jump to such label. *)
+         when the label is needed for the jump table. *)
       match prev_block.terminator.desc with
-      | Switch _ | Poll_and_jump _ -> true
+      | Switch _ -> true
       | Never -> Misc.fatal_error "Cannot linearize terminator: Never"
       | Always _ | Parity_test _ | Truth_test _ | Float_test _ | Int_test _
-      | Call _ | Prim _ | Specific_can_raise _ ->
-        (* If the label came from the original [Linear] code, preserve it for
-           checking that the conversion from [Linear] to [Cfg] and back is the
-           identity; and for various assertions in reorder. *)
-        let new_labels = CL.new_labels cfg_with_layout in
-        CL.preserve_orig_labels cfg_with_layout
-        && not (Label.Set.mem block.start new_labels)
+      | Call _ | Prim _ | Invalid _ ->
+        false
       | Return | Raise _ | Tailcall_func _ | Tailcall_self _ | Call_no_return _
         ->
         assert false)
@@ -344,9 +408,9 @@ let make_Llabel cfg_with_layout label =
   Linear.Llabel
     { label;
       section_name =
-        (if !Flambda_backend_flags.basic_block_sections
-        then CL.get_section cfg_with_layout label
-        else None)
+        (if !Oxcaml_flags.basic_block_sections
+         then CL.get_section cfg_with_layout label
+         else None)
     }
 
 (* CR-someday gyorsh: handle duplicate labels in new layout: print the same
@@ -359,13 +423,19 @@ let run cfg_with_layout =
   DLL.iter_right_cell layout ~f:(fun cell ->
       let label = DLL.value cell in
       if not (Label.Tbl.mem cfg.blocks label)
-      then Misc.fatal_errorf "Unknown block labelled %d\n" label;
+      then Misc.fatal_errorf "Unknown block labelled %a\n" Label.format label;
       let block = Label.Tbl.find cfg.blocks label in
       assert (Label.equal label block.start);
       let body =
+        let has_epilogue =
+          DLL.exists block.body ~f:(fun instr ->
+              match[@ocaml.warning "-4"] instr.Cfg.desc with
+              | Cfg.Epilogue -> true
+              | _ -> false)
+        in
         let terminator, terminator_tailrec_label =
           linearize_terminator cfg_with_layout cfg.fun_name block.start
-            block.terminator ~next:!next
+            block.terminator ~next:!next ~has_epilogue
         in
         (match !tailrec_label, terminator_tailrec_label with
         | (Some _ | None), None -> ()
@@ -389,9 +459,15 @@ let run cfg_with_layout =
           let body =
             if need_starting_label cfg_with_layout block ~prev_block
             then
-              to_linear_instr
-                (make_Llabel cfg_with_layout block.start)
-                ~next:body
+              let instr =
+                to_linear_instr
+                  (make_Llabel cfg_with_layout block.start)
+                  ~next:body
+              in
+              { instr with
+                available_before = body.available_before;
+                available_across = body.available_across
+              }
             else body
           in
           adjust_stack_offset body block ~prev_block
@@ -406,14 +482,15 @@ let run cfg_with_layout =
     Proc.prologue_required ~fun_contains_calls ~fun_num_stack_slots
   in
   let fun_section_name =
-    if !Flambda_backend_flags.basic_block_sections
+    if !Oxcaml_flags.basic_block_sections
     then CL.get_section cfg_with_layout cfg.entry_label
     else None
   in
   { Linear.fun_name = cfg.fun_name;
+    fun_args = Reg.set_of_array cfg.fun_args;
     fun_body = !next.insn;
     fun_tailrec_entry_point_label = !tailrec_label;
-    fun_fast = cfg.fun_fast;
+    fun_fast = not (List.mem Cfg.Reduce_code_size cfg.fun_codegen_options);
     fun_dbg = cfg.fun_dbg;
     fun_contains_calls;
     fun_num_stack_slots;
@@ -421,31 +498,3 @@ let run cfg_with_layout =
     fun_prologue_required;
     fun_section_name
   }
-
-let layout_of_block_list : Cfg.basic_block list -> Cfg_with_layout.layout =
- fun blocks ->
-  let res = DLL.make_empty () in
-  List.iter (fun block -> DLL.add_end res block.Cfg.start) blocks;
-  res
-
-(** debug print block as assembly *)
-let print_assembly (blocks : Cfg.basic_block list) =
-  (* create a fake cfg just for printing these blocks *)
-  let layout = layout_of_block_list blocks in
-  let fun_name = "_fun_start_" in
-  let cfg =
-    Cfg.create ~fun_name ~fun_args:[||] ~fun_dbg:Debuginfo.none ~fun_fast:false
-      ~fun_contains_calls:true ~fun_num_stack_slots:[||]
-  in
-  List.iter
-    (fun (block : Cfg.basic_block) ->
-      Label.Tbl.add cfg.blocks block.start block)
-    blocks;
-  let cl =
-    Cfg_with_layout.create cfg ~layout ~new_labels:Label.Set.empty
-      ~preserve_orig_labels:true
-  in
-  let fundecl = run cl in
-  X86_proc.reset_asm_code ();
-  Emit.fundecl fundecl;
-  X86_proc.generate_code (Some (X86_gas.generate_asm !Emitaux.output_channel))

@@ -42,15 +42,13 @@ module Map_to_canonical = struct
       map1 map2
 
   let union map1 map2 =
-    Name.Map.union
+    Name.Map.union_total_shared
       (fun elt coercion1 coercion2 ->
-        match coercion1, coercion2 with
-        | coercion1, coercion2 ->
-          if Coercion.equal coercion1 coercion2
-          then Some coercion1
-          else
-            fatal_inconsistent ~func_name:"Aliases.Map_to_canonical.union" elt
-              coercion1 coercion2)
+        if Coercion.equal coercion1 coercion2
+        then coercion1
+        else
+          fatal_inconsistent ~func_name:"Aliases.Map_to_canonical.union" elt
+            coercion1 coercion2)
       map1 map2
 
   let ids_for_export t =
@@ -114,26 +112,28 @@ end = struct
     }
 
   let invariant { aliases; all } =
-    (* The elements in [aliases] have disjoint set of keys. *)
-    let aliases_union : Map_to_canonical.t =
-      Name_mode.Map.fold
-        (fun _name_mode map acc ->
-          Name.Map.union
-            (fun elt _coercion1 _coercion2 ->
-              Misc.fatal_errorf
-                "[Aliases_of_canonical_element.invariant]: element %a appears \
-                 in several modes"
-                Name.print elt)
-            map acc)
-        aliases Name.Map.empty
-    in
-    (* [all] is the union of all elements in [aliases] *)
-    if Name.Map.equal Coercion.equal all aliases_union
-    then ()
-    else
-      Misc.fatal_errorf
-        "[Aliases_of_canonical_element.invariant]: [aliases] and [all] are not \
-         consistent"
+    if Flambda_features.check_invariants ()
+    then
+      (* The elements in [aliases] have disjoint set of keys. *)
+      let aliases_union : Map_to_canonical.t =
+        Name_mode.Map.fold
+          (fun _name_mode map acc ->
+            Name.Map.union_total
+              (fun elt _coercion1 _coercion2 ->
+                Misc.fatal_errorf
+                  "[Aliases_of_canonical_element.invariant]: element %a \
+                   appears in several modes"
+                  Name.print elt)
+              map acc)
+          aliases Name.Map.empty
+      in
+      (* [all] is the union of all elements in [aliases] *)
+      if Name.Map.equal Coercion.equal all aliases_union
+      then ()
+      else
+        Misc.fatal_errorf
+          "[Aliases_of_canonical_element.invariant]: [aliases] and [all] are \
+           not consistent"
 
   let [@ocamlformat "disable"] print ppf { aliases; all = _; } =
     Name_mode.Map.print (Name.Map.print Coercion.print) ppf aliases
@@ -152,7 +152,7 @@ end = struct
         (function
           | None -> Some (Name.Map.singleton elt coercion_to_canonical)
           | Some elts ->
-            if Flambda_features.check_invariants ()
+            if Flambda_features.check_light_invariants ()
             then assert (not (Name.Map.mem elt elts));
             Some (Name.Map.add elt coercion_to_canonical elts))
         t.aliases
@@ -182,8 +182,8 @@ end = struct
 
   let union t1 t2 =
     let aliases : Map_to_canonical.t Name_mode.Map.t =
-      Name_mode.Map.union
-        (fun _order elts1 elts2 -> Some (Map_to_canonical.union elts1 elts2))
+      Name_mode.Map.union_total_shared
+        (fun _order elts1 elts2 -> Map_to_canonical.union elts1 elts2)
         t1.aliases t2.aliases
     in
     let t = { aliases; all = Map_to_canonical.union t1.all t2.all } in
@@ -246,6 +246,9 @@ module Alias_set = struct
 
   let empty = { const = None; names = Name.Map.empty }
 
+  let is_empty { const; names } =
+    Option.is_none const && Name.Map.is_empty names
+
   let create_aliases_of_element ~element:_ ~canonical_element
       ~coercion_from_canonical_to_element ~alias_names_with_coercions_to_element
       =
@@ -276,7 +279,7 @@ module Alias_set = struct
     | None ->
       Name.Map.choose_opt names
       |> Option.map (fun (name, coercion) ->
-             Simple.with_coercion (Simple.name name) coercion)
+          Simple.with_coercion (Simple.name name) coercion)
 
   let get_singleton { const; names } =
     match const with
@@ -285,7 +288,7 @@ module Alias_set = struct
     | None ->
       Name.Map.get_singleton names
       |> Option.map (fun (name, coercion) ->
-             Simple.with_coercion (Simple.name name) coercion)
+          Simple.with_coercion (Simple.name name) coercion)
 
   let [@ocamlformat "disable"] print ppf { const; names; } =
     let none ppf () =
@@ -492,12 +495,13 @@ let invariant ~binding_time_resolver ~binding_times_and_modes t =
         (fun canonical_element aliases all_aliases ->
           Aliases_of_canonical_element.invariant aliases;
           let aliases = Aliases_of_canonical_element.all aliases in
-          if not
-               (Name.Map.for_all
-                  (fun elt _coercion ->
-                    name_defined_earlier ~binding_time_resolver
-                      ~binding_times_and_modes canonical_element ~than:elt)
-                  aliases)
+          if
+            not
+              (Name.Map.for_all
+                 (fun elt _coercion ->
+                   name_defined_earlier ~binding_time_resolver
+                     ~binding_times_and_modes canonical_element ~than:elt)
+                 aliases)
           then
             Misc.fatal_errorf
               "Canonical element %a is not earlier than all of its aliases:@ %a"
@@ -624,24 +628,26 @@ let add_alias_between_canonical_elements ~binding_time_resolver
   if Simple.equal canonical_element to_be_demoted
   then
     if Coercion.is_id coercion_to_canonical
-    then t
+    then Or_bottom.Ok t
     else
       Misc.fatal_errorf
         "Cannot add an alias of %a@ to itself with a non-identity coercion@ %a"
         Simple.print canonical_element Coercion.print coercion_to_canonical
   else
-    let name_to_be_demoted =
+    let open Or_bottom.Let_syntax in
+    let<+ name_to_be_demoted =
       assert (not (Simple.has_coercion to_be_demoted));
       Simple.pattern_match to_be_demoted
-        ~const:(fun c ->
-          Misc.fatal_errorf "Can't demote const %a@ (while adding alias to@ %a)"
-            Reg_width_const.print c Simple.print canonical_element)
-        ~name:(fun name ~coercion:_ -> name)
+        ~const:(fun _ ->
+          (* We're adding aliases between different constants; this is a Bottom
+             case. *)
+          Or_bottom.Bottom)
+        ~name:(fun name ~coercion:_ -> Or_bottom.Ok name)
     in
     let aliases_of_to_be_demoted =
       get_aliases_of_canonical_element t ~canonical_element:to_be_demoted
     in
-    if Flambda_features.check_invariants ()
+    if Flambda_features.check_light_invariants ()
     then
       Simple.pattern_match canonical_element
         ~const:(fun _ -> ())
@@ -717,37 +723,39 @@ type to_be_demoted =
 
 let choose_canonical_element_to_be_demoted ~binding_time_resolver
     ~binding_times_and_modes ~canonical_element1 ~canonical_element2 =
-  if defined_earlier ~binding_time_resolver ~binding_times_and_modes
-       canonical_element1 ~than:canonical_element2
+  if
+    defined_earlier ~binding_time_resolver ~binding_times_and_modes
+      canonical_element1 ~than:canonical_element2
   then Demote_canonical_element2
   else Demote_canonical_element1
 
 type add_result =
   { t : t;
-    canonical_element : Simple.t;
-    alias_of_demoted_element : Simple.t
+    demoted_name : Name.t;
+    canonical_element : Simple.t
   }
 
 let invariant_add_result ~binding_time_resolver ~binding_times_and_modes
-    ~original_t { canonical_element; alias_of_demoted_element; t } =
+    ~original_t { demoted_name; canonical_element; t } =
   if Flambda_features.check_invariants ()
   then (
     invariant ~binding_time_resolver ~binding_times_and_modes t;
-    if not
-         (defined_earlier ~binding_time_resolver ~binding_times_and_modes
-            canonical_element ~than:alias_of_demoted_element)
+    if
+      not
+        (defined_earlier ~binding_time_resolver ~binding_times_and_modes
+           canonical_element ~than:(Simple.name demoted_name))
     then
       Misc.fatal_errorf
         "Canonical element %a should be defined earlier than %a after alias \
          addition.@ Original alias tracker:@ %a@ Resulting alias tracker:@ %a"
-        Simple.print canonical_element Simple.print alias_of_demoted_element
-        print original_t print t;
-    match canonical t alias_of_demoted_element with
+        Simple.print canonical_element Name.print demoted_name print original_t
+        print t;
+    match canonical t (Simple.name demoted_name) with
     | Is_canonical ->
       Misc.fatal_errorf
         "Alias %a must not be must not be canonical anymore.@ Original alias \
          tracker:@ %a@ Resulting alias tracker:@ %a"
-        Simple.print alias_of_demoted_element print original_t print t
+        Name.print demoted_name print original_t print t
     | Alias_of_canonical _ -> ())
 
 let add_alias ~binding_time_resolver ~binding_times_and_modes t
@@ -755,13 +763,13 @@ let add_alias ~binding_time_resolver ~binding_times_and_modes t
     ~canonical_element2 =
   assert (not (Simple.has_coercion canonical_element1));
   assert (not (Simple.has_coercion canonical_element2));
+  let which_element =
+    choose_canonical_element_to_be_demoted ~binding_time_resolver
+      ~binding_times_and_modes ~canonical_element1 ~canonical_element2
+  in
   let ( canonical_element,
         demoted_canonical,
         coercion_from_demoted_canonical_to_canonical ) =
-    let which_element =
-      choose_canonical_element_to_be_demoted ~binding_time_resolver
-        ~binding_times_and_modes ~canonical_element1 ~canonical_element2
-    in
     match which_element with
     | Demote_canonical_element1 ->
       let coercion_from_canonical_element1_to_canonical_element2 =
@@ -775,22 +783,18 @@ let add_alias ~binding_time_resolver ~binding_times_and_modes t
         canonical_element2,
         coercion_from_canonical_element2_to_canonical_element1 )
   in
-  let t =
+  let open Or_bottom.Let_syntax in
+  let<+ t =
     add_alias_between_canonical_elements ~binding_time_resolver
       ~binding_times_and_modes t ~canonical_element
       ~coercion_to_canonical:coercion_from_demoted_canonical_to_canonical
       ~to_be_demoted:demoted_canonical
   in
-  let alias_of_demoted_element =
-    Simple.with_coercion demoted_canonical
-      coercion_from_demoted_canonical_to_canonical
-  in
-  { t; canonical_element; alias_of_demoted_element }
+  t, which_element
 
-let add ~binding_time_resolver ~binding_times_and_modes t
+let add0 ~binding_time_resolver ~binding_times_and_modes t
     ~canonical_element1:element1_with_coercion
     ~canonical_element2:element2_with_coercion =
-  let original_t = t in
   (* element1_with_coercion <--[c1]-- element1
    * +
    * element2_with_coercion <--[c2]-- element2
@@ -806,31 +810,41 @@ let add ~binding_time_resolver ~binding_times_and_modes t
       (Simple.coercion element2_with_coercion)
       ~then_:(Coercion.inverse (Simple.coercion element1_with_coercion))
   in
-  if Flambda_features.check_invariants ()
-  then (
+  if Flambda_features.check_light_invariants ()
+  then
     if Simple.equal canonical_element1 canonical_element2
     then
       Misc.fatal_errorf "Cannot alias an element to itself: %a" Simple.print
         canonical_element1;
-    Simple.pattern_match canonical_element1
-      ~name:(fun _ ~coercion:_ -> ())
-      ~const:(fun const1 ->
-        Simple.pattern_match canonical_element2
-          ~name:(fun _ ~coercion:_ -> ())
-          ~const:(fun const2 ->
-            Misc.fatal_errorf "Cannot add alias between two consts: %a, %a"
-              Reg_width_const.print const1 Reg_width_const.print const2)));
-  let add_result =
-    add_alias ~binding_time_resolver ~binding_times_and_modes t
-      ~canonical_element1
-      ~coercion_from_canonical_element2_to_canonical_element1
+  add_alias ~binding_time_resolver ~binding_times_and_modes t
+    ~canonical_element1 ~coercion_from_canonical_element2_to_canonical_element1
+    ~canonical_element2
+
+let add ~binding_time_resolver ~binding_times_and_modes t ~canonical_element1
+    ~canonical_element2 =
+  let open Or_bottom.Let_syntax in
+  let original_t = t in
+  let<+ t, which_element =
+    add0 ~binding_time_resolver ~binding_times_and_modes t ~canonical_element1
       ~canonical_element2
   in
-  if Flambda_features.check_invariants ()
-  then
-    invariant_add_result ~binding_time_resolver ~binding_times_and_modes
-      ~original_t add_result;
-  add_result
+  let canonical_element, alias_of_demoted_element =
+    match which_element with
+    | Demote_canonical_element1 -> canonical_element2, canonical_element1
+    | Demote_canonical_element2 -> canonical_element1, canonical_element2
+  in
+  Simple.pattern_match alias_of_demoted_element
+    ~const:(fun _ -> Misc.fatal_error "Cannot demote a constant")
+    ~name:(fun name ~coercion ->
+      let canonical_element =
+        Simple.apply_coercion_exn canonical_element (Coercion.inverse coercion)
+      in
+      let add_result = { t; canonical_element; demoted_name = name } in
+      if Flambda_features.check_invariants ()
+      then
+        invariant_add_result ~binding_time_resolver ~binding_times_and_modes
+          ~original_t add_result;
+      add_result)
 
 (* CR-someday mshinwell: For the moment we allow relations between canonical
    elements that are actually incomparable under the name mode ordering, and
@@ -874,8 +888,9 @@ let find_earliest_alias t ~canonical_element ~binding_times_and_modes
     let earliest, coercion_from_earliest_to_canonical =
       Name.Map.fold
         (fun elt coercion ((min_elt, _min_coercion) as min_binding) ->
-          if name_defined_earlier ~binding_time_resolver
-               ~binding_times_and_modes elt ~than:min_elt
+          if
+            name_defined_earlier ~binding_time_resolver ~binding_times_and_modes
+              elt ~than:min_elt
           then elt, coercion
           else min_binding)
         at_earliest_mode
@@ -963,22 +978,22 @@ let get_aliases t element =
         ~then_:coercion_from_canonical_to_element
     in
     (if Flambda_features.check_invariants ()
-    then
-      let element_coerced_to_canonical =
-        Simple.apply_coercion_exn element coercion_from_element_to_canonical
-      in
-      (* These aliases are all equivalent to the canonical element, and so is
-         our original [element] if we coerce it first, so the coerced form of
-         [element] should be among the aliases. *)
-      assert (
-        Name.Map.exists
-          (fun name coercion_from_name_to_canonical ->
-            let name_coerced_to_canonical =
-              Simple.apply_coercion_exn (Simple.name name)
-                coercion_from_name_to_canonical
-            in
-            Simple.equal element_coerced_to_canonical name_coerced_to_canonical)
-          alias_names_with_coercions_to_canonical));
+     then
+       let element_coerced_to_canonical =
+         Simple.apply_coercion_exn element coercion_from_element_to_canonical
+       in
+       (* These aliases are all equivalent to the canonical element, and so is
+          our original [element] if we coerce it first, so the coerced form of
+          [element] should be among the aliases. *)
+       assert (
+         Name.Map.exists
+           (fun name coercion_from_name_to_canonical ->
+             let name_coerced_to_canonical =
+               Simple.apply_coercion_exn (Simple.name name)
+                 coercion_from_name_to_canonical
+             in
+             Simple.equal element_coerced_to_canonical name_coerced_to_canonical)
+           alias_names_with_coercions_to_canonical));
     Alias_set.create_aliases_of_element ~element ~canonical_element
       ~coercion_from_canonical_to_element ~alias_names_with_coercions_to_element
 
@@ -1020,3 +1035,43 @@ let get_canonical_ignoring_name_mode t name =
   | Alias_of_canonical { canonical_element; coercion_to_canonical } ->
     let coercion_from_canonical = Coercion.inverse coercion_to_canonical in
     Simple.apply_coercion_exn canonical_element coercion_from_canonical
+
+let add_alias_set ~binding_time_resolver ~binding_times_and_modes t name aliases
+    =
+  (* CR vlaviron: when we get rid of coercions we should be able to have more
+     efficient implementations *)
+  let canonical = get_canonical_ignoring_name_mode t name in
+  let add_alias (t, canonical_element1) elt =
+    if
+      Simple.equal
+        (Simple.without_coercion canonical_element1)
+        (Simple.without_coercion elt)
+    then t, canonical_element1
+    else
+      match
+        add0 ~binding_time_resolver ~binding_times_and_modes t
+          ~canonical_element1 ~canonical_element2:elt
+      with
+      | Bottom -> Misc.fatal_error "Discovered Bottom during alias join"
+      | Ok (t, which_element) ->
+        let canonical_element =
+          match which_element with
+          | Demote_canonical_element1 -> elt
+          | Demote_canonical_element2 -> canonical_element1
+        in
+        t, canonical_element
+  in
+  let ({ const; names } : Alias_set.t) = aliases in
+  let acc =
+    match const with
+    | None -> t, canonical
+    | Some c -> add_alias (t, canonical) (Simple.const c)
+  in
+  let t, _ =
+    Name.Map.fold
+      (fun name coercion (t, canonical) ->
+        let elt = get_canonical_ignoring_name_mode t name in
+        add_alias (t, canonical) (Simple.apply_coercion_exn elt coercion))
+      names acc
+  in
+  t

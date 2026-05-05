@@ -21,6 +21,9 @@ include module type of struct include Ident end
 
 type backend_var = t
 
+val name_for_debugger : t -> string
+val unique_name_for_debugger : t -> string
+
 module Provenance : sig
   type t
 
@@ -28,13 +31,19 @@ module Provenance : sig
      : module_path:Path.t
     -> location:Debuginfo.t
     -> original_ident:Ident.t
+    -> debug_uid:Flambda2_identifiers.Flambda_debug_uid.t
     -> t
 
   val module_path : t -> Path.t
   val location : t -> Debuginfo.t
   val original_ident : t -> Ident.t
+  val debug_uid : t -> Flambda2_identifiers.Flambda_debug_uid.t
 
   val print : Format.formatter -> t -> unit
+
+  val compare : t -> t -> int
+
+  val equal : t -> t -> bool
 end
 
 module With_provenance : sig

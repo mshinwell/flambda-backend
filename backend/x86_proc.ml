@@ -13,60 +13,18 @@
 (*                                                                        *)
 (**************************************************************************)
 
+[@@@ocaml.warning "+a-40-41-42"]
+
+open! Int_replace_polymorphic_compare
 open X86_ast
-
-module Section_name = struct
-  module S = struct
-    type t =
-      { name: string list;
-        name_str: string;
-        flags : string option;
-        args: string list
-      }
-
-    let equal t1 t2 =
-      List.equal String.equal t1.name t2.name
-
-    let hash t = Hashtbl.hash t.name
-
-    let compare t1 t2 = List.compare String.compare t1.name t2.name
-
-    let make name flags args =
-      { name; name_str = String.concat "," name; flags; args; }
-
-    let of_string name =
-      { name = [name]; name_str = name; flags = None; args = [] }
-
-    let to_string t = t.name_str
-
-    let flags t =
-      t.flags
-
-    let alignment t =
-      let rec align = function
-        | [] -> 0L
-        | [hd] -> Option.value ~default:0L (Int64.of_string_opt hd)
-        | hd :: tl -> align tl
-      in align t.args
-
-    let isprefix s1 s2 =
-      String.length s1 <= String.length s2
-      && String.equal (String.sub s2 0 (String.length s1)) s1
-
-    let is_text_like t = isprefix ".text" t.name_str
-    let is_data_like t = isprefix ".data" t.name_str
-  end
-  include S
-  module Map = Map.Make (S)
-  module Tbl = Hashtbl.Make (S)
-end
+module DLL = Oxcaml_utils.Doubly_linked_list
+module Section_name = X86_section.Section_name
 
 type system =
   (* 32 bits and 64 bits *)
   | S_macosx
   | S_gnu
   | S_cygwin
-
   (* 32 bits only *)
   | S_solaris
   | S_win32
@@ -74,16 +32,17 @@ type system =
   | S_bsd_elf
   | S_beos
   | S_mingw
-
   (* 64 bits only *)
   | S_win64
   | S_linux
   | S_mingw64
-
+  | S_freebsd
+  | S_netbsd
+  | S_openbsd
   | S_unknown
 
-
-let system = match Config.system with
+let system =
+  match Config.system with
   | "macosx" -> S_macosx
   | "solaris" -> S_solaris
   | "win32" -> S_win32
@@ -96,30 +55,49 @@ let system = match Config.system with
   | "mingw64" -> S_mingw64
   | "win64" -> S_win64
   | "linux" -> S_linux
-
+  | "freebsd" -> S_freebsd
+  | "netbsd" -> S_netbsd
+  | "openbsd" -> S_openbsd
   | _ -> S_unknown
 
 let windows =
-  match system with
+  match[@warning "-4"] system with
   | S_mingw64 | S_cygwin | S_win64 -> true
   | _ -> false
 
+let is_linux = function[@warning "-4"] S_linux -> true | _ -> false
+
+let is_macosx = function[@warning "-4"] S_macosx -> true | _ -> false
+
+let is_win32 = function[@warning "-4"] S_win32 -> true | _ -> false
+
+let is_win64 = function[@warning "-4"] S_win64 -> true | _ -> false
+
+let is_solaris = function[@warning "-4"] S_solaris -> true | _ -> false
+
 let string_of_substring_literal k n s =
+  let between x low high =
+    Char.compare x low >= 0 && Char.compare x high <= 0
+  in
   let b = Buffer.create (n + 2) in
   let last_was_escape = ref false in
   for i = k to k + n - 1 do
     let c = s.[i] in
-    if c >= '0' && c <= '9' then
+    if between c '0' '9'
+    then
       if !last_was_escape
       then Printf.bprintf b "\\%o" (Char.code c)
       else Buffer.add_char b c
-    else if c >= ' ' && c <= '~' && c <> '"' (* '"' *) && c <> '\\' then begin
+    else if
+      between c ' ' '~'
+      && (not (Char.equal c '"'))
+      (* '"' *) && not (Char.equal c '\\')
+    then (
       Buffer.add_char b c;
-      last_was_escape := false
-    end else begin
+      last_was_escape := false)
+    else (
       Printf.bprintf b "\\%o" (Char.code c);
-      last_was_escape := true
-    end
+      last_was_escape := true)
   done;
   Buffer.contents b
 
@@ -130,18 +108,19 @@ let string_of_symbol prefix s =
   let spec = ref false in
   for i = 0 to String.length s - 1 do
     match String.unsafe_get s i with
-    | 'A'..'Z' | 'a'..'z' | '0'..'9' | '_' -> ()
-    | _ -> spec := true;
+    | 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '_' | '.' -> ()
+    | _ -> spec := true
   done;
-  if not !spec then if prefix = "" then s else prefix ^ s
+  if not !spec
+  then if String.equal prefix "" then s else prefix ^ s
   else
     let b = Buffer.create (String.length s + 10) in
     Buffer.add_string b prefix;
     String.iter
       (function
-        | ('A'..'Z' | 'a'..'z' | '0'..'9' | '_') as c -> Buffer.add_char b c
-        | c -> Printf.bprintf b "$%02x" (Char.code c)
-      )
+        | ('A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '_' | '.') as c ->
+          Buffer.add_char b c
+        | c -> Printf.bprintf b "$%02x" (Char.code c))
       s;
     Buffer.contents b
 
@@ -155,16 +134,15 @@ let buf_bytes_directive b directive s =
   let pos = ref 0 in
   for i = 0 to String.length s - 1 do
     if !pos = 0
-    then begin
+    then (
       if i > 0 then Buffer.add_char b '\n';
       Buffer.add_char b '\t';
       Buffer.add_string b directive;
-      Buffer.add_char b '\t';
-    end
+      Buffer.add_char b '\t')
     else Buffer.add_char b ',';
     Printf.bprintf b "%d" (Char.code s.[i]);
     incr pos;
-    if !pos >= 16 then begin pos := 0 end
+    if !pos >= 16 then pos := 0
   done
 
 let string_of_reg64 = function
@@ -176,8 +154,8 @@ let string_of_reg64 = function
   | RCX -> "rcx"
   | RBP -> "rbp"
   | RSP -> "rsp"
-  | R8  -> "r8"
-  | R9  -> "r9"
+  | R8 -> "r8"
+  | R9 -> "r9"
   | R10 -> "r10"
   | R11 -> "r11"
   | R12 -> "r12"
@@ -194,8 +172,8 @@ let string_of_reg8l = function
   | RBP -> "bpl"
   | RSI -> "sil"
   | RDI -> "dil"
-  | R8  -> "r8b"
-  | R9  -> "r9b"
+  | R8 -> "r8b"
+  | R9 -> "r9b"
   | R10 -> "r10b"
   | R11 -> "r11b"
   | R12 -> "r12b"
@@ -218,8 +196,8 @@ let string_of_reg16 = function
   | RBP -> "bp"
   | RSI -> "si"
   | RDI -> "di"
-  | R8  -> "r8w"
-  | R9  -> "r9w"
+  | R8 -> "r8w"
+  | R9 -> "r9w"
   | R10 -> "r10w"
   | R11 -> "r11w"
   | R12 -> "r12w"
@@ -236,8 +214,8 @@ let string_of_reg32 = function
   | RBP -> "ebp"
   | RSI -> "esi"
   | RDI -> "edi"
-  | R8  -> "r8d"
-  | R9  -> "r9d"
+  | R8 -> "r8d"
+  | R9 -> "r9d"
   | R10 -> "r10d"
   | R11 -> "r11d"
   | R12 -> "r12d"
@@ -245,10 +223,18 @@ let string_of_reg32 = function
   | R14 -> "r14d"
   | R15 -> "r15d"
 
-let string_of_registerf = function
+let string_of_regf = function
   | XMM n -> Printf.sprintf "xmm%d" n
-  | TOS -> Printf.sprintf "tos"
-  | ST n -> Printf.sprintf "st(%d)" n
+  | YMM n -> Printf.sprintf "ymm%d" n
+  | ZMM n -> Printf.sprintf "zmm%d" n
+
+let string_of_gpr arch reg =
+  match arch with X86 -> string_of_reg32 reg | X64 -> string_of_reg64 reg
+
+let string_of_reg_idx arch reg_idx =
+  match reg_idx with
+  | Scalar reg -> string_of_gpr arch reg
+  | Vector reg -> string_of_regf reg
 
 let string_of_condition = function
   | E -> "e"
@@ -268,6 +254,16 @@ let string_of_condition = function
   | NO -> "no"
   | O -> "o"
 
+let imm_of_float_condition = function
+  | EQf -> Imm 0L
+  | LTf -> Imm 1L
+  | LEf -> Imm 2L
+  | UNORDf -> Imm 3L
+  | NEQf -> Imm 4L
+  | NLTf -> Imm 5L
+  | NLEf -> Imm 6L
+  | ORDf -> Imm 7L
+
 let string_of_float_condition = function
   | EQf -> "eq"
   | LTf -> "lt"
@@ -278,6 +274,22 @@ let string_of_float_condition = function
   | NLEf -> "nle"
   | ORDf -> "ord"
 
+let float_condition_of_imm = function
+  | Imm 0L -> EQf
+  | Imm 1L -> LTf
+  | Imm 2L -> LEf
+  | Imm 3L -> UNORDf
+  | Imm 4L -> NEQf
+  | Imm 5L -> NLTf
+  | Imm 6L -> NLEf
+  | Imm 7L -> ORDf
+  | Sym _ | Reg8L _ | Reg8H _ | Reg16 _ | Reg32 _ | Reg64 _ | Regf _ | Mem _
+  | Mem64_RIP _ | Imm _ ->
+    Misc.fatal_errorf "Invalid float condition immediate arg"
+
+let string_of_float_condition_imm imm =
+  float_condition_of_imm imm |> string_of_float_condition
+
 let string_of_rounding = function
   | RoundDown -> "roundsd.down"
   | RoundUp -> "roundsd.up"
@@ -285,7 +297,7 @@ let string_of_rounding = function
   | RoundNearest -> "roundsd.near"
   | RoundCurrent -> "roundsd"
 
-(* Control fields for [roundsd] operation is specified as a 4-bit immediate:
+(*= Control fields for [roundsd] operation is specified as a 4-bit immediate:
    bit 3: whether to signal Precision Floating-Point Exception.
    bit 2: if set, select rounding mode from MXCSR.RC, else use bits 0 and 1.
    bits 0 and 1: rounding mode, according to  Table 4-17 of
@@ -298,72 +310,119 @@ let imm_of_rounding = function
   | RoundCurrent -> Imm 12L
 
 let internal_assembler = ref None
+
 let register_internal_assembler f = internal_assembler := Some f
 
 (* Which asm conventions to use *)
 let masm =
-  match system with
-  | S_win32 | S_win64 -> true
-  | _ -> false
+  match[@warning "-4"] system with S_win32 | S_win64 -> true | _ -> false
 
 let use_plt =
   match system with
   | S_macosx | S_mingw64 | S_cygwin | S_win64 -> false
-  | _ -> !Clflags.dlcode
+  | S_linux | S_gnu | S_solaris | S_win32 | S_linux_elf | S_bsd_elf | S_beos
+  | S_mingw | S_freebsd | S_netbsd | S_openbsd | S_unknown ->
+    !Clflags.dlcode
 
-(* Shall we use an external assembler command ?
-   If [binary_content] contains some data, we can directly
-   save it. Otherwise, we have to ask an external command.
-*)
+(* Shall we use an external assembler command ? If [binary_content] contains
+   some data, we can directly save it. Otherwise, we have to ask an external
+   command. *)
 let binary_content = ref None
 
 let compile infile outfile =
-  if masm then
-    Ccomp.command (Config.asm ^
-                   Filename.quote outfile ^ " " ^ Filename.quote infile ^
-                   (if !Clflags.verbose then "" else ">NUL"))
+  if masm
+  then
+    Ccomp.command
+      (Config.asm ^ Filename.quote outfile ^ " " ^ Filename.quote infile
+      ^ if !Clflags.verbose then "" else ">NUL")
   else
-    Ccomp.command (Config.asm ^ " " ^
-                   (String.concat " " (Misc.debug_prefix_map_flags ())) ^
-                   " -o " ^ Filename.quote outfile ^ " " ^
-                   Filename.quote infile)
+    let dwarf_flag =
+      if !Clflags.native_code && !Clflags.debug
+      then Dwarf_flags.get_dwarf_as_toolchain_flag ()
+      else ""
+    in
+    Ccomp.command
+      (Config.asm ^ " "
+      ^ String.concat " " (Misc.debug_prefix_map_flags ())
+      ^ dwarf_flag ^ " -o " ^ Filename.quote outfile ^ " "
+      ^ Filename.quote infile)
 
 let assemble_file infile outfile =
   match !binary_content with
   | None -> compile infile outfile
-  | Some content -> content outfile; binary_content := None; 0
+  | Some content ->
+    content outfile;
+    binary_content := None;
+    0
 
-let asm_code = ref []
-let asm_code_current_section = ref (ref [])
+let asm_code = DLL.make_empty ()
+
+let asm_code_current_section = ref (DLL.make_empty ())
+
 let asm_code_by_section = Section_name.Tbl.create 100
 
+let delayed_sections = Section_name.Tbl.create 100
+
+(* Cannot use Emitaux directly here or there would be a circular dep *)
+let create_asm_file = ref true
+
 let directive dir =
-  (if !Emitaux.create_asm_file then
-     asm_code := dir :: !asm_code);
-  match dir with
-  | Section (name, flags, args) -> (
-      let name = Section_name.make name flags args in
-      match Section_name.Tbl.find_opt asm_code_by_section name with
-      | Some x -> asm_code_current_section := x
-      | None ->
-        asm_code_current_section := ref [];
-        Section_name.Tbl.add asm_code_by_section name !asm_code_current_section)
-  | dir -> !asm_code_current_section := dir :: !(!asm_code_current_section)
+  if !create_asm_file then DLL.add_end asm_code dir;
+  match[@warning "-4"] dir with
+  | Directive
+      (Asm_targets.Asm_directives.Directive.Section (section, first_occurrence))
+    -> (
+    let details = Asm_targets.Asm_section.details section first_occurrence in
+    let name = Section_name.make details.names details.flags details.args in
+    let where =
+      if details.is_delayed then delayed_sections else asm_code_by_section
+    in
+    match Section_name.Tbl.find_opt where name with
+    | Some x -> asm_code_current_section := x
+    | None ->
+      let new_section = DLL.make_empty () in
+      asm_code_current_section := new_section;
+      Section_name.Tbl.add where name new_section)
+  | dir -> DLL.add_end !asm_code_current_section dir
 
 let emit ins = directive (Ins ins)
 
 let reset_asm_code () =
-  asm_code := [];
-  asm_code_current_section := ref [];
+  DLL.clear asm_code;
+  asm_code_current_section := DLL.make_empty ();
   Section_name.Tbl.clear asm_code_by_section
 
+type output_pos = asm_line DLL.cell option (* None means the beginning *)
+
+let current_output_pos () = DLL.last_cell asm_code
+
+let output_from pos =
+  match pos with
+  | None -> DLL.to_list asm_code
+  | Some start_excl -> DLL.suffix start_excl
+
+let peephole_optimize_from pos =
+  if !Oxcaml_flags.x86_peephole_optimize
+  then
+    let start =
+      match pos with
+      | None -> DLL.hd_cell asm_code
+      | Some start_excl -> DLL.next start_excl
+    in
+    X86_peephole_optimize.optimize_from_cell start
+
 let generate_code asm =
-  begin match asm with
-  | Some f -> Profile.record ~accumulate:true "write_asm" f (List.rev !asm_code)
-  | None -> ()
-  end;
-  begin match !internal_assembler with
-    | Some f ->
-      binary_content := Some (f asm_code_by_section)
+  (match asm with
+  | Some f -> Profile.record ~accumulate:true "write_asm" f asm_code
+  | None -> ());
+  match !internal_assembler with
+  | Some f ->
+    let get sections =
+      Section_name.Tbl.fold
+        (fun name instrs acc -> (name, instrs) :: acc)
+        sections []
+    in
+    let instrs = get asm_code_by_section in
+    let delayed () = get delayed_sections in
+    binary_content := Some (f ~delayed instrs)
   | None -> binary_content := None
-  end

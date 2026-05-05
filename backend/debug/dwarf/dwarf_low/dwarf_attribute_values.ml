@@ -14,7 +14,9 @@
 
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
+open! Int_replace_polymorphic_compare
 open Asm_targets
+module A = Asm_directives
 
 module Value = struct
   type internal_t =
@@ -60,6 +62,12 @@ module Value = struct
   let distance_between_labels_64_bit ?comment ~upper ~lower () =
     Dwarf_value (V.distance_between_labels_64_bit ?comment ~upper ~lower ())
 
+  let distance_between_labels_64_bit_with_offsets ?comment ~upper ~upper_offset
+      ~lower ~lower_offset () =
+    Dwarf_value
+      (V.distance_between_labels_64_bit_with_offsets ?comment ~upper
+         ~upper_offset ~lower ~lower_offset ())
+
   let distance_between_label_and_symbol_32_bit ?comment ~upper ~lower () =
     assert (Dwarf_arch_sizes.size_addr = 4);
     Dwarf_value
@@ -74,6 +82,10 @@ module Value = struct
 
   let code_address_from_label ?comment lbl =
     Dwarf_value (V.code_address_from_label ?comment lbl)
+
+  let code_address_from_label_plus_offset ?comment lbl ~offset_in_bytes =
+    Dwarf_value
+      (V.code_address_from_label_plus_offset ?comment lbl ~offset_in_bytes)
 
   let code_address_from_symbol ?comment sym =
     Dwarf_value (V.code_address_from_symbol ?comment sym)
@@ -153,7 +165,6 @@ module Attribute_value = struct
         loc_desc_size
 
   let emit ~asm_directives ((spec, value) : t) =
-    let module A = (val asm_directives : Asm_directives.S) in
     match value with
     | Dwarf_value value ->
       let value =

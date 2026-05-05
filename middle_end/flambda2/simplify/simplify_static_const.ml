@@ -17,29 +17,25 @@
 open! Flambda.Import
 open! Simplify_import
 
-let simplify_field_of_block dacc (field : Field_of_static_block.t) =
-  match field with
-  | Symbol sym -> field, T.alias_type_of K.value (Simple.symbol sym)
-  | Tagged_immediate i -> field, T.this_tagged_immediate i
-  | Dynamically_computed (var, dbg) ->
-    let min_name_mode = Name_mode.normal in
-    let ty = S.simplify_simple dacc (Simple.var var) ~min_name_mode in
-    let simple = T.get_alias_exn ty in
-    Simple.pattern_match simple
-      ~name:(fun name ~coercion:_ ->
-        (* CR mshinwell: It's safe to drop the coercion, but perhaps not
-           ideal. *)
-        Name.pattern_match name
-          ~var:(fun var ->
-            Field_of_static_block.Dynamically_computed (var, dbg), ty)
-          ~symbol:(fun sym -> Field_of_static_block.Symbol sym, ty))
-      ~const:(fun const ->
-        match Reg_width_const.descr const with
-        | Tagged_immediate imm -> Field_of_static_block.Tagged_immediate imm, ty
-        | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
-        | Naked_nativeint _ ->
-          (* CR mshinwell: This should be "invalid" and propagate up *)
-          field, ty)
+let simplify_field_of_block dacc (field, expected_kind) =
+  let ty, simple =
+    S.simplify_simple dacc
+      (Simple.With_debuginfo.simple field)
+      ~min_name_mode:Name_mode.normal
+  in
+  let field =
+    Simple.With_debuginfo.create simple (Simple.With_debuginfo.dbg field)
+  in
+  (* CR mshinwell: maybe we should produce a normal user error? *)
+  (* We would like to prevent kind mismatches at toplevel, since they will turn
+     into programs that potentially always fail with an invalid trap. *)
+  if not (K.equal (T.kind ty) expected_kind)
+  then
+    Misc.fatal_errorf
+      "Kind %a specified for a field of a static block, but the field has \
+       type:@ %a"
+      K.print expected_kind T.print ty;
+  field, ty
 
 let simplify_or_variable dacc type_for_const (or_variable : _ Or_variable.t)
     kind =
@@ -50,6 +46,37 @@ let simplify_or_variable dacc type_for_const (or_variable : _ Or_variable.t)
     (* CR mshinwell: There should be some kind of reification here *)
     or_variable, TE.find (DE.typing_env denv) (Name.var var) (Some kind)
 
+let rebuild_naked_number_array dacc ~bind_result_sym kind type_creator creator
+    ~fields =
+  let fields, field_tys =
+    let kind = KS.kind kind in
+    List.map
+      (fun field -> simplify_or_variable dacc type_creator field kind)
+      fields
+    |> List.split
+  in
+  let dacc =
+    let machine_width = DE.machine_width (DA.denv dacc) in
+    bind_result_sym
+      (T.immutable_array ~element_kind:(Ok kind) ~fields:field_tys
+         Alloc_mode.For_types.heap ~machine_width)
+  in
+  creator (DA.are_rebuilding_terms dacc) fields, dacc
+
+let simplify_static_const_block_type ~machine_width ~tag ~fields ~shape
+    ~(is_mutable : Mutability.t) =
+  (* Similar to Simplify_variadic_primitive.simplify_make_block_of_values *)
+  let tag = Tag.Scannable.to_tag tag in
+  let shape = K.Block_shape.Scannable shape in
+  match is_mutable with
+  | Immutable ->
+    T.immutable_block ~is_unique:false tag ~shape ~fields
+      Alloc_mode.For_types.heap ~machine_width
+  | Immutable_unique ->
+    T.immutable_block ~is_unique:true tag ~shape ~fields
+      Alloc_mode.For_types.heap ~machine_width
+  | Mutable -> T.mutable_block Alloc_mode.For_types.heap
+
 let simplify_static_const_of_kind_value dacc (static_const : Static_const.t)
     ~result_sym : Rebuilt_static_const.t * DA.t =
   let bind_result_sym typ =
@@ -58,28 +85,38 @@ let simplify_static_const_of_kind_value dacc (static_const : Static_const.t)
         DE.add_equation_on_symbol denv result_sym typ)
   in
   match static_const with
-  | Block (tag, is_mutable, fields) ->
+  | Block (tag, is_mutable, shape, fields) ->
     let fields_with_tys =
-      List.map (fun field -> simplify_field_of_block dacc field) fields
+      let fields_with_kinds =
+        match shape with
+        | Value_only -> List.map (fun field -> field, K.value) fields
+        | Mixed_record shape ->
+          List.combine fields
+            (Array.to_list (K.Mixed_block_shape.field_kinds shape))
+      in
+      List.map (simplify_field_of_block dacc) fields_with_kinds
     in
     let fields, field_tys = List.split fields_with_tys in
     let ty =
-      (* Same as Simplify_variadic_primitive.simplify_make_block_of_values *)
-      let tag = Tag.Scannable.to_tag tag in
-      let fields = field_tys in
-      match is_mutable with
-      | Immutable ->
-        T.immutable_block ~is_unique:false tag ~field_kind:K.value ~fields
-          Alloc_mode.For_types.heap
-      | Immutable_unique ->
-        T.immutable_block ~is_unique:true tag ~field_kind:K.value ~fields
-          Alloc_mode.For_types.heap
-      | Mutable -> T.any_value
+      simplify_static_const_block_type ~tag ~fields:field_tys ~shape ~is_mutable
+        ~machine_width:(DE.machine_width (DA.denv dacc))
     in
     let dacc = bind_result_sym ty in
     ( Rebuilt_static_const.create_block
         (DA.are_rebuilding_terms dacc)
-        tag is_mutable ~fields,
+        tag is_mutable shape ~fields,
+      dacc )
+  | Boxed_float32 or_var ->
+    let or_var, ty =
+      simplify_or_variable dacc
+        (fun f -> T.this_boxed_float32 f Alloc_mode.For_types.heap)
+        or_var K.value
+    in
+    let dacc = bind_result_sym ty in
+    ( Rebuilt_static_const.create_boxed_float32
+        (DA.are_rebuilding_terms dacc)
+        ~machine_width:(DE.machine_width (DA.denv dacc))
+        or_var,
       dacc )
   | Boxed_float or_var ->
     let or_var, ty =
@@ -90,6 +127,7 @@ let simplify_static_const_of_kind_value dacc (static_const : Static_const.t)
     let dacc = bind_result_sym ty in
     ( Rebuilt_static_const.create_boxed_float
         (DA.are_rebuilding_terms dacc)
+        ~machine_width:(DE.machine_width (DA.denv dacc))
         or_var,
       dacc )
   | Boxed_int32 or_var ->
@@ -101,6 +139,7 @@ let simplify_static_const_of_kind_value dacc (static_const : Static_const.t)
     let dacc = bind_result_sym ty in
     ( Rebuilt_static_const.create_boxed_int32
         (DA.are_rebuilding_terms dacc)
+        ~machine_width:(DE.machine_width (DA.denv dacc))
         or_var,
       dacc )
   | Boxed_int64 or_var ->
@@ -112,6 +151,7 @@ let simplify_static_const_of_kind_value dacc (static_const : Static_const.t)
     let dacc = bind_result_sym ty in
     ( Rebuilt_static_const.create_boxed_int64
         (DA.are_rebuilding_terms dacc)
+        ~machine_width:(DE.machine_width (DA.denv dacc))
         or_var,
       dacc )
   | Boxed_nativeint or_var ->
@@ -123,6 +163,43 @@ let simplify_static_const_of_kind_value dacc (static_const : Static_const.t)
     let dacc = bind_result_sym ty in
     ( Rebuilt_static_const.create_boxed_nativeint
         (DA.are_rebuilding_terms dacc)
+        ~machine_width:(DE.machine_width (DA.denv dacc))
+        or_var,
+      dacc )
+  | Boxed_vec128 or_var ->
+    let or_var, ty =
+      simplify_or_variable dacc
+        (fun f -> T.this_boxed_vec128 f Alloc_mode.For_types.heap)
+        or_var K.value
+    in
+    let dacc = bind_result_sym ty in
+    ( Rebuilt_static_const.create_boxed_vec128
+        (DA.are_rebuilding_terms dacc)
+        ~machine_width:(DE.machine_width (DA.denv dacc))
+        or_var,
+      dacc )
+  | Boxed_vec256 or_var ->
+    let or_var, ty =
+      simplify_or_variable dacc
+        (fun f -> T.this_boxed_vec256 f Alloc_mode.For_types.heap)
+        or_var K.value
+    in
+    let dacc = bind_result_sym ty in
+    ( Rebuilt_static_const.create_boxed_vec256
+        (DA.are_rebuilding_terms dacc)
+        ~machine_width:(DE.machine_width (DA.denv dacc))
+        or_var,
+      dacc )
+  | Boxed_vec512 or_var ->
+    let or_var, ty =
+      simplify_or_variable dacc
+        (fun f -> T.this_boxed_vec512 f Alloc_mode.For_types.heap)
+        or_var K.value
+    in
+    let dacc = bind_result_sym ty in
+    ( Rebuilt_static_const.create_boxed_vec512
+        (DA.are_rebuilding_terms dacc)
+        ~machine_width:(DE.machine_width (DA.denv dacc))
         or_var,
       dacc )
   | Immutable_float_block fields ->
@@ -141,55 +218,81 @@ let simplify_static_const_of_kind_value dacc (static_const : Static_const.t)
         fields,
       dacc )
   | Immutable_float_array fields ->
+    rebuild_naked_number_array dacc ~bind_result_sym KS.naked_float
+      T.this_naked_float RSC.create_immutable_float_array ~fields
+  | Immutable_float32_array fields ->
+    rebuild_naked_number_array dacc ~bind_result_sym KS.naked_float32
+      T.this_naked_float32 RSC.create_immutable_float32_array ~fields
+  | Immutable_int_array fields ->
+    rebuild_naked_number_array dacc ~bind_result_sym KS.naked_immediate
+      T.this_naked_immediate RSC.create_immutable_int_array ~fields
+  | Immutable_int8_array fields ->
+    rebuild_naked_number_array dacc ~bind_result_sym KS.naked_int8
+      T.this_naked_int8 RSC.create_immutable_int8_array ~fields
+  | Immutable_int16_array fields ->
+    rebuild_naked_number_array dacc ~bind_result_sym KS.naked_int16
+      T.this_naked_int16 RSC.create_immutable_int16_array ~fields
+  | Immutable_int32_array fields ->
+    rebuild_naked_number_array dacc ~bind_result_sym KS.naked_int32
+      T.this_naked_int32 RSC.create_immutable_int32_array ~fields
+  | Immutable_int64_array fields ->
+    rebuild_naked_number_array dacc ~bind_result_sym KS.naked_int64
+      T.this_naked_int64 RSC.create_immutable_int64_array ~fields
+  | Immutable_nativeint_array fields ->
+    rebuild_naked_number_array dacc ~bind_result_sym KS.naked_nativeint
+      T.this_naked_nativeint RSC.create_immutable_nativeint_array ~fields
+  | Immutable_vec128_array fields ->
+    rebuild_naked_number_array dacc ~bind_result_sym KS.naked_vec128
+      T.this_naked_vec128 RSC.create_immutable_vec128_array ~fields
+  | Immutable_vec256_array fields ->
+    rebuild_naked_number_array dacc ~bind_result_sym KS.naked_vec256
+      T.this_naked_vec256 RSC.create_immutable_vec256_array ~fields
+  | Immutable_vec512_array fields ->
+    rebuild_naked_number_array dacc ~bind_result_sym KS.naked_vec512
+      T.this_naked_vec512 RSC.create_immutable_vec512_array ~fields
+  | Immutable_value_array fields ->
     let fields_with_tys =
       List.map
-        (fun field ->
-          simplify_or_variable dacc
-            (fun f -> T.this_naked_float f)
-            field K.naked_float)
+        (fun field -> simplify_field_of_block dacc (field, K.value))
         fields
     in
     let fields, field_tys = List.split fields_with_tys in
     let dacc =
+      let machine_width = DE.machine_width (DA.denv dacc) in
       bind_result_sym
-        (T.immutable_array ~element_kind:(Ok K.With_subkind.naked_float)
-           ~fields:field_tys Alloc_mode.For_types.heap)
-    in
-    ( Rebuilt_static_const.create_immutable_float_array
-        (DA.are_rebuilding_terms dacc)
-        fields,
-      dacc )
-  | Immutable_value_array fields ->
-    let fields_with_tys =
-      List.map (fun field -> simplify_field_of_block dacc field) fields
-    in
-    let fields, field_tys = List.split fields_with_tys in
-    let dacc =
-      bind_result_sym
-        (T.immutable_array ~element_kind:(Ok K.With_subkind.any_value)
-           ~fields:field_tys Alloc_mode.For_types.heap)
+        (T.immutable_array ~element_kind:(Ok KS.any_value) ~fields:field_tys
+           Alloc_mode.For_types.heap ~machine_width)
     in
     ( Rebuilt_static_const.create_immutable_value_array
         (DA.are_rebuilding_terms dacc)
         fields,
       dacc )
-  | Empty_array ->
+  | Empty_array array_kind ->
     let dacc =
       bind_result_sym
         (T.array_of_length ~element_kind:Bottom
-           ~length:(T.this_tagged_immediate Targetint_31_63.zero)
+           ~length:
+             (let machine_width = DE.machine_width (DA.denv dacc) in
+              T.this_tagged_immediate (Target_ocaml_int.zero machine_width))
            Alloc_mode.For_types.heap)
     in
-    Rebuilt_static_const.create_empty_array (DA.are_rebuilding_terms dacc), dacc
+    ( Rebuilt_static_const.create_empty_array
+        (DA.are_rebuilding_terms dacc)
+        array_kind,
+      dacc )
   | Mutable_string { initial_value } ->
-    let str_ty = T.mutable_string ~size:(String.length initial_value) in
+    let machine_width = DE.machine_width (DA.denv dacc) in
+    let str_ty =
+      T.mutable_string ~size:(String.length initial_value) ~machine_width
+    in
     let dacc = bind_result_sym str_ty in
     ( Rebuilt_static_const.create_mutable_string
         (DA.are_rebuilding_terms dacc)
         ~initial_value,
       dacc )
   | Immutable_string str ->
-    let ty = T.this_immutable_string str in
+    let machine_width = DE.machine_width (DA.denv dacc) in
+    let ty = T.this_immutable_string str ~machine_width in
     let dacc = bind_result_sym ty in
     ( Rebuilt_static_const.create_immutable_string
         (DA.are_rebuilding_terms dacc)
@@ -253,11 +356,37 @@ let simplify_static_consts dacc (bound_static : Bound_static.t) static_consts
      and for some reason the type of the closure is either not available or does
      not have a more precise code ID.
 
-     I suspect we will eventually need to deal with this in a more principled
-     way (maybe by making offset constraints part of the required fields to
-     create code, similar to the free names), but for now we're relying on the
-     fact that Closure_conversion never produces such examples, and Simplify
-     only has a single round. *)
+     We don't want to keep old code alive for two reasons. First, as it is not
+     simplified it will often be noticeably slower than its newer versions.
+     Second, it can contain value slot projections that we never registered in
+     the accumulators, so we might remove the associated value slots. The last
+     issue is critical: if the value slots are removed, their projections will
+     be compiled to Invalid, which will trigger at runtime.
+
+     To solve this, for now we track these old code IDs in the accumulator and
+     demote any direct calls to them. That ensures that we don't keep any use of
+     non-simplified code. We could also change the slot offsets data to include
+     projections in addition to sets of closures; this piece of data is always
+     computed (during closure conversion for old code IDs) so by using the
+     additional info we could make more accurate decisions on which value slots
+     can be removed. *)
+  let dacc =
+    let old_code_ids =
+      Code_id.Map.fold
+        (fun code_id code old_code_ids ->
+          if Code.stub code
+          then old_code_ids
+          else
+            match Code.newer_version_of code with
+            | None ->
+              if Code_id.is_imported code_id
+              then old_code_ids
+              else Code_id.Set.add code_id old_code_ids
+            | Some _ -> old_code_ids)
+        all_code Code_id.Set.empty
+    in
+    DA.add_code_ids_never_simplified dacc ~old_code_ids
+  in
   let bound_static', static_consts', dacc =
     Static_const_group.match_against_bound_static static_consts bound_static
       ~init:([], [], dacc)
@@ -294,8 +423,8 @@ let simplify_static_consts dacc (bound_static : Bound_static.t) static_consts
           dacc ))
       ~deleted_code:(fun acc _code_id -> acc)
       ~set_of_closures:(fun acc ~closure_symbols:_ _ -> acc)
-      ~block_like:
-        (fun (bound_static, static_consts, dacc) symbol static_const ->
+      ~block_like:(fun
+          (bound_static, static_consts, dacc) symbol static_const ->
         let static_const, dacc =
           simplify_static_const_of_kind_value dacc static_const
             ~result_sym:symbol
@@ -317,9 +446,11 @@ let simplify_static_consts dacc (bound_static : Bound_static.t) static_consts
       ~code:(fun acc _ _ -> acc)
       ~deleted_code:(fun acc _ -> acc)
       ~block_like:(fun acc _ _ -> acc)
-      ~set_of_closures:
-        (fun (closure_bound_names_all_sets, sets_of_closures) ~closure_symbols
-             set_of_closures ->
+      ~set_of_closures:(fun
+          (closure_bound_names_all_sets, sets_of_closures)
+          ~closure_symbols
+          set_of_closures
+        ->
         let closure_bound_names =
           Function_slot.Lmap.fold
             (fun function_slot symbol closure_bound_names_all_sets ->

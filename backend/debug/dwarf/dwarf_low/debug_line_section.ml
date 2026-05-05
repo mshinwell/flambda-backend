@@ -12,7 +12,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
-open Asm_targets
+open! Asm_targets
 
 type line_number_program_instr =
   | Special_opcode of Dwarf_value.t
@@ -116,7 +116,7 @@ let create ~code_begin =
 
 let add_source_file t ~file_name ~file_num =
   (match Int.Map.find_opt file_num t.current.source_files with
-  | Some v -> failwith "debug_line section: multiple files with same number"
+  | Some _ -> failwith "debug_line section: multiple files with same number"
   | None -> ());
   t.current
     <- { t.current with

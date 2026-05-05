@@ -21,26 +21,22 @@
 
 type t
 
-val create : Continuation.t -> Flambda_arity.t -> t
+val create : Continuation.t -> [`Unarized] Flambda_arity.t -> t
 
 val print : Format.formatter -> t -> unit
 
-val add_use :
-  t ->
-  Continuation_use_kind.t ->
-  env_at_use:Downwards_env.t ->
-  Apply_cont_rewrite_id.t ->
-  arg_types:Flambda2_types.t list ->
-  t
+val add_use : t -> One_continuation_use.t -> t
 
 val get_uses : t -> One_continuation_use.t list
 
-type arg_at_use = private
+type arg_at_use =
   { arg_type : Flambda2_types.t;
     typing_env : Flambda2_types.Typing_env.t
   }
 
 type arg_types_by_use_id = arg_at_use Apply_cont_rewrite_id.Map.t list
+
+val print_arg_type_at_use : Format.formatter -> arg_at_use -> unit
 
 val get_arg_types_by_use_id : t -> arg_types_by_use_id
 
@@ -50,13 +46,13 @@ val get_arg_types_by_use_id : t -> arg_types_by_use_id
    prefix of each of these argument lists, corresponding to the invariant
    params, and merges them. *)
 val get_arg_types_by_use_id_for_invariant_params :
-  Flambda_arity.t -> t list -> arg_types_by_use_id
+  [`Unarized] Flambda_arity.t -> t list -> arg_types_by_use_id
 
 val get_use_ids : t -> Apply_cont_rewrite_id.Set.t
 
 val number_of_uses : t -> int
 
-val arity : t -> Flambda_arity.t
+val arity : t -> [`Unarized] Flambda_arity.t
 
 val get_typing_env_no_more_than_one_use :
   t -> Flambda2_types.Typing_env.t option
@@ -64,3 +60,5 @@ val get_typing_env_no_more_than_one_use :
 val union : t -> t -> t
 
 val mark_non_inlinable : t -> t
+
+val clear_uses : t -> t

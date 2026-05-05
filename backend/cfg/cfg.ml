@@ -23,17 +23,19 @@
  * SOFTWARE.                                                                      *
  *                                                                                *
  **********************************************************************************)
-[@@@ocaml.warning "+a-30-40-41-42"]
+[@@@ocaml.warning "+a-40-41-42"]
+
+open! Int_replace_polymorphic_compare
 
 let verbose = ref false
 
 include Cfg_intf.S
-module DLL = Flambda_backend_utils.Doubly_linked_list
+module DLL = Oxcaml_utils.Doubly_linked_list
 
 type basic_instruction_list = basic instruction DLL.t
 
 type basic_block =
-  { start : Label.t;
+  { mutable start : Label.t;
     body : basic_instruction_list;
     mutable terminator : terminator instruction;
     mutable predecessors : Label.Set.t;
@@ -41,33 +43,83 @@ type basic_block =
     mutable exn : Label.t option;
     mutable can_raise : bool;
     mutable is_trap_handler : bool;
-    mutable dead : bool
+    mutable cold : bool
   }
+
+type codegen_option =
+  | Reduce_code_size
+  | No_CSE
+  | Use_linscan_regalloc
+  | Use_regalloc of Clflags.Register_allocator.t
+  | Use_regalloc_param of string list
+  | Cold
+  | Assume_zero_alloc of
+      { strict : bool;
+        never_returns_normally : bool;
+        never_raises : bool;
+        loc : Location.t
+      }
+  | Check_zero_alloc of
+      { strict : bool;
+        loc : Location.t;
+        custom_error_msg : string option
+      }
+
+let rec of_cmm_codegen_option : Cmm.codegen_option list -> codegen_option list =
+ fun cmm_options ->
+  match cmm_options with
+  | [] -> []
+  | hd :: tl -> (
+    match hd with
+    | No_CSE -> No_CSE :: of_cmm_codegen_option tl
+    | Reduce_code_size -> Reduce_code_size :: of_cmm_codegen_option tl
+    | Assume_zero_alloc { strict; never_returns_normally; never_raises; loc } ->
+      Assume_zero_alloc { strict; never_returns_normally; never_raises; loc }
+      :: of_cmm_codegen_option tl
+    | Check_zero_alloc { strict; loc; custom_error_msg } ->
+      Check_zero_alloc { strict; loc; custom_error_msg }
+      :: of_cmm_codegen_option tl
+    | Use_linscan_regalloc -> Use_linscan_regalloc :: of_cmm_codegen_option tl
+    | Use_regalloc regalloc -> Use_regalloc regalloc :: of_cmm_codegen_option tl
+    | Use_regalloc_param params ->
+      Use_regalloc_param params :: of_cmm_codegen_option tl
+    | Cold -> Cold :: of_cmm_codegen_option tl)
 
 type t =
   { blocks : basic_block Label.Tbl.t;
     fun_name : string;
     fun_args : Reg.t array;
+    fun_codegen_options : codegen_option list;
     fun_dbg : Debuginfo.t;
     entry_label : Label.t;
-    fun_fast : bool;
     fun_contains_calls : bool;
     (* CR-someday gyorsh: compute locally. *)
-    fun_num_stack_slots : int array
+    fun_num_stack_slots : int Stack_class.Tbl.t;
+    fun_poll : Lambda.poll_attribute;
+    next_instruction_id : InstructionId.sequence;
+    fun_ret_type : Cmm.machtype;
+    mutable allowed_to_be_irreducible : bool;
+    mutable register_locations_are_set : bool
   }
 
-let create ~fun_name ~fun_args ~fun_dbg ~fun_fast ~fun_contains_calls
-    ~fun_num_stack_slots =
+let create ~fun_name ~fun_args ~fun_codegen_options ~fun_dbg ~fun_contains_calls
+    ~fun_num_stack_slots ~fun_poll ~next_instruction_id ~fun_ret_type
+    ~allowed_to_be_irreducible =
   { fun_name;
     fun_args;
+    fun_codegen_options;
     fun_dbg;
-    entry_label = 1;
+    entry_label = Label.entry_label;
     (* CR gyorsh: We should use [Cmm.new_label ()] here, but validator tests
        currently rely on it to be initialized as above. *)
     blocks = Label.Tbl.create 31;
-    fun_fast;
     fun_contains_calls;
-    fun_num_stack_slots
+    fun_num_stack_slots;
+    fun_poll;
+    next_instruction_id;
+    fun_ret_type;
+    allowed_to_be_irreducible;
+    register_locations_are_set = false
   }
 
 let mem_block t label = Label.Tbl.mem t.blocks label
@@ -82,16 +134,16 @@ let successor_labels_normal ti =
   | Always l -> Label.Set.singleton l
   | Parity_test { ifso; ifnot } | Truth_test { ifso; ifnot } ->
     Label.Set.singleton ifso |> Label.Set.add ifnot
-  | Float_test { lt; gt; eq; uo } ->
+  | Float_test { width = _; lt; gt; eq; uo } ->
     Label.Set.singleton lt |> Label.Set.add gt |> Label.Set.add eq
     |> Label.Set.add uo
   | Int_test { lt; gt; eq; imm = _; is_signed = _ } ->
     Label.Set.singleton lt |> Label.Set.add gt |> Label.Set.add eq
   | Call { op = _; label_after }
   | Prim { op = _; label_after }
-  | Specific_can_raise { op = _; label_after } ->
+  | Invalid { label_after = Some label_after; _ } ->
     Label.Set.singleton label_after
-  | Poll_and_jump return_label -> Label.Set.singleton return_label
+  | Invalid { label_after = None; _ } -> Label.Set.empty
 
 let successor_labels ~normal ~exn block =
   match normal, exn with
@@ -116,8 +168,8 @@ let replace_successor_labels t ~normal ~exn block ~f =
     if not (mem_block t dst)
     then
       Misc.fatal_errorf
-        "Cfg.replace_successor_labels: \nnew successor %d not found in the cfg"
-        dst;
+        "Cfg.replace_successor_labels: \nnew successor %a not found in the cfg"
+        Label.format dst;
     dst
   in
   if exn then block.exn <- Option.map f block.exn;
@@ -133,55 +185,52 @@ let replace_successor_labels t ~normal ~exn block ~f =
         Truth_test { ifso = f ifso; ifnot = f ifnot }
       | Int_test { lt; eq; gt; is_signed; imm } ->
         Int_test { lt = f lt; eq = f eq; gt = f gt; is_signed; imm }
-      | Float_test { lt; eq; gt; uo } ->
-        Float_test { lt = f lt; eq = f eq; gt = f gt; uo = f uo }
+      | Float_test { width; lt; eq; gt; uo } ->
+        Float_test { width; lt = f lt; eq = f eq; gt = f gt; uo = f uo }
       | Switch labels -> Switch (Array.map f labels)
       | Tailcall_self { destination } ->
         Tailcall_self { destination = f destination }
-      | Tailcall_func Indirect
+      | Tailcall_func (Indirect _)
       | Tailcall_func (Direct _)
-      | Return | Raise _ | Call_no_return _ ->
+      | Return | Raise _ | Call_no_return _
+      | Invalid { label_after = None; _ } ->
         block.terminator.desc
-      | Poll_and_jump return_label -> Poll_and_jump (f return_label)
       | Call { op; label_after } -> Call { op; label_after = f label_after }
       | Prim { op; label_after } -> Prim { op; label_after = f label_after }
-      | Specific_can_raise { op; label_after } ->
-        Specific_can_raise { op; label_after = f label_after }
+      | Invalid ({ label_after = Some label_after; _ } as r) ->
+        Invalid { r with label_after = Some (f label_after) }
     in
     block.terminator <- { block.terminator with desc }
 
 let add_block_exn t block =
   if Label.Tbl.mem t.blocks block.start
   then
-    Misc.fatal_errorf "Cfg.add_block_exn: block %d is already present"
-      block.start;
+    Misc.fatal_errorf "Cfg.add_block_exn: block %a is already present"
+      Label.format block.start;
   Label.Tbl.add t.blocks block.start block
-
-let remove_block_exn t label =
-  match Label.Tbl.find t.blocks label with
-  | exception Not_found ->
-    Misc.fatal_errorf "Cfg.remove_block_exn: block %d not found" label
-  | _ -> Label.Tbl.remove t.blocks label
-
-let remove_blocks t labels_to_remove =
-  Label.Tbl.filter_map_inplace
-    (fun l b -> if Label.Set.mem l labels_to_remove then None else Some b)
-    t.blocks
 
 let get_block t label = Label.Tbl.find_opt t.blocks label
 
 let get_block_exn t label =
   match Label.Tbl.find t.blocks label with
   | exception Not_found ->
-    Misc.fatal_errorf "Cfg.get_block_exn: block %d not found" label
+    Misc.fatal_errorf "Cfg.get_block_exn: block %a not found" Label.format label
   | block -> block
 
 let can_raise_interproc block = block.can_raise && Option.is_none block.exn
 
-let first_instruction_id (block : basic_block) : int =
+type 'a instr_mapper = { f : 'b. 'b instruction -> 'a } [@@unboxed]
+
+let map_first_instruction (block : basic_block) (t : 'a instr_mapper) =
   match DLL.hd block.body with
-  | None -> block.terminator.id
-  | Some first_instr -> first_instr.id
+  | None -> t.f block.terminator
+  | Some first_instr -> t.f first_instr
+
+let first_instruction_id (block : basic_block) : InstructionId.t =
+  map_first_instruction block { f = (fun instr -> instr.id) }
+
+let first_instruction_stack_offset (block : basic_block) : int =
+  map_first_instruction block { f = (fun instr -> instr.stack_offset) }
 
 let fun_name t = t.fun_name
 
@@ -189,7 +238,32 @@ let entry_label t = t.entry_label
 
 let iter_blocks t ~f = Label.Tbl.iter f t.blocks
 
+let iter_blocks_dfs : t -> f:(Label.t -> basic_block -> unit) -> unit =
+ fun cfg ~f ->
+  let marked = ref Label.Set.empty in
+  let rec iter (label : Label.t) : unit =
+    if not (Label.Set.mem label !marked)
+    then (
+      marked := Label.Set.add label !marked;
+      let block = get_block_exn cfg label in
+      f label block;
+      Label.Set.iter
+        (fun succ_label -> iter succ_label)
+        (successor_labels ~normal:true ~exn:true block))
+  in
+  iter cfg.entry_label;
+  (* note: some block may not have been seen since we currently cannot remove
+     all non-reachable blocks. *)
+  if Label.Set.cardinal !marked <> Label.Tbl.length cfg.blocks
+  then
+    iter_blocks cfg ~f:(fun label block ->
+        if not (Label.Set.mem label !marked) then f label block)
+
 let fold_blocks t ~f ~init = Label.Tbl.fold f t.blocks init
+
+let fold_body_instructions t ~f ~init =
+  let helper _ block acc = DLL.fold_left block.body ~f ~init:acc in
+  fold_blocks t ~f:helper ~init
 
 let register_predecessors_for_all_blocks (t : t) =
   Label.Tbl.iter
@@ -197,7 +271,14 @@ let register_predecessors_for_all_blocks (t : t) =
       let targets = successor_labels ~normal:true ~exn:true block in
       Label.Set.iter
         (fun target ->
-          let target_block = Label.Tbl.find t.blocks target in
+          let target_block =
+            match Label.Tbl.find t.blocks target with
+            | target_block -> target_block
+            | exception Not_found ->
+              Misc.fatal_errorf
+                "Cfg.register_predecessors_for_all_blocks: block %a not found"
+                Label.format target
+          in
           target_block.predecessors
             <- Label.Set.add label target_block.predecessors)
         targets)
@@ -205,85 +286,21 @@ let register_predecessors_for_all_blocks (t : t) =
 
 (* Printing for debug *)
 
-(* The next 2 functions are copied almost as is from asmcomp/printmach.ml
-   because there is no interface to call them. Eventually this won't be needed
-   when we change cfg to have its own types rather than referring back to mach
-   and cmm. *)
-(* CR-someday gyorsh: implement desc printing, and args/res/dbg, etc, properly,
-   with regs, use the dreaded Format. *)
-
-let intcomp (comp : Mach.integer_comparison) =
-  match comp with
-  | Isigned c -> Printf.sprintf " %ss " (Printcmm.integer_comparison c)
-  | Iunsigned c -> Printf.sprintf " %su " (Printcmm.integer_comparison c)
-
-let intop_atomic (op : Cmm.atomic_op) =
-  match op with Fetch_and_add -> " += " | Compare_and_swap -> " cas "
-
-let intop (op : Mach.integer_operation) =
-  match op with
-  | Iadd -> " + "
-  | Isub -> " - "
-  | Imul -> " * "
-  | Imulh { signed : bool } -> " *h" ^ if signed then " " else "u "
-  | Idiv -> " div "
-  | Imod -> " mod "
-  | Iand -> " & "
-  | Ior -> " | "
-  | Ixor -> " ^ "
-  | Ilsl -> " << "
-  | Ilsr -> " >>u "
-  | Iasr -> " >>s "
-  | Ipopcnt -> " pop "
-  | Iclz _ -> " clz "
-  | Ictz _ -> " ctz "
-  | Icomp cmp -> intcomp cmp
-  | Icheckbound -> assert false
-
-let dump_op ppf = function
-  | Move -> Format.fprintf ppf "mov"
-  | Spill -> Format.fprintf ppf "spill"
-  | Reload -> Format.fprintf ppf "reload"
-  | Const_int n -> Format.fprintf ppf "const_int %nd" n
-  | Const_float f -> Format.fprintf ppf "const_float %F" (Int64.float_of_bits f)
-  | Const_symbol s -> Format.fprintf ppf "const_symbol %s" s.sym_name
-  | Stackoffset n -> Format.fprintf ppf "stackoffset %d" n
-  | Load _ -> Format.fprintf ppf "load"
-  | Store _ -> Format.fprintf ppf "store"
-  | Intop op -> Format.fprintf ppf "intop %s" (intop op)
-  | Intop_imm (op, n) -> Format.fprintf ppf "intop %s %d" (intop op) n
-  | Intop_atomic { op; size = _; addr = _ } ->
-    Format.fprintf ppf "intop atomic %s" (intop_atomic op)
-  | Negf -> Format.fprintf ppf "negf"
-  | Absf -> Format.fprintf ppf "absf"
-  | Addf -> Format.fprintf ppf "addf"
-  | Subf -> Format.fprintf ppf "subf"
-  | Mulf -> Format.fprintf ppf "mulf"
-  | Divf -> Format.fprintf ppf "divf"
-  | Compf _ -> Format.fprintf ppf "compf"
-  | Csel _ -> Format.fprintf ppf "csel"
-  | Floatofint -> Format.fprintf ppf "floattoint"
-  | Intoffloat -> Format.fprintf ppf "intoffloat"
-  | Valueofint -> Format.fprintf ppf "valueofint"
-  | Intofvalue -> Format.fprintf ppf "intofvalue"
-  | Specific _ -> Format.fprintf ppf "specific"
-  | Probe_is_enabled { name } -> Format.fprintf ppf "probe_is_enabled %s" name
-  | Opaque -> Format.fprintf ppf "opaque"
-  | Begin_region -> Format.fprintf ppf "beginregion"
-  | End_region -> Format.fprintf ppf "endregion"
-  | Name_for_debugger _ -> Format.fprintf ppf "name_for_debugger"
-
 let dump_basic ppf (basic : basic) =
   let open Format in
   match basic with
-  | Op op -> dump_op ppf op
-  | Reloadretaddr -> fprintf ppf "Reloadretaddr"
-  | Pushtrap { lbl_handler } -> fprintf ppf "Pushtrap handler=%d" lbl_handler
-  | Poptrap -> fprintf ppf "Poptrap"
-  | Prologue -> fprintf ppf "Prologue"
+  | Op op -> Operation.dump ppf op
+  | Reloadretaddr -> fprintf ppf "reloadretaddr"
+  | Pushtrap { lbl_handler } ->
+    fprintf ppf "pushtrap handler=%a" Label.format lbl_handler
+  | Poptrap { lbl_handler } ->
+    fprintf ppf "poptrap handler=%a" Label.format lbl_handler
+  | Prologue -> fprintf ppf "prologue"
+  | Epilogue -> fprintf ppf "epilogue"
+  | Stack_check { max_frame_size_bytes } ->
+    fprintf ppf "stack_check size=%d" max_frame_size_bytes
 
-let dump_terminator' ?(print_reg = Printmach.reg) ?(res = [||]) ?(args = [||])
-    ?(specific_can_raise = fun ppf _ -> Format.fprintf ppf "specific_can_raise")
+let dump_terminator' ?(print_reg = Printreg.reg) ?(res = [||]) ?(args = [||])
     ?(sep = "\n") ppf (terminator : terminator) =
   let first_arg =
     if Array.length args >= 1
@@ -298,84 +315,102 @@ let dump_terminator' ?(print_reg = Printmach.reg) ?(res = [||]) ?(args = [||])
   let print_args ppf args =
     if Array.length args = 0
     then ()
-    else Format.fprintf ppf " %a" (Printmach.regs' ~print_reg) args
+    else Format.fprintf ppf " %a" (Printreg.regs' ~print_reg) args
   in
   let print_res ppf =
     if Array.length res > 0
-    then Format.fprintf ppf "%a := " (Printmach.regs' ~print_reg) res
+    then Format.fprintf ppf "%a := " (Printreg.regs' ~print_reg) res
   in
-  let dump_mach_op ppf op = Printmach.operation' ~print_reg op args ppf [||] in
+  let dump_linear_call_op ppf op =
+    Printlinear.call_operation ~print_reg ppf op args
+  in
   let open Format in
   match terminator with
   | Never -> fprintf ppf "deadend"
-  | Always l -> fprintf ppf "goto %d" l
+  | Always l -> fprintf ppf "goto %a" Label.format l
   | Parity_test { ifso; ifnot } ->
-    fprintf ppf "if even%s goto %d%selse goto %d" first_arg ifso sep ifnot
+    fprintf ppf "if even%s goto %a%selse goto %a" first_arg Label.format ifso
+      sep Label.format ifnot
   | Truth_test { ifso; ifnot } ->
-    fprintf ppf "if true%s goto %d%selse goto %d" first_arg ifso sep ifnot
-  | Float_test { lt; eq; gt; uo } ->
-    fprintf ppf "if%s <%s goto %d%s" first_arg second_arg lt sep;
-    fprintf ppf "if%s =%s goto %d%s" first_arg second_arg eq sep;
-    fprintf ppf "if%s >%s goto %d%s" first_arg second_arg gt sep;
-    fprintf ppf "else goto %d" uo
+    fprintf ppf "if true%s goto %a%selse goto %a" first_arg Label.format ifso
+      sep Label.format ifnot
+  | Float_test { width = _; lt; eq; gt; uo } ->
+    fprintf ppf "if%s <%s goto %a%s" first_arg second_arg Label.format lt sep;
+    fprintf ppf "if%s =%s goto %a%s" first_arg second_arg Label.format eq sep;
+    fprintf ppf "if%s >%s goto %a%s" first_arg second_arg Label.format gt sep;
+    fprintf ppf "else goto %a" Label.format uo
   | Int_test { lt; eq; gt; is_signed; imm } ->
     let cmp =
       Printf.sprintf " %s%s"
-        (if is_signed then "s" else "u")
+        (match is_signed with Signed -> "s" | Unsigned -> "u")
         (match imm with None -> second_arg | Some i -> " " ^ Int.to_string i)
     in
-    fprintf ppf "if%s <%s goto %d%s" first_arg cmp lt sep;
-    fprintf ppf "if%s =%s goto %d%s" first_arg cmp eq sep;
-    fprintf ppf "if%s >%s goto %d" first_arg cmp gt
+    fprintf ppf "if%s <%s goto %a%s" first_arg cmp Label.format lt sep;
+    fprintf ppf "if%s =%s goto %a%s" first_arg cmp Label.format eq sep;
+    fprintf ppf "if%s >%s goto %a" first_arg cmp Label.format gt
   | Switch labels ->
     fprintf ppf "switch%s%s" first_arg sep;
     let label_count = Array.length labels in
     if label_count >= 1
     then (
       for i = 0 to label_count - 2 do
-        fprintf ppf "case %d: goto %d%s" i labels.(i) sep
+        fprintf ppf "case %d: goto %a%s" i Label.format labels.(i) sep
       done;
       let i = label_count - 1 in
-      fprintf ppf "case %d: goto %d" i labels.(i))
+      fprintf ppf "case %d: goto %a" i Label.format labels.(i))
   | Call_no_return { func_symbol; _ } ->
-    fprintf ppf "Call_no_return %s%a" func_symbol print_args args
-  | Return -> fprintf ppf "Return%a" print_args args
-  | Raise _ -> fprintf ppf "Raise%a" print_args args
+    fprintf ppf "call_no_return %s%a" func_symbol print_args args
+  | Return -> fprintf ppf "return%a" print_args args
+  | Raise _ -> fprintf ppf "raise%a" print_args args
   | Tailcall_self { destination } ->
-    dump_mach_op ppf
-      (Mach.Itailcall_imm
+    dump_linear_call_op ppf
+      (Linear.Ltailcall_imm
          { func =
-             { sym_name = Printf.sprintf "self(%d)" destination;
+             { sym_name =
+                 Printf.sprintf "self(%s)" (Label.to_string destination);
                sym_global = Local
              }
          })
   | Tailcall_func call ->
-    dump_mach_op ppf
+    (* CR ncourant: here and below, maybe the callees should be printed when
+       they are known *)
+    dump_linear_call_op ppf
       (match call with
-      | Indirect -> Mach.Itailcall_ind
-      | Direct func -> Mach.Itailcall_imm { func })
+      | Indirect _callees -> Linear.Ltailcall_ind
+      | Direct func -> Linear.Ltailcall_imm { func })
   | Call { op = call; label_after } ->
-    Format.fprintf ppf "%t%a" print_res dump_mach_op
+    Format.fprintf ppf "%t%a" print_res dump_linear_call_op
       (match call with
-      | Indirect -> Mach.Icall_ind
-      | Direct func -> Mach.Icall_imm { func });
-    Format.fprintf ppf "%sgoto %d" sep label_after
+      | Indirect _callees -> Linear.Lcall_ind
+      | Direct func -> Linear.Lcall_imm { func });
+    Format.fprintf ppf "%s\n           goto %a" sep Label.format label_after
   | Prim { op = prim; label_after } ->
-    Format.fprintf ppf "%t%a" print_res dump_mach_op
+    Format.fprintf ppf "%t%a" print_res dump_linear_call_op
       (match prim with
-      | External { func_symbol = func; ty_res; ty_args; alloc } ->
-        Mach.Iextcall { func; ty_res; ty_args; returns = true; alloc }
-      | Alloc { bytes; dbginfo; mode } -> Mach.Ialloc { bytes; dbginfo; mode }
-      | Checkbound { immediate = Some x } -> Mach.Iintop_imm (Icheckbound, x)
-      | Checkbound { immediate = None } -> Mach.Iintop Icheckbound
+      | External
+          { func_symbol = func;
+            ty_res;
+            ty_args;
+            alloc;
+            stack_ofs;
+            stack_align;
+            effects = _
+          } ->
+        Linear.Lextcall
+          { func;
+            ty_res;
+            ty_args;
+            returns = true;
+            alloc;
+            stack_ofs;
+            stack_align
+          }
       | Probe { name; handler_code_sym; enabled_at_init } ->
-        Mach.Iprobe { name; handler_code_sym; enabled_at_init });
-    Format.fprintf ppf "%sgoto %d" sep label_after
-  | Specific_can_raise { op; label_after } ->
-    Format.fprintf ppf "%a" specific_can_raise op;
-    Format.fprintf ppf "%sgoto %d" sep label_after
-  | Poll_and_jump return_label ->
-    Format.fprintf ppf "Poll_and_jump %a" Label.print return_label
+        Linear.Lprobe { name; handler_code_sym; enabled_at_init });
+    Format.fprintf ppf "%sgoto %a" sep Label.format label_after
+  | Invalid { message; label_after; _ } ->
+    Format.fprintf ppf "Invalid %S" message;
+    Option.iter (Format.fprintf ppf "%sgoto %a" sep Label.format) label_after
 
 let dump_terminator ?sep ppf terminator = dump_terminator' ?sep ppf terminator
 
@@ -386,9 +421,11 @@ let print_basic' ?print_reg ppf (instruction : basic instruction) =
       next = Linear.end_instr;
       arg = instruction.arg;
       res = instruction.res;
-      dbg = [];
+      dbg = Debuginfo.none;
       fdo = None;
-      live = Reg.Set.empty
+      live = Reg.Set.empty;
+      available_before = instruction.available_before;
+      available_across = instruction.available_across
     }
   in
   Printlinear.instr' ?print_reg ppf instruction
@@ -396,11 +433,9 @@ let print_basic' ?print_reg ppf (instruction : basic instruction) =
 let print_basic ppf i = print_basic' ppf i
 
 let print_terminator' ?print_reg ppf (ti : terminator instruction) =
-  dump_terminator' ?print_reg
-    ~specific_can_raise:(fun ppf op ->
-      (* Print this as basic instruction. *)
-      print_basic' ?print_reg ppf { ti with desc = Op (Specific op) })
-    ~res:ti.res ~args:ti.arg ~sep:"\n" ppf ti.desc
+  Format.fprintf ppf "%t%a%t" Cfg_colours.terminator
+    (dump_terminator' ?print_reg ~res:ti.res ~args:ti.arg ~sep:"")
+    ti.desc Cfg_colours.pop
 
 let print_terminator ppf ti = print_terminator' ppf ti
 
@@ -413,96 +448,82 @@ let print_instruction ppf i = print_instruction' ppf i
 
 let can_raise_terminator (i : terminator) =
   match i with
-  | Raise _ | Tailcall_func _ | Call_no_return _ | Call _
-  | Prim { op = External _ | Checkbound _ | Probe _; label_after = _ } ->
+  | Call_no_return _ | Raise _ | Tailcall_func _ | Call _
+  | Prim { op = Probe _; label_after = _ } ->
     true
-  | Prim { op = Alloc _; label_after = _ } -> false
-  | Specific_can_raise { op; _ } ->
-    assert (Arch.operation_can_raise op);
-    true
-  | Poll_and_jump _ -> true
+  | Prim { op = External { alloc; effects; _ }; label_after = _ } -> (
+    if not alloc
+    then false
+    else
+      (* Even if going via [caml_c_call], if there are no effects, the function
+         cannot raise an exception. (Example: [caml_obj_dup].) *)
+      match effects with
+      | No_effects -> false
+      | Arbitrary_effects -> true)
   | Never | Always _ | Parity_test _ | Truth_test _ | Float_test _ | Int_test _
-  | Switch _ | Return | Tailcall_self _ ->
+  | Switch _ | Return | Tailcall_self _ | Invalid _ ->
     false
 
 (* CR gyorsh: [is_pure_terminator] is not the same as [can_raise_terminator]
    because of [Tailcal Self] which is not pure but marked as cannot raise at the
    moment, which we might want to reconsider later. *)
+(* CR mshinwell/gyorsh: maybe this function could be made more precise e.g.
+   taking into account [effects] on extcalls *)
 let is_pure_terminator desc =
   match (desc : terminator) with
   | Return | Raise _ | Call_no_return _ | Tailcall_func _ | Tailcall_self _
-  | Call _ | Prim _ ->
+  | Call _ | Prim _ | Invalid _ ->
     false
-  | Specific_can_raise { op; _ } ->
-    assert (Arch.operation_can_raise op);
-    false
-  | Poll_and_jump _ -> false
   | Never | Always _ | Parity_test _ | Truth_test _ | Float_test _ | Int_test _
   | Switch _ ->
     (* CR gyorsh: fix for memory operands *)
     true
 
-let is_pure_operation : operation -> bool = function
-  | Move -> true
-  | Spill -> true
-  | Reload -> true
-  | Const_int _ -> true
-  | Const_float _ -> true
-  | Const_symbol _ -> true
-  | Stackoffset _ -> false
-  | Load _ -> true
-  | Store _ -> false
-  | Intop _ -> true
-  | Intop_imm _ -> true
-  | Intop_atomic _ -> false
-  | Negf -> true
-  | Absf -> true
-  | Addf -> true
-  | Subf -> true
-  | Mulf -> true
-  | Divf -> true
-  | Compf _ -> true
-  | Csel _ -> true
-  | Floatofint -> true
-  | Intoffloat -> true
-  (* Conservative to ensure valueofint/intofvalue are not eliminated before
-     emit. *)
-  | Valueofint -> false
-  | Intofvalue -> false
-  | Probe_is_enabled _ -> true
-  | Opaque -> false
-  | Begin_region -> false
-  | End_region -> false
-  | Specific s ->
-    assert (not (Arch.operation_can_raise s));
-    Arch.operation_is_pure s
-  | Name_for_debugger _ -> true
+let is_never_terminator desc =
+  match (desc : terminator) with
+  | Never -> true
+  | Always _ | Parity_test _ | Truth_test _ | Float_test _ | Int_test _
+  | Switch _ | Return | Raise _ | Tailcall_self _ | Tailcall_func _
+  | Call_no_return _ | Call _ | Prim _ | Invalid _ ->
+    false
+
+let is_return_terminator desc =
+  match (desc : terminator) with
+  | Return -> true
+  | Never | Always _ | Parity_test _ | Truth_test _ | Float_test _ | Int_test _
+  | Switch _ | Raise _ | Tailcall_self _ | Tailcall_func _ | Call_no_return _
+  | Call _ | Prim _ | Invalid _ ->
+    false
 
 let is_pure_basic : basic -> bool = function
-  | Op op -> is_pure_operation op
+  | Op op -> Operation.is_pure op
   | Reloadretaddr ->
     (* This is a no-op on supported backends but on some others like "power" it
        wouldn't be. Saying it's not pure doesn't decrease the generated code
        quality and is future-proof.*)
     false
-  | Pushtrap _ | Poptrap ->
+  | Pushtrap _ | Poptrap _ ->
     (* Those instructions modify the trap stack which actually modifies the
        stack pointer. *)
     false
-  | Prologue ->
+  | Prologue | Epilogue ->
     (* [Prologue] grows the stack when entering a function and therefore
        modifies the stack pointer. [Prologue] can be considered pure if it's
        ensured that it wouldn't modify the stack pointer (e.g. there are no used
-       local stack slots nor calls). *)
+       local stack slots nor calls). [Epilogue] shrinks the stack when leaving a
+       function, and can also be considered pure under the same conditions. *)
     false
+  | Stack_check _ ->
+    (* May reallocate the stack. *)
+    false
+
+let same_location (r1 : Reg.t) (r2 : Reg.t) =
+  Reg.same_loc_fatal_on_unknown
+    ~fatal_message:"Cfg got unknown register location." r1 r2
 
 let is_noop_move instr =
   match instr.desc with
-  | Op (Move | Spill | Reload) ->
-    (match instr.arg.(0).loc with
-    | Unknown -> false
-    | Reg _ | Stack _ -> Reg.same_loc instr.arg.(0) instr.res.(0))
-    && Proc.register_class instr.arg.(0) = Proc.register_class instr.res.(0)
+  | Op (Move | Spill | Reload) -> same_location instr.arg.(0) instr.res.(0)
   | Op (Csel _) -> (
     match instr.res.(0).loc with
     | Unknown -> false
@@ -512,12 +533,15 @@ let is_noop_move instr =
       let ifnot = instr.arg.(len - 1) in
       Reg.same_loc instr.res.(0) ifso && Reg.same_loc instr.res.(0) ifnot)
   | Op
-      ( Const_int _ | Const_float _ | Const_symbol _ | Stackoffset _ | Load _
-      | Store _ | Intop _ | Intop_imm _ | Intop_atomic _ | Negf | Absf | Addf
-      | Subf | Mulf | Divf | Compf _ | Floatofint | Intoffloat | Opaque
-      | Valueofint | Intofvalue | Probe_is_enabled _ | Specific _
-      | Name_for_debugger _ | Begin_region | End_region )
-  | Reloadretaddr | Pushtrap _ | Poptrap | Prologue ->
+      ( Const_int _ | Const_float _ | Const_float32 _ | Const_symbol _
+      | Const_vec128 _ | Const_vec256 _ | Const_vec512 _ | Stackoffset _
+      | Load _ | Store _ | Intop _ | Int128op _ | Intop_imm _ | Intop_atomic _
+      | Floatop _ | Opaque | Reinterpret_cast _ | Static_cast _
+      | Probe_is_enabled _ | Specific _ | Name_for_debugger _ | Begin_region
+      | End_region | Dls_get | Tls_get | Domain_index | Poll | Alloc _ | Pause
+        )
+  | Reloadretaddr | Pushtrap _ | Poptrap _ | Prologue | Epilogue | Stack_check _
+    ->
     false
 
 let set_stack_offset (instr : _ instruction) stack_offset =
@@ -527,10 +551,409 @@ let set_stack_offset (instr : _ instruction) stack_offset =
       stack_offset;
   instr.stack_offset <- stack_offset
 
-let string_of_irc_work_list = function
-  | Unknown_list -> "unknown_list"
-  | Coalesced -> "coalesced"
-  | Constrained -> "constrained"
-  | Frozen -> "frozen"
-  | Work_list -> "work_list"
-  | Active -> "active"
+let set_stack_offset_for_block (block : basic_block) stack_offset =
+  if stack_offset < 0
+  then
+    Misc.fatal_errorf
+      "Cfg.set_stack_offset_for_block: expected non-negative got %d"
+      stack_offset;
+  block.stack_offset <- stack_offset
+
+let set_live (instr : _ instruction) live = instr.live <- live
+
+let make_instruction ~desc ?(arg = [||]) ?(res = [||]) ?(dbg = Debuginfo.none)
+    ?(fdo = Fdo_info.none) ?(live = Reg.Set.empty) ~stack_offset ~id
+    ?(available_before = Reg_availability_set.Unreachable)
+    ?(available_across = Reg_availability_set.Unreachable) () =
+  { desc;
+    arg;
+    res;
+    dbg;
+    fdo;
+    live;
+    stack_offset;
+    id;
+    available_before;
+    available_across
+  }
+
+let make_instruction_from_copy (copy : _ instruction) ~desc ~id ?(arg = [||])
+    ?(res = [||]) () =
+  { desc;
+    arg;
+    res;
+    dbg = copy.dbg;
+    fdo = copy.fdo;
+    live = copy.live;
+    stack_offset = copy.stack_offset;
+    id;
+    available_before = copy.available_before;
+    available_across = copy.available_across
+  }
+
+let invalid_stack_offset = -1
+
+let make_empty_block ?label terminator : basic_block =
+  let start =
+    match label with None -> Cmm.new_label () | Some label -> label
+  in
+  { start;
+    body = DLL.make_empty ();
+    terminator;
+    predecessors = Label.Set.empty;
+    stack_offset = invalid_stack_offset;
+    exn = None;
+    can_raise = false;
+    is_trap_handler = false;
+    cold = false
+  }
+
+let is_poll (instr : basic instruction) =
+  match instr.desc with
+  | Op Poll -> true
+  | Reloadretaddr | Prologue | Epilogue | Pushtrap _ | Poptrap _ | Stack_check _
+  | Op
+      ( Alloc _ | Move | Spill | Reload | Opaque | Pause | Begin_region
+      | End_region | Dls_get | Tls_get | Domain_index | Const_int _
+      | Const_float32 _ | Const_float _ | Const_symbol _ | Const_vec128 _
+      | Const_vec256 _ | Const_vec512 _ | Stackoffset _ | Load _
+      | Store (_, _, _)
+      | Intop _ | Int128op _
+      | Intop_imm (_, _)
+      | Intop_atomic _
+      | Floatop (_, _)
+      | Csel _ | Reinterpret_cast _ | Static_cast _ | Probe_is_enabled _
+      | Specific _ | Name_for_debugger _ ) ->
+    false
+
+let is_alloc (instr : basic instruction) =
+  match instr.desc with
+  | Op (Alloc _) -> true
+  | Reloadretaddr | Prologue | Epilogue | Pushtrap _ | Poptrap _ | Stack_check _
+  | Op
+      ( Poll | Move | Spill | Reload | Opaque | Begin_region | End_region
+      | Dls_get | Tls_get | Domain_index | Pause | Const_int _ | Const_float32 _
+      | Const_float _ | Const_symbol _ | Const_vec128 _ | Const_vec256 _
+      | Const_vec512 _ | Stackoffset _ | Load _
+      | Store (_, _, _)
+      | Intop _ | Int128op _
+      | Intop_imm (_, _)
+      | Intop_atomic _
+      | Floatop (_, _)
+      | Csel _ | Reinterpret_cast _ | Static_cast _ | Probe_is_enabled _
+      | Specific _ | Name_for_debugger _ ) ->
+    false
+
+let is_end_region (b : basic) =
+  match b with
+  | Op End_region -> true
+  | Reloadretaddr | Prologue | Epilogue | Pushtrap _ | Poptrap _ | Stack_check _
+  | Op
+      ( Alloc _ | Poll | Move | Spill | Reload | Opaque | Begin_region | Dls_get
+      | Tls_get | Domain_index | Pause | Const_int _ | Const_float32 _
+      | Const_float _ | Const_symbol _ | Const_vec128 _ | Const_vec256 _
+      | Const_vec512 _ | Stackoffset _ | Load _
+      | Store (_, _, _)
+      | Intop _ | Int128op _
+      | Intop_imm (_, _)
+      | Intop_atomic _
+      | Floatop (_, _)
+      | Csel _ | Reinterpret_cast _ | Static_cast _ | Probe_is_enabled _
+      | Specific _ | Name_for_debugger _ ) ->
+    false
+
+let is_alloc_or_poll instr = is_alloc instr || is_poll instr
+
+let basic_block_contains_calls block =
+  block.is_trap_handler
+  || (match block.terminator.desc with
+    | Never | Always _ | Parity_test _ | Truth_test _ | Float_test _
+    | Int_test _ | Switch _ | Return ->
+      false
+    | Raise raise_kind -> (
+      match raise_kind with
+      | Lambda.Raise_notrace -> false
+      | Lambda.Raise_regular | Lambda.Raise_reraise ->
+        (* PR#6239 *)
+        (* caml_stash_backtrace; we #mark_call rather than #mark_c_tailcall to
+            get a good stack backtrace *)
+        true)
+    | Tailcall_self _ -> false
+    | Tailcall_func _ -> false
+    | Call_no_return _ -> true
+    | Call _ -> true
+    | Prim { op = External _; _ } | Invalid _ -> true
+    | Prim { op = Probe _; _ } -> true)
+  || DLL.exists block.body ~f:is_alloc_or_poll
+
+let remove_trap_instructions t removed_trap_handlers =
+  (* Remove Lpushtrap and Lpoptrap instructions that refer to dead labels and
+     update stack_offsets of affected instructions and blocks. [stack_offset] is
+     in bytes throughout this function. *)
+  let visited = ref Label.Set.empty in
+  let update_instruction (i : _ instruction) ~stack_offset =
+    if not (Int.equal i.stack_offset stack_offset)
+    then set_stack_offset i stack_offset
+  in
+  let rec update_basic cursor ~stack_offset =
+    let update_basic_next r ~stack_offset =
+      match r with
+      | Error `End_of_list -> stack_offset
+      | Ok () -> update_basic cursor ~stack_offset
+    in
+    let basic = DLL.Cursor.value cursor in
+    update_instruction basic ~stack_offset;
+    match basic.desc with
+    | Pushtrap { lbl_handler } ->
+      if Label.Set.mem lbl_handler removed_trap_handlers
+      then update_basic_next (DLL.Cursor.delete_and_next cursor) ~stack_offset
+      else (
+        update_block lbl_handler ~stack_offset;
+        update_basic_next (DLL.Cursor.next cursor)
+          ~stack_offset:(stack_offset + Proc.trap_size_in_bytes ()))
+    | Poptrap { lbl_handler } ->
+      if Label.Set.mem lbl_handler removed_trap_handlers
+      then update_basic_next (DLL.Cursor.delete_and_next cursor) ~stack_offset
+      else
+        update_basic_next (DLL.Cursor.next cursor)
+          ~stack_offset:(stack_offset - Proc.trap_size_in_bytes ())
+    | Op (Stackoffset n) ->
+      update_basic_next (DLL.Cursor.next cursor) ~stack_offset:(stack_offset + n)
+    | Op
+        ( Move | Spill | Reload | Const_int _ | Const_float _ | Const_float32 _
+        | Const_symbol _ | Const_vec128 _ | Const_vec256 _ | Const_vec512 _
+        | Load _ | Store _ | Intop _ | Int128op _ | Intop_imm _ | Intop_atomic _
+        | Floatop _ | Csel _ | Static_cast _ | Reinterpret_cast _
+        | Probe_is_enabled _ | Opaque | Begin_region | End_region | Specific _
+        | Name_for_debugger _ | Dls_get | Tls_get | Domain_index | Poll
+        | Alloc _ | Pause )
+    | Reloadretaddr | Prologue | Epilogue | Stack_check _ ->
+      update_basic_next (DLL.Cursor.next cursor) ~stack_offset
+  and update_body r ~stack_offset =
+    match r with
+    | Error `Empty -> stack_offset
+    | Ok cursor -> update_basic cursor ~stack_offset
+  and update_terminator terminator ~stack_offset =
+    (match terminator.desc with
+    | Tailcall_self _ -> assert (Int.equal stack_offset 0)
+    | Never | Always _ | Parity_test _ | Truth_test _ | Float_test _
+    | Int_test _ | Switch _ | Return | Raise _ | Tailcall_func _
+    | Call_no_return _ | Call _ | Prim _ | Invalid _ ->
+      ());
+    update_instruction terminator ~stack_offset
+  and update_block label ~stack_offset =
+    let block = get_block_exn t label in
+    if Label.Set.mem label !visited
+    then assert (block.stack_offset = stack_offset)
+    else (
+      visited := Label.Set.add label !visited;
+      if not (Int.equal block.stack_offset stack_offset)
+      then set_stack_offset_for_block block stack_offset;
+      let stack_offset =
+        update_body (DLL.create_hd_cursor block.body) ~stack_offset
+      in
+      update_terminator block.terminator ~stack_offset;
+      Label.Set.iter
+        (update_block ~stack_offset)
+        (successor_labels ~normal:true ~exn:false block)
+      (* Stack offset is not propagated across exceptional edges, because an
+         exception that is raised "folds" everything on the stack up to the top
+         of the currnt trap stack, and the amount can be different in different
+         blocks. *))
+  in
+  if not (Label.Set.is_empty removed_trap_handlers)
+  then
+    (* CR-someday gyorsh: avoid iterating over all the instructions to just
+       remove a few pushtrap/poptraps. *)
+    (* update all blocks reachable from entry *)
+    update_block t.entry_label ~stack_offset:0
+
+let remove_blocks t labels_to_remove =
+  let removed_labels = ref Label.Set.empty in
+  let removed_trap_handlers = ref Label.Set.empty in
+  Label.Tbl.filter_map_inplace
+    (fun l b ->
+      if Label.Set.mem l labels_to_remove
+      then (
+        assert (Label.Set.is_empty b.predecessors);
+        assert (Label.Set.is_empty (successor_labels b ~normal:true ~exn:false));
+        if b.is_trap_handler
+        then removed_trap_handlers := Label.Set.add l !removed_trap_handlers;
+        removed_labels := Label.Set.add l !removed_labels;
+        None)
+      else Some b)
+    t.blocks;
+  let labels_not_found = Label.Set.diff labels_to_remove !removed_labels in
+  if not (Label.Set.is_empty labels_not_found)
+  then
+    Misc.fatal_errorf "Cfg.remove_blocks: not found blocks %a" Label.Set.print
+      labels_not_found;
+  remove_trap_instructions t !removed_trap_handlers
+
+let equal_basic left right =
+  match left, right with
+  | Op left_op, Op right_op -> Operation.equal left_op right_op
+  | Reloadretaddr, Reloadretaddr -> true
+  | Pushtrap { lbl_handler = left_lbl }, Pushtrap { lbl_handler = right_lbl }
+  | Poptrap { lbl_handler = left_lbl }, Poptrap { lbl_handler = right_lbl } ->
+    Label.equal left_lbl right_lbl
+  | Prologue, Prologue | Epilogue, Epilogue -> true
+  | ( Stack_check { max_frame_size_bytes = left_size },
+      Stack_check { max_frame_size_bytes = right_size } ) ->
+    Int.equal left_size right_size
+  | ( ( Op _ | Reloadretaddr | Pushtrap _ | Poptrap _ | Prologue | Epilogue
+      | Stack_check _ ),
+      _ ) ->
+    false
+
+let equal_bool_test ({ ifso = left_ifso; ifnot = left_ifnot } : bool_test)
+    ({ ifso = right_ifso; ifnot = right_ifnot } : bool_test) =
+  Label.equal left_ifso right_ifso && Label.equal left_ifnot right_ifnot
+
+let equal_int_test
+    ({ lt = left_lt;
+       eq = left_eq;
+       gt = left_gt;
+       is_signed = left_is_signed;
+       imm = left_imm
+     } :
+      int_test)
+    ({ lt = right_lt;
+       eq = right_eq;
+       gt = right_gt;
+       is_signed = right_is_signed;
+       imm = right_imm
+     } :
+      int_test) =
+  Label.equal left_lt right_lt
+  && Label.equal left_eq right_eq
+  && Label.equal left_gt right_gt
+  && Scalar.Signedness.equal left_is_signed right_is_signed
+  && Option.equal Int.equal left_imm right_imm
+
+let equal_float_test
+    ({ width = left_width;
+       lt = left_lt;
+       eq = left_eq;
+       gt = left_gt;
+       uo = left_uo
+     } :
+      float_test)
+    ({ width = right_width;
+       lt = right_lt;
+       eq = right_eq;
+       gt = right_gt;
+       uo = right_uo
+     } :
+      float_test) =
+  Cmm.equal_float_width left_width right_width
+  && Label.equal left_lt right_lt
+  && Label.equal left_eq right_eq
+  && Label.equal left_gt right_gt
+  && Label.equal left_uo right_uo
+
+let equal_func_call_operation left right =
+  match left, right with
+  | Indirect left_callees, Indirect right_callees ->
+    Option.equal (List.equal Cmm.equal_symbol) left_callees right_callees
+  | Direct left_sym, Direct right_sym -> Cmm.equal_symbol left_sym right_sym
+  | (Indirect _ | Direct _), _ -> false
+
+let equal_external_call_operation
+    { func_symbol = left_func_symbol;
+      alloc = left_alloc;
+      effects = left_effects;
+      ty_res = left_ty_res;
+      ty_args = left_ty_args;
+      stack_ofs = left_stack_ofs;
+      stack_align = left_stack_align
+    }
+    { func_symbol = right_func_symbol;
+      alloc = right_alloc;
+      effects = right_effects;
+      ty_res = right_ty_res;
+      ty_args = right_ty_args;
+      stack_ofs = right_stack_ofs;
+      stack_align = right_stack_align
+    } =
+  String.equal left_func_symbol right_func_symbol
+  && Bool.equal left_alloc right_alloc
+  && Cmm.equal_effects left_effects right_effects
+  && Cmm.equal_machtype left_ty_res right_ty_res
+  && List.equal Cmm.equal_exttype left_ty_args right_ty_args
+  && Int.equal left_stack_ofs right_stack_ofs
+  && Cmm.equal_stack_align left_stack_align right_stack_align
+
+let equal_prim_call_operation left right =
+  match left, right with
+  | External left_op, External right_op ->
+    equal_external_call_operation left_op right_op
+  | ( Probe
+        { name = left_name;
+          handler_code_sym = left_handler;
+          enabled_at_init = left_enabled
+        },
+      Probe
+        { name = right_name;
+          handler_code_sym = right_handler;
+          enabled_at_init = right_enabled
+        } ) ->
+    String.equal left_name right_name
+    && String.equal left_handler right_handler
+    && Bool.equal left_enabled right_enabled
+  | (External _ | Probe _), _ -> false
+
+let equal_with_label_after equal_op
+    { op = left_op; label_after = left_label_after }
+    { op = right_op; label_after = right_label_after } =
+  equal_op left_op right_op && Label.equal left_label_after right_label_after
+
+let equal_terminator left right =
+  match left, right with
+  | Never, Never -> true
+  | Always left_lbl, Always right_lbl -> Label.equal left_lbl right_lbl
+  | Parity_test left_test, Parity_test right_test
+  | Truth_test left_test, Truth_test right_test ->
+    equal_bool_test left_test right_test
+  | Float_test left_test, Float_test right_test ->
+    equal_float_test left_test right_test
+  | Int_test left_test, Int_test right_test ->
+    equal_int_test left_test right_test
+  | Switch left_labels, Switch right_labels ->
+    Int.equal (Array.length left_labels) (Array.length right_labels)
+    && Array.for_all2 Label.equal left_labels right_labels
+  | Return, Return -> true
+  | Raise left_kind, Raise right_kind ->
+    Lambda.equal_raise_kind left_kind right_kind
+  | ( Tailcall_self { destination = left_dest },
+      Tailcall_self { destination = right_dest } ) ->
+    Label.equal left_dest right_dest
+  | Tailcall_func left_op, Tailcall_func right_op ->
+    equal_func_call_operation left_op right_op
+  | Call_no_return left_op, Call_no_return right_op ->
+    equal_external_call_operation left_op right_op
+  | Call left_call, Call right_call ->
+    equal_with_label_after equal_func_call_operation left_call right_call
+  | Prim left_prim, Prim right_prim ->
+    equal_with_label_after equal_prim_call_operation left_prim right_prim
+  | ( Invalid
+        { message = left_msg;
+          stack_ofs = left_ofs;
+          stack_align = left_align;
+          label_after = left_lbl
+        },
+      Invalid
+        { message = right_msg;
+          stack_ofs = right_ofs;
+          stack_align = right_align;
+          label_after = right_lbl
+        } ) ->
+    String.equal left_msg right_msg
+    && Int.equal left_ofs right_ofs
+    && Cmm.equal_stack_align left_align right_align
+    && Option.equal Label.equal left_lbl right_lbl
+  | ( ( Never | Always _ | Parity_test _ | Truth_test _ | Float_test _
+      | Int_test _ | Switch _ | Return | Raise _ | Tailcall_self _
+      | Tailcall_func _ | Call_no_return _ | Call _ | Prim _ | Invalid _ ),
+      _ ) ->
+    false

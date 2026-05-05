@@ -16,6 +16,8 @@ val flambda2_is_enabled : unit -> bool
 
 val debug_flambda2 : unit -> bool
 
+val debug_reaper : string -> bool
+
 type 'a mode =
   | Normal : [`Normal] mode
   | Classic : [`Classic] mode
@@ -36,7 +38,34 @@ val cse_depth : unit -> int
 
 val join_depth : unit -> int
 
-val safe_string : unit -> bool
+val use_n_way_join : unit -> bool
+
+type join_algorithm = Oxcaml_flags.join_algorithm =
+  | Binary
+  | N_way
+  | Checked
+
+val join_algorithm : unit -> join_algorithm
+
+val enable_reaper : unit -> bool
+
+type reaper_preserve_direct_calls = Oxcaml_flags.reaper_preserve_direct_calls =
+  | Never
+  | Always
+  | Zero_alloc
+  | Auto
+
+val reaper_preserve_direct_calls : unit -> reaper_preserve_direct_calls
+
+val reaper_local_fields : unit -> bool
+
+val reaper_unbox : unit -> bool
+
+val reaper_max_unbox_size : unit -> int
+
+val reaper_change_calling_conventions : unit -> bool
+
+val kind_checks : unit -> bool
 
 val flat_float_array : unit -> bool
 
@@ -58,9 +87,12 @@ val colour : unit -> Misc.Color.setting option
 
 val unicode : unit -> bool
 
+(** Check all invariants (light and heavy). *)
 val check_invariants : unit -> bool
 
-type dump_target = Flambda_backend_flags.Flambda2.Dump.target =
+val check_light_invariants : unit -> bool
+
+type dump_target = Oxcaml_flags.Flambda2.Dump.target =
   | Nowhere
   | Main_dump_stream
   | File of Misc.filepath
@@ -71,24 +103,35 @@ val dump_flambda : unit -> bool
 
 val dump_rawfexpr : unit -> dump_target
 
-val dump_fexpr : unit -> dump_target
+val dump_fexpr_annot : unit -> bool
 
-val dump_flexpect : unit -> dump_target
+val dump_fexpr_annot_after : unit -> string list
+
+type pass = Oxcaml_flags.Flambda2.Dump.pass =
+  | Last_pass
+  | This_pass of string
+
+val dump_fexpr : pass -> dump_target
 
 val dump_slot_offsets : unit -> bool
 
 val dump_flow : unit -> bool
+
+val dump_simplify : unit -> bool
+
+val dump_reaper : unit -> bool
 
 val freshen_when_printing : unit -> bool
 
 module Inlining : sig
   type round_or_default =
     | Round of int
-    | Default of Flambda_backend_flags.opt_level
+    | Default of Oxcaml_flags.opt_level
 
   val depth_scaling_factor : int
 
-  (** [max_depth] returns the user's value multipled by [depth_scaling_factor]. *)
+  (** [max_depth] returns the user's value multipled by [depth_scaling_factor].
+  *)
   val max_depth : round_or_default -> int
 
   val max_rec_depth : round_or_default -> int
@@ -109,9 +152,15 @@ module Inlining : sig
 
   val large_function_size : round_or_default -> int
 
+  val small_functor_size : round_or_default -> int
+
+  val large_functor_size : round_or_default -> int
+
   val threshold : round_or_default -> float
 
   val speculative_inlining_only_if_arguments_useful : unit -> bool
+
+  val speculative_inlining_track_lifted_constants : unit -> bool
 end
 
 module Debug : sig
@@ -125,6 +174,8 @@ module Expert : sig
 
   val inline_effects_in_cmm : unit -> bool
 
+  val cmm_safe_subst : unit -> bool
+
   val max_block_size_for_projections : unit -> int option
 
   val phantom_lets : unit -> bool
@@ -134,6 +185,12 @@ module Expert : sig
   val can_inline_recursive_functions : unit -> bool
 
   val max_function_simplify_run : unit -> int
+
+  val shorten_symbol_names : unit -> bool
+
+  val cont_lifting_budget : unit -> int
+
+  val cont_spec_budget : unit -> int
 end
 
 val stack_allocation_enabled : unit -> bool

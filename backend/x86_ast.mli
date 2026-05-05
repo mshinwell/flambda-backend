@@ -15,6 +15,8 @@
 
 (** Structured representation of Intel assembly language (32 and 64 bit). *)
 
+[@@@ocaml.warning "+a-40-41-42"]
+
 type condition =
   | L | GE     (* signed comparisons: less/greater *)
   | LE | G
@@ -46,6 +48,7 @@ type constant =
   | Const of int64
   | ConstThis
   | ConstLabel of string
+  | ConstLabelOffset of string * int
   | ConstAdd of constant * constant
   | ConstSub of constant * constant
 
@@ -57,7 +60,10 @@ type constant =
 type data_type =
   | NONE
   | REAL4 | REAL8 (* floating point values *)
-  | BYTE | WORD | DWORD | QWORD | OWORD (* integer values *)
+  | BYTE | WORD | DWORD | QWORD (* integer values *)
+  | VEC128 (* vector values (float & integer) *)
+  | VEC256
+  | VEC512
   | NEAR | PROC
 
 type reg64 =
@@ -67,8 +73,14 @@ type reg64 =
 type reg8h =
   | AH | BH | CH | DH
 
+type regf =
+  | XMM of int
+  | YMM of int
+  | ZMM of int
 
-type registerf = XMM of int | TOS | ST of int
+type reg_idx =
+  | Scalar of reg64
+  | Vector of regf
 
 type arch = X64 | X86
 
@@ -76,7 +88,7 @@ type addr =
   {
     arch: arch;
     typ: data_type;
-    idx: reg64;
+    idx: reg_idx;
     scale: int;
     base: reg64 option;
     sym: string option;
@@ -93,7 +105,7 @@ type arg =
   | Imm of int64
   (** Operand is an immediate constant integer *)
 
-  | Sym of  string
+  | Sym of string
   (** Address of a symbol (absolute address except for call/jmp target
       where it is interpreted as a relative displacement *)
 
@@ -102,68 +114,25 @@ type arg =
   | Reg16 of reg64
   | Reg32 of reg64
   | Reg64 of reg64
-  | Regf of registerf
+  | Regf of regf
 
   | Mem of addr
   | Mem64_RIP of data_type * string * int
 
 type instruction =
   | ADD of arg * arg
-  | ADDSD of arg * arg
+  | ADC of arg * arg
   | AND of arg * arg
-  | ANDPD of arg * arg
   | BSF of arg * arg
   | BSR of arg * arg
   | BSWAP of arg
   | CALL of arg
   | CDQ
+  | CLDEMOTE of arg
   | CMOV of condition * arg * arg
   | CMP of arg * arg
-  | CMPSD of float_condition * arg * arg
-  | COMISD of arg * arg
   | CQO
-  | CRC32 of arg * arg
-  | CVTSD2SI of arg * arg
-  | CVTSD2SS of arg * arg
-  | CVTSI2SD of arg * arg
-  | CVTSS2SD of arg * arg
-  | CVTTSD2SI of arg * arg
   | DEC of arg
-  | DIVSD of arg * arg
-  | FABS
-  | FADD of arg
-  | FADDP of arg * arg
-  | FCHS
-  | FCOMP of arg
-  | FCOMPP
-  | FCOS
-  | FDIV of arg
-  | FDIVP of arg * arg
-  | FDIVR of arg
-  | FDIVRP of arg * arg
-  | FILD of arg
-  | FISTP of arg
-  | FLD of arg
-  | FLD1
-  | FLDCW of arg
-  | FLDLG2
-  | FLDLN2
-  | FLDZ
-  | FMUL of arg
-  | FMULP of arg * arg
-  | FNSTCW of arg
-  | FNSTSW of arg
-  | FPATAN
-  | FPTAN
-  | FSIN
-  | FSQRT
-  | FSTP of arg
-  | FSUB of arg
-  | FSUBP of arg * arg
-  | FSUBR of arg
-  | FSUBRP of arg * arg
-  | FXCH of arg
-  | FYL2X
   | HLT
   | IDIV of arg
   | IMUL of arg * arg option
@@ -174,26 +143,21 @@ type instruction =
   | LEA of arg * arg
   | LOCK_CMPXCHG of arg * arg
   | LOCK_XADD of arg * arg
+  | LOCK_ADD of arg * arg
+  | LOCK_SUB of arg * arg
+  | LOCK_AND of arg * arg
+  | LOCK_OR of arg * arg
+  | LOCK_XOR of arg * arg
   | LEAVE
-  | MAXSD of arg * arg
-  | MINSD of arg * arg
   | MOV of arg * arg
-  | MOVAPD of arg * arg
-  | MOVD of arg * arg
-  | MOVQ of arg * arg
-  | MOVLPD of arg * arg
-  | MOVSD of arg * arg
-  | MOVSS of arg * arg
   | MOVSX of arg * arg
   | MOVSXD of arg * arg
   | MOVZX of arg * arg
-  | MULSD of arg * arg
   | NEG of arg
   | NOP
   | OR of arg * arg
   | PAUSE
   | POP of arg
-  | POPCNT of arg * arg
   | PREFETCH of bool * prefetch_temporal_locality_hint * arg
   | PUSH of arg
   | RDTSC
@@ -202,19 +166,16 @@ type instruction =
   | SFENCE
   | MFENCE
   | RET
-  | ROUNDSD of rounding * arg * arg
   | SAL of arg * arg
   | SAR of arg * arg
   | SET of condition * arg
   | SHR of arg * arg
-  | SQRTSD of arg * arg
   | SUB of arg * arg
-  | SUBSD of arg * arg
+  | SBB of arg * arg
   | TEST of arg * arg
-  | UCOMISD of arg * arg
   | XCHG of arg * arg
   | XOR of arg * arg
-  | XORPD of arg * arg
+  | SIMD of Amd64_simd_instrs.instr * arg array
 
 (* ELF specific *)
 type reloc_type =
@@ -226,45 +187,9 @@ type reloc =
     expr : constant;
   }
 
+(* CR gyorsh: use inline record for Section and File constructors. *)
 type asm_line =
   | Ins of instruction
+  | Directive of Asm_targets.Asm_directives.Directive.t
 
-  | Align of bool * int
-  | Byte of constant
-  | Bytes of string
-  | Comment of string
-  | Global of string
-  | Hidden of string
-  | Weak of string
-  | Long of constant
-  | NewLabel of string * data_type
-  | NewLine
-  | Quad of constant
-  | Section of string list * string option * string list
-  | Sleb128 of constant
-  | Space of int
-  | Uleb128 of constant
-  | Word of constant
-
-  (* masm only (the gas emitter will fail on them) *)
-  | External of string * data_type
-  | Mode386
-  | Model of string
-
-  (* gas only (the masm emitter will fail on them) *)
-  | Cfi_adjust_cfa_offset of int
-  | Cfi_endproc
-  | Cfi_startproc
-  | File of int * string (* (file_num, file_name) *)
-  | Indirect_symbol of string
-  | Loc of { file_num:int; line:int; col:int; discriminator: int option }
-  | Private_extern of string
-  | Set of string * constant
-  | Size of string * constant
-  | Type of string * string
-  | Reloc of reloc
-
-  (* MacOS only *)
-  | Direct_assignment of string * constant
-
-type asm_program = asm_line list
+type asm_program = asm_line Oxcaml_utils.Doubly_linked_list.t

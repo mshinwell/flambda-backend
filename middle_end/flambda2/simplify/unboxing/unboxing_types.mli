@@ -26,14 +26,17 @@ type do_not_unbox_reason =
   | Not_enough_information_at_use
   | Not_of_kind_value
   | Unboxing_not_requested
+  | All_fields_invalid
 
 module Extra_param_and_args : sig
   type t = private
     { param : Variable.t;
+      param_debug_uid : Flambda_debug_uid.t;
       args : EPA.Extra_arg.t Apply_cont_rewrite_id.Map.t
     }
 
-  val create : name:string -> t
+  val create :
+    name:string -> debug_uid:Flambda_debug_uid.t -> Flambda_kind.t -> t
 
   val update_param_args : t -> Apply_cont_rewrite_id.t -> EPA.Extra_arg.t -> t
 end
@@ -41,12 +44,14 @@ end
 type unboxing_decision =
   | Unique_tag_and_size of
       { tag : Tag.t;
+        shape : Flambda_kind.Block_shape.t;
         fields : field_decision list
       }
   | Variant of
       { tag : Extra_param_and_args.t;
         const_ctors : const_ctors_decision;
-        fields_by_tag : field_decision list Tag.Scannable.Map.t
+        fields_by_tag :
+          (Flambda_kind.Block_shape.t * field_decision list) Tag.Scannable.Map.t
       }
   | Closure_single_entry of
       { function_slot : Function_slot.t;
@@ -79,7 +84,8 @@ val print_decision : Format.formatter -> decision -> unit
 module Decisions : sig
   type t =
     { decisions : (BP.t * decision) list;
-      rewrite_ids_seen : Apply_cont_rewrite_id.Set.t
+      rewrite_ids_seen : Apply_cont_rewrite_id.Set.t;
+      rewrites_ids_known_as_invalid : Apply_cont_rewrite_id.Set.t
     }
 
   val print : Format.formatter -> t -> unit

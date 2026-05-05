@@ -23,7 +23,8 @@ module IR : sig
 
   type exn_continuation =
     { exn_handler : Continuation.t;
-      extra_args : (simple * Flambda_kind.With_subkind.t) list
+      extra_args :
+        (simple * Flambda_debug_uid.t * Flambda_kind.With_subkind.t) list
     }
 
   type trap_action =
@@ -37,8 +38,16 @@ module IR : sig
   type named =
     | Simple of simple
     | Get_tag of Ident.t (* Intermediary primitive for block switch *)
-    | Begin_region of { try_region_parent : Ident.t option }
-    | End_region of Ident.t
+    | Begin_region of
+        { ghost : bool;
+          is_try_region : bool;
+          parent_region : Ident.t option
+        }
+    | End_region of
+        { is_try_region : bool;
+          region : Ident.t;
+          ghost : bool
+        }
         (** [Begin_region] and [End_region] are needed because these primitives
             don't exist in Lambda *)
     | Prim of
@@ -46,7 +55,8 @@ module IR : sig
           args : simple list list;
           loc : Lambda.scoped_location;
           exn_continuation : exn_continuation option;
-          region : Ident.t
+          region : Ident.t option;
+          ghost_region : Ident.t option
         }
 
   type apply_kind =
@@ -66,16 +76,24 @@ module IR : sig
       region_close : Lambda.region_close;
       inlined : Lambda.inlined_attribute;
       probe : Lambda.probe;
-      mode : Lambda.alloc_mode;
-      region : Ident.t;
-      return_arity : Flambda_arity.t
+      mode : Lambda.locality_mode;
+      region : Ident.t option;
+      ghost_region : Ident.t option;
+      args_arity : [`Complex] Flambda_arity.t;
+      return_arity : [`Unarized] Flambda_arity.t
     }
 
   type switch =
     { numconsts : int;
-      consts : (int * Continuation.t * trap_action option * simple list) list;
-      failaction : (Continuation.t * trap_action option * simple list) option
+      (* CR mshinwell: use record types *)
+      consts :
+        (int * Continuation.t * Debuginfo.t * trap_action option * simple list)
+        list;
+      failaction :
+        (Continuation.t * Debuginfo.t * trap_action option * simple list) option
     }
+
+  val print_simple : Format.formatter -> simple -> unit
 
   val print_named : Format.formatter -> named -> unit
 end
@@ -127,7 +145,11 @@ module Env : sig
 
   val add_vars_like :
     t ->
-    (Ident.t * IR.user_visible * Flambda_kind.With_subkind.t) list ->
+    (Ident.t
+    * Flambda_debug_uid.t
+    * IR.user_visible
+    * Flambda_kind.With_subkind.t)
+    list ->
     t * Variable.t list
 
   val find_name : t -> Ident.t -> Name.t
@@ -157,7 +179,13 @@ module Env : sig
   val add_var_approximation : t -> Variable.t -> value_approximation -> t
 
   val add_block_approximation :
-    t -> Variable.t -> value_approximation array -> Alloc_mode.For_types.t -> t
+    t ->
+    Variable.t ->
+    Tag.Scannable.t ->
+    Flambda_kind.Scannable_block_shape.t ->
+    value_approximation array ->
+    Alloc_mode.For_types.t ->
+    t
 
   val find_var_approximation : t -> Variable.t -> value_approximation
 
@@ -191,15 +219,22 @@ end
 (** Used to pipe some data through closure conversion *)
 module Acc : sig
   type closure_info = private
-    { return_continuation : Continuation.t;
+    { code_id : Code_id.t;
+      return_continuation : Continuation.t;
       exn_continuation : Exn_continuation.t;
       my_closure : Variable.t;
-      is_purely_tailrec : bool
+      is_purely_tailrec : bool;
+      slot_offsets_at_definition : Slot_offsets.t
     }
 
   type t
 
-  val create : slot_offsets:Slot_offsets.t -> cmx_loader:Flambda_cmx.loader -> t
+  val create :
+    cmx_loader:Flambda_cmx.loader ->
+    machine_width:Target_system.Machine_width.t ->
+    t
+
+  val manufacture_symbol_short_name : t -> t * Linkage_name.t
 
   val declared_symbols : t -> (Symbol.t * Static_const.t) list
 
@@ -213,6 +248,8 @@ module Acc : sig
   val code_map : t -> Code.t Code_id.Map.t
 
   val free_names : t -> Name_occurrences.t
+
+  val machine_width : t -> Target_system.Machine_width.t
 
   val seen_a_function : t -> bool
 
@@ -229,11 +266,14 @@ module Acc : sig
   val add_shareable_constant :
     symbol:Symbol.t -> constant:Static_const.t -> t -> t
 
-  val add_code : code_id:Code_id.t -> code:Code.t -> t -> t
+  val add_code :
+    code_id:Code_id.t -> code:Code.t -> ?slot_offsets:Slot_offsets.t -> t -> t
 
   val add_free_names : Name_occurrences.t -> t -> t
 
   val remove_var_from_free_names : Variable.t -> t -> t
+
+  val remove_var_opt_from_free_names : Variable.t option -> t -> t
 
   val remove_continuation_from_free_names : Continuation.t -> t -> t
 
@@ -264,6 +304,10 @@ module Acc : sig
 
   val slot_offsets : t -> Slot_offsets.t
 
+  val code_slot_offsets : t -> Slot_offsets.t Code_id.Map.t
+
+  val add_offsets_from_code : t -> Code_id.t -> t
+
   val add_set_of_closures_offsets :
     is_phantom:bool -> t -> Set_of_closures.t -> t
 
@@ -275,6 +319,7 @@ module Acc : sig
     exn_continuation:Exn_continuation.t ->
     my_closure:Variable.t ->
     is_purely_tailrec:bool ->
+    code_id:Code_id.t ->
     t
 
   val pop_closure_info : t -> closure_info * t
@@ -291,42 +336,73 @@ end
     one declaration is when processing "let rec".) *)
 module Function_decls : sig
   module Function_decl : sig
+    type unboxing_kind =
+      | Fields_of_block_with_tag_zero of Flambda_kind.With_subkind.t list
+      | Unboxed_number of Flambda_kind.Boxable_number.t
+      | Unboxed_float_record of int
+
+    type calling_convention =
+      | Normal_calling_convention
+      | Unboxed_calling_convention of
+          unboxing_kind option list * unboxing_kind option * Function_slot.t
+
     type t
+
+    type param =
+      { name : Ident.t;
+        debug_uid : Flambda_debug_uid.t;
+        kind : Flambda_kind.With_subkind.t;
+        attributes : Lambda.parameter_attribute;
+        mode : Lambda.locality_mode
+      }
 
     val create :
       let_rec_ident:Ident.t option ->
+      let_rec_uid:Flambda_debug_uid.t ->
       function_slot:Function_slot.t ->
       kind:Lambda.function_kind ->
-      params:(Ident.t * Flambda_kind.With_subkind.t) list ->
-      return:Flambda_arity.t ->
+      params:param list ->
+      params_arity:[`Complex] Flambda_arity.t ->
+      removed_params:Ident.Set.t ->
+      return:[`Unarized] Flambda_arity.t ->
+      calling_convention:calling_convention ->
       return_continuation:Continuation.t ->
       exn_continuation:IR.exn_continuation ->
-      my_region:Ident.t ->
+      my_region:Ident.t option ->
+      my_ghost_region:Ident.t option ->
       body:(Acc.t -> Env.t -> Acc.t * Flambda.Import.Expr.t) ->
       attr:Lambda.function_attribute ->
       loc:Lambda.scoped_location ->
       free_idents_of_body:Ident.Set.t ->
       Recursive.t ->
-      closure_alloc_mode:Lambda.alloc_mode ->
-      num_trailing_local_params:int ->
-      contains_no_escaping_local_allocs:bool ->
+      closure_alloc_mode:Lambda.locality_mode ->
+      first_complex_local_param:int ->
+      result_mode:Lambda.locality_mode ->
       t
 
     val let_rec_ident : t -> Ident.t
+
+    val let_rec_debug_uid : t -> Flambda_debug_uid.t
 
     val function_slot : t -> Function_slot.t
 
     val kind : t -> Lambda.function_kind
 
-    val params : t -> (Ident.t * Flambda_kind.With_subkind.t) list
+    val params : t -> param list
 
-    val return : t -> Flambda_arity.t
+    val params_arity : t -> [`Complex] Flambda_arity.t
+
+    val return : t -> [`Unarized] Flambda_arity.t
+
+    val calling_convention : t -> calling_convention
 
     val return_continuation : t -> Continuation.t
 
     val exn_continuation : t -> IR.exn_continuation
 
-    val my_region : t -> Ident.t
+    val my_region : t -> Ident.t option
+
+    val my_ghost_region : t -> Ident.t option
 
     val body : t -> Acc.t -> Env.t -> Acc.t * Flambda.Import.Expr.t
 
@@ -336,11 +412,19 @@ module Function_decls : sig
 
     val poll_attribute : t -> Lambda.poll_attribute
 
+    val regalloc_attribute : t -> Lambda.regalloc_attribute
+
+    val regalloc_param_attribute : t -> Lambda.regalloc_param_attribute
+
+    val cold : t -> bool
+
     val loop : t -> Lambda.loop_attribute
 
     val is_a_functor : t -> bool
 
-    val check_attribute : t -> Lambda.check_attribute
+    val is_opaque : t -> bool
+
+    val zero_alloc_attribute : t -> Lambda.zero_alloc_attribute
 
     val stub : t -> bool
 
@@ -348,11 +432,11 @@ module Function_decls : sig
 
     val recursive : t -> Recursive.t
 
-    val closure_alloc_mode : t -> Lambda.alloc_mode
+    val closure_alloc_mode : t -> Lambda.locality_mode
 
-    val num_trailing_local_params : t -> int
+    val first_complex_local_param : t -> int
 
-    val contains_no_escaping_local_allocs : t -> bool
+    val result_mode : t -> Lambda.locality_mode
 
     (* Like [all_free_idents], but for just one function. *)
     val free_idents : t -> Ident.Set.t
@@ -360,9 +444,9 @@ module Function_decls : sig
 
   type t
 
-  val create : Function_decl.t list -> Lambda.alloc_mode -> t
+  val create : Function_decl.t list -> Lambda.locality_mode -> t
 
-  val alloc_mode : t -> Lambda.alloc_mode
+  val alloc_mode : t -> Lambda.locality_mode
 
   val to_list : t -> Function_decl.t list
 
@@ -408,7 +492,7 @@ module Let_cont_with_acc : sig
     Acc.t ->
     invariant_params:Bound_parameters.t ->
     handlers:
-      ((Acc.t -> Expr_with_acc.t) * Bound_parameters.t * bool)
+      ((Acc.t -> Expr_with_acc.t) * Bound_parameters.t * bool * bool)
       Continuation.Map.t ->
     body:(Acc.t -> Expr_with_acc.t) ->
     Expr_with_acc.t
@@ -420,5 +504,6 @@ module Let_cont_with_acc : sig
     handler:(Acc.t -> Expr_with_acc.t) ->
     body:(Acc.t -> Expr_with_acc.t) ->
     is_exn_handler:bool ->
+    is_cold:bool ->
     Expr_with_acc.t
 end

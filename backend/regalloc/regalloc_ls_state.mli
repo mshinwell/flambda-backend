@@ -1,14 +1,14 @@
-[@@@ocaml.warning "+a-4-30-40-41-42"]
+[@@@ocaml.warning "+a-30-40-41-42"]
 
-open! Regalloc_utils
 open! Regalloc_ls_utils
+module DLL = Oxcaml_utils.Doubly_linked_list
 
 type t
 
-val for_fatal : t -> Interval.t list * ClassIntervals.t array
+val for_fatal : t -> Interval.t DLL.t * ClassIntervals.t Regs.Reg_class_tbl.t
 
 val make :
-  stack_slots:Regalloc_stack_slots.t -> next_instruction_id:Instruction.id -> t
+  stack_slots:Regalloc_stack_slots.t -> affinity:Regalloc_affinity.t -> t
 
 val update_intervals : t -> Interval.t Reg.Tbl.t -> unit
 
@@ -18,12 +18,20 @@ val fold_intervals : t -> f:('a -> Interval.t -> 'a) -> init:'a -> 'a
 
 val release_expired_intervals : t -> pos:int -> unit
 
-val active : t -> reg_class:int -> ClassIntervals.t
+val active : t -> reg_class:Regs.Reg_class.t -> ClassIntervals.t
+
+val active_classes : t -> ClassIntervals.t Regs.Reg_class_tbl.t
 
 val stack_slots : t -> Regalloc_stack_slots.t
 
-val get_and_incr_instruction_id : t -> Instruction.id
+val affinity : t -> Regalloc_affinity.t
 
-val invariant_intervals : t -> Cfg_with_liveness.t -> unit
+val set_ls_order : t -> instruction_id:InstructionId.t -> ls_order:int -> unit
+
+val get_ls_order : t -> instruction_id:InstructionId.t -> int
+
+val ls_order_mapping : t -> InstructionId.t -> int
+
+val invariant_intervals : t -> Cfg_with_infos.t -> unit
 
 val invariant_active : t -> unit

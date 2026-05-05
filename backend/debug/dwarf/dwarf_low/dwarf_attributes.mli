@@ -217,8 +217,8 @@ module Attribute : sig
       | String_length : [< Class.exprloc | Class.Dwarf_4.loclistptr] t
       | Return_addr : [< Class.exprloc | Class.Dwarf_4.loclistptr] t
       | Start_scope : [< Class.constant | Class.Dwarf_4.rangelistptr] t
-      | Data_member_location
-          : [< Class.constant | Class.exprloc | Class.Dwarf_4.loclistptr] t
+      | Data_member_location :
+          [< Class.constant | Class.exprloc | Class.Dwarf_4.loclistptr] t
       | Frame_base : [< Class.exprloc | Class.Dwarf_4.loclistptr] t
       | Segment : [< Class.exprloc | Class.Dwarf_4.loclistptr] t
       | Static_link : [< Class.exprloc | Class.Dwarf_4.loclistptr] t
@@ -243,6 +243,7 @@ module Attribute : sig
       | Prefix_name : Class.string t
       | Linker_dirs : Class.string t
       | Cmt_file_digest : Class.string t
+      | Offset_record_from_pointer : Class.constant t
   end
 
   type 'dwarf_classes t =
@@ -283,8 +284,8 @@ module Attribute : sig
     | Base_types : Class.reference t
     | Calling_convention : Class.constant t
     | Count : [< Class.constant | Class.exprloc | Class.reference] t
-    | Data_member_location
-        : [< Class.constant | Class.exprloc | Class.loclistsptr] t
+    | Data_member_location :
+        [< Class.constant | Class.exprloc | Class.loclistsptr] t
     | Decl_column : Class.constant t
     | Decl_file : Class.constant t
     | Decl_line : Class.constant t
@@ -314,8 +315,8 @@ module Attribute : sig
     | Use_UTF8 : Class.flag t
     | Extension : Class.reference t
     | Ranges : Class.rnglist t
-    | Trampoline
-        : [< Class.address | Class.flag | Class.reference | Class.string] t
+    | Trampoline :
+        [< Class.address | Class.flag | Class.reference | Class.string] t
     | Call_column : Class.constant t
     | Call_file : Class.constant t
     | Call_line : Class.constant t

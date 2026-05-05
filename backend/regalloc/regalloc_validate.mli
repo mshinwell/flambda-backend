@@ -1,4 +1,4 @@
-[@@@ocaml.warning "+a-4-30-40-41-42"]
+[@@@ocaml.warning "+a-30-40-41-42"]
 
 module Description : sig
   type t
@@ -15,4 +15,4 @@ end
 val test :
   Description.t -> Cfg_with_layout.t -> (Cfg_with_layout.t, Error.t) Result.t
 
-val run : Description.t option -> Cfg_with_layout.t -> Cfg_with_layout.t
+val run : Description.t option -> Cfg_with_infos.t -> Cfg_with_infos.t

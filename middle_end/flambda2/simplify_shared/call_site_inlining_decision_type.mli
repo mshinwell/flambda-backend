@@ -20,7 +20,8 @@
 type t =
   | Missing_code
   | Definition_says_not_to_inline
-  | Environment_says_never_inline
+  | In_a_stub
+  | Doing_speculative_inlining
   | Argument_types_not_useful
   | Unrolling_depth_exceeded
   | Max_inlining_depth_exceeded
@@ -29,16 +30,21 @@ type t =
   | Speculatively_not_inline of
       { cost_metrics : Cost_metrics.t;
         evaluated_to : float;
-        threshold : float
+        threshold : float;
+        is_a_functor : bool
       }
   | Attribute_always
-  | Attribute_unroll of int
+  | Replay_history_says_must_inline of t
+  | Begin_unrolling of int
+  | Continue_unrolling
   | Definition_says_inline of { was_inline_always : bool }
   | Speculatively_inline of
       { cost_metrics : Cost_metrics.t;
         evaluated_to : float;
-        threshold : float
+        threshold : float;
+        is_a_functor : bool
       }
+  | Jsir_inlining_disabled
 
 val print : Format.formatter -> t -> unit
 

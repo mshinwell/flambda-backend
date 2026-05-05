@@ -26,15 +26,15 @@ type t
 (** Create a result structure.
 
     [reachable_names] specifies which names are reachable from outside the
-    compilation unit (same terminology as used in [Flambda_cmx]).
-*)
+    compilation unit (same terminology as used in [Flambda_cmx]). *)
 val create : module_symbol:Symbol.t -> reachable_names:Name_occurrences.t -> t
 
 (** Translate an existing [Symbol.t] to a Cmm symbol. *)
 val symbol : t -> Symbol.t -> Cmm.symbol
 
 (** Produce the Cmm function symbol for a piece of code. *)
-val symbol_of_code_id : t -> Code_id.t -> Cmm.symbol
+val symbol_of_code_id :
+  t -> Code_id.t -> currently_in_inlined_body:bool -> Cmm.symbol
 
 (** Create a Cmm symbol, not arising from a [Symbol.t]. *)
 val raw_symbol : t -> global:Cmm.is_global -> string -> t * Cmm.symbol

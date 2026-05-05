@@ -61,6 +61,12 @@ module Bound = struct
     let other_vars = List.map (fun var -> Variable.rename var) other_vars in
     { params; results; other_vars }
 
+  let is_renamed_version_of t t' =
+    Bound_parameters.is_renamed_version_of t.params t'.params
+    && Bound_parameters.is_renamed_version_of t.results t'.results
+    && Misc.Stdlib.List.equal Variable.is_renamed_version_of t.other_vars
+         t'.other_vars
+
   let print ppf { params; results; other_vars } =
     Format.fprintf ppf
       "@[<hov 1>(@[<hov 1>(params@ (%a))@]@ @[<hov 1>(results@ (%a))@]@ @[<hov \
@@ -79,9 +85,10 @@ module Bound = struct
     let fresh_params = Bound_parameters.to_list fresh_params in
     let results = Bound_parameters.to_list results in
     let fresh_results = Bound_parameters.to_list fresh_results in
-    if List.compare_lengths params fresh_params <> 0
-       || List.compare_lengths results fresh_results <> 0
-       || List.compare_lengths other_vars fresh_other_vars <> 0
+    if
+      List.compare_lengths params fresh_params <> 0
+      || List.compare_lengths results fresh_results <> 0
+      || List.compare_lengths other_vars fresh_other_vars <> 0
     then Misc.fatal_error "Mismatching params/results/other-vars list lengths";
     let renaming =
       List.fold_left2
@@ -144,5 +151,7 @@ let ids_for_export = A.ids_for_export
 let map_result_types t ~f =
   A.pattern_match t
     ~f:(fun { Bound.params; results; other_vars = _ } env_extension ->
-      let env_extension = TEEV.map_types ~f env_extension in
-      create ~params ~results env_extension)
+      let env_extension' = TEEV.map_types ~f env_extension in
+      if env_extension == env_extension'
+      then t
+      else create ~params ~results env_extension')

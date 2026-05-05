@@ -34,9 +34,10 @@ let params_and_body t = t.params_and_body
 
 let check_free_names_of_params_and_body ~print_function_params_and_body code_id
     ~params_and_body ~free_names_of_params_and_body =
-  if not
-       (Name_occurrences.no_continuations free_names_of_params_and_body
-       && Name_occurrences.no_variables free_names_of_params_and_body)
+  if
+    not
+      (Name_occurrences.no_continuations free_names_of_params_and_body
+      && Name_occurrences.no_variables free_names_of_params_and_body)
   then
     Misc.fatal_errorf
       "Incorrect free names:@ %a@ for creation of code:@ %a@ =@ %a"
@@ -99,9 +100,10 @@ let apply_renaming ~apply_renaming_function_params_and_body
     (* See note in [ids_for_export], below. *)
     Name_occurrences.apply_renaming free_names_of_params_and_body renaming
   in
-  if params_and_body == params_and_body'
-     && code_metadata == code_metadata'
-     && free_names_of_params_and_body == free_names_of_params_and_body'
+  if
+    params_and_body == params_and_body'
+    && code_metadata == code_metadata'
+    && free_names_of_params_and_body == free_names_of_params_and_body'
   then t
   else
     { params_and_body = params_and_body';
@@ -125,6 +127,9 @@ let ids_for_export ~ids_for_export_function_params_and_body
       free_names_of_params_and_body_ids ]
 
 let map_result_types ({ code_metadata; _ } as t) ~f =
-  { t with code_metadata = Code_metadata.map_result_types code_metadata ~f }
+  let code_metadata' = Code_metadata.map_result_types code_metadata ~f in
+  if code_metadata == code_metadata'
+  then t
+  else { t with code_metadata = code_metadata' }
 
 let free_names_of_params_and_body t = t.free_names_of_params_and_body

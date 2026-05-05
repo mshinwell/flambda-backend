@@ -1,46 +1,42 @@
-[@@@ocaml.warning "+a-4-30-40-41-42"]
+[@@@ocaml.warning "+a-30-40-41-42"]
 
 open Regalloc_utils
+module DLL = Oxcaml_utils.Doubly_linked_list
 
-val ls_debug : bool
+val log : ?no_eol:unit -> ('a, Format.formatter, unit) format -> 'a
 
-val ls_verbose : bool Lazy.t
+val equal_list_dll : ('a -> 'a -> bool) -> 'a list -> 'a DLL.t -> bool
 
-val ls_invariants : bool Lazy.t
+val indent : unit -> unit
 
-val log :
-  indent:int -> ?no_eol:unit -> ('a, Format.formatter, unit) format -> 'a
+val dedent : unit -> unit
+
+val reset_indentation : unit -> unit
 
 val log_body_and_terminator :
-  indent:int ->
   Cfg.basic_instruction_list ->
   Cfg.terminator Cfg.instruction ->
   liveness ->
   unit
 
-val log_cfg_with_liveness : indent:int -> Cfg_with_liveness.t -> unit
+val log_cfg_with_infos : Cfg_with_infos.t -> unit
 
-module Order : sig
-  type t =
-    | Layout (* Order given by iterating over the CFG layout. *)
-    | DFS (* Order computed by a depth-first search from the entry point. *)
+(** Versions that display ls_order instead of instruction IDs *)
+val log_body_and_terminator_with_ls_order :
+  (InstructionId.t -> int) ->
+  Cfg.basic_instruction_list ->
+  Cfg.terminator Cfg.instruction ->
+  liveness ->
+  unit
 
-  val all : t list
-
-  val to_string : t -> string
-
-  val value : t Lazy.t
-end
-
-val iter_cfg_order :
-  Cfg_with_layout.t -> Order.t -> f:(Cfg.basic_block -> unit) -> unit
+val log_cfg_with_infos_with_ls_order :
+  (InstructionId.t -> int) -> Cfg_with_infos.t -> unit
 
 (* The [trap_handler] parameter to the [instruction] and [terminator] functions
    is set to [true] iff the instruction is the first one of a block which is a
    trap handler. *)
-val iter_instructions_order :
+val iter_instructions_dfs :
   Cfg_with_layout.t ->
-  Order.t ->
   instruction:(trap_handler:bool -> Cfg.basic Cfg.instruction -> unit) ->
   terminator:(trap_handler:bool -> Cfg.terminator Cfg.instruction -> unit) ->
   unit
@@ -56,11 +52,11 @@ module Range : sig
 
   val print : Format.formatter -> t -> unit
 
-  val overlap : t list -> t list -> bool
+  val overlap : t DLL.t -> t DLL.t -> bool
 
-  val is_live : t list -> pos:int -> bool
+  val is_live : t DLL.t -> pos:int -> bool
 
-  val remove_expired : t list -> pos:int -> t list
+  val remove_expired : t DLL.t -> pos:int -> unit
 end
 
 module Interval : sig
@@ -69,8 +65,10 @@ module Interval : sig
     { reg : Reg.t;
       mutable begin_ : int;
       mutable end_ : int;
-      mutable ranges : Range.t list
+      ranges : Range.t DLL.t
     }
+
+  val equal : t -> t -> bool
 
   val copy : t -> t
 
@@ -82,19 +80,21 @@ module Interval : sig
 
   val remove_expired : t -> pos:int -> unit
 
-  module List : sig
-    val release_expired_fixed : t list -> pos:int -> t list
+  module DLL : sig
+    val print : Format.formatter -> t DLL.t -> unit
 
-    val insert_sorted : t list -> t -> t list
+    val release_expired_fixed : t DLL.t -> pos:int -> unit
+
+    val insert_sorted : t DLL.t -> t -> unit
   end
 end
 
 module ClassIntervals : sig
-  (* Similar to [Linscan.class_intervals] (in "backend/linscan.mln"). *)
+  (* Similar to [Linscan.class_intervals] (in "backend/linscan.ml"). *)
   type t =
-    { mutable fixed : Interval.t list;
-      mutable active : Interval.t list;
-      mutable inactive : Interval.t list
+    { fixed_dll : Interval.t DLL.t;
+      active_dll : Interval.t DLL.t;
+      inactive_dll : Interval.t DLL.t
     }
 
   val make : unit -> t
@@ -108,6 +108,6 @@ module ClassIntervals : sig
   val release_expired_intervals : t -> pos:int -> unit
 end
 
-val log_interval : indent:int -> kind:string -> Interval.t -> unit
+val log_interval : kind:string -> Interval.t -> unit
 
-val log_intervals : indent:int -> kind:string -> Interval.t list -> unit
+val log_interval_dll : kind:string -> Interval.t DLL.t -> unit

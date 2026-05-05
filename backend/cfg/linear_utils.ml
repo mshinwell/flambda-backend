@@ -23,20 +23,23 @@
  * SOFTWARE.                                                                      *
  *                                                                                *
  **********************************************************************************)
-[@@@ocaml.warning "+a-30-40-41-42"]
+[@@@ocaml.warning "+a-40-41-42"]
+
+open! Int_replace_polymorphic_compare [@@ocaml.warning "-66"]
 
 type labelled_insn =
   { label : Label.t;
     insn : Linear.instruction
   }
 
-let labelled_insn_end = { label = -1; insn = Linear.end_instr }
+let labelled_insn_end = { label = Label.none; insn = Linear.end_instr }
 
 let rec defines_label (i : Linear.instruction) =
   match i.desc with
   | Lend | Llabel _ -> true
   | Ladjust_stack_offset _ -> defines_label i.next
-  | Lprologue | Lop _ | Lreloadretaddr | Lreturn | Lbranch _ | Lcondbranch _
-  | Lcondbranch3 _ | Lswitch _ | Lentertrap | Lpushtrap _ | Lpoptrap | Lraise _
+  | Lprologue | Lepilogue_open | Lepilogue_close | Lop _ | Lcall_op _
+  | Lreloadretaddr | Lreturn | Lbranch _ | Lcondbranch _ | Lcondbranch3 _
+  | Lswitch _ | Lentertrap | Lpushtrap _ | Lpoptrap _ | Lraise _ | Lstackcheck _
     ->
     false

@@ -47,20 +47,20 @@ end
 
 (** Create an application expression. *)
 val create :
-  callee:Simple.t ->
+  callee:Simple.t option ->
   continuation:Result_continuation.t ->
   Exn_continuation.t ->
   args:Simple.t list ->
-  args_arity:Flambda_arity.t ->
-  return_arity:Flambda_arity.t ->
+  args_arity:[`Complex] Flambda_arity.t ->
+  return_arity:[`Unarized] Flambda_arity.t ->
   call_kind:Call_kind.t ->
+  alloc_mode:Alloc_mode.For_applications.t ->
   Debuginfo.t ->
   inlined:Inlined_attribute.t ->
   inlining_state:Inlining_state.t ->
   probe:Probe.t ->
   position:Position.t ->
   relative_history:Inlining_history.Relative.t ->
-  region:Variable.t ->
   t
 
 (* CR mshinwell: This doesn't really make sense for C calls; we should have a
@@ -71,20 +71,22 @@ val create :
    probes *)
 
 (** The function or method being applied. *)
-val callee : t -> Simple.t
+val callee : t -> Simple.t option
 
 (** The arguments of the function or method being applied. *)
 val args : t -> Simple.t list
 
 (** The arity of the arguments being applied. *)
-val args_arity : t -> Flambda_arity.t
+val args_arity : t -> [`Complex] Flambda_arity.t
 
 (** The arity of the result(s) of the application. *)
-val return_arity : t -> Flambda_arity.t
+val return_arity : t -> [`Unarized] Flambda_arity.t
 
 (** Information about what kind of call is involved (direct function call,
     method call, etc). *)
 val call_kind : t -> Call_kind.t
+
+val alloc_mode : t -> Alloc_mode.For_applications.t
 
 (** Where to send the result of the application. *)
 val continuation : t -> Result_continuation.t
@@ -102,6 +104,8 @@ val inlined : t -> Inlined_attribute.t
 (** Whether the call was marked [@nontail] *)
 val position : t -> Position.t
 
+val erase_callee : t -> t
+
 (** Change the return continuation of an application. *)
 val with_continuation : t -> Result_continuation.t -> t
 
@@ -110,7 +114,7 @@ val with_continuations : t -> Result_continuation.t -> Exn_continuation.t -> t
 val with_exn_continuation : t -> Exn_continuation.t -> t
 
 (** Change the arguments of an application *)
-val with_args : t -> Simple.t list -> args_arity:Flambda_arity.t -> t
+val with_args : t -> Simple.t list -> args_arity:[`Complex] Flambda_arity.t -> t
 
 (** Change the call kind of an application. *)
 val with_call_kind : t -> Call_kind.t -> t
@@ -126,8 +130,5 @@ val relative_history : t -> Inlining_history.Relative.t
 (** Returns [true] if the application returns to the caller, [false] if it is
     non terminating. *)
 val returns : t -> bool
-
-(** The local allocation region for this application. *)
-val region : t -> Variable.t
 
 val with_inlined_attribute : t -> Inlined_attribute.t -> t

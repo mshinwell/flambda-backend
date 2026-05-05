@@ -9,6 +9,7 @@
   is_flambda_backend
   build_m32_from_upstream
   stack_allocation_by_default
+  supports_cached_generated_functions
   ))
  (features (
    normal
@@ -22,5 +23,10 @@
    perf_demangled_symbols
    stack_allocation
    poll_insertion
+   runtime5
+   address_sanitizer
+   stack_checks
+   multidomain
+   llvm
    ))
  )

@@ -29,13 +29,25 @@ module Expanded_type : sig
 
   val create_naked_immediate : Type_grammar.head_of_kind_naked_immediate -> t
 
+  val create_naked_float32 : Type_grammar.head_of_kind_naked_float32 -> t
+
   val create_naked_float : Type_grammar.head_of_kind_naked_float -> t
+
+  val create_naked_int8 : Type_grammar.head_of_kind_naked_int8 -> t
+
+  val create_naked_int16 : Type_grammar.head_of_kind_naked_int16 -> t
 
   val create_naked_int32 : Type_grammar.head_of_kind_naked_int32 -> t
 
   val create_naked_int64 : Type_grammar.head_of_kind_naked_int64 -> t
 
   val create_naked_nativeint : Type_grammar.head_of_kind_naked_nativeint -> t
+
+  val create_naked_vec128 : Type_grammar.head_of_kind_naked_vec128 -> t
+
+  val create_naked_vec256 : Type_grammar.head_of_kind_naked_vec256 -> t
+
+  val create_naked_vec512 : Type_grammar.head_of_kind_naked_vec512 -> t
 
   val create_rec_info : Type_grammar.head_of_kind_rec_info -> t
 
@@ -45,6 +57,8 @@ module Expanded_type : sig
 
   val create_unknown : Flambda_kind.t -> t
 
+  val create_const : Reg_width_const.t -> t
+
   val bottom_like : t -> t
 
   val unknown_like : t -> t
@@ -53,15 +67,23 @@ module Expanded_type : sig
 
   val is_unknown : t -> bool
 
+  val is_unknown_maybe_null : t -> bool
+
   val to_type : t -> Type_grammar.t
 
   type descr = private
     | Value of Type_grammar.head_of_kind_value
     | Naked_immediate of Type_grammar.head_of_kind_naked_immediate
+    | Naked_float32 of Type_grammar.head_of_kind_naked_float32
     | Naked_float of Type_grammar.head_of_kind_naked_float
+    | Naked_int8 of Type_grammar.head_of_kind_naked_int8
+    | Naked_int16 of Type_grammar.head_of_kind_naked_int16
     | Naked_int32 of Type_grammar.head_of_kind_naked_int32
     | Naked_int64 of Type_grammar.head_of_kind_naked_int64
     | Naked_nativeint of Type_grammar.head_of_kind_naked_nativeint
+    | Naked_vec128 of Type_grammar.head_of_kind_naked_vec128
+    | Naked_vec256 of Type_grammar.head_of_kind_naked_vec256
+    | Naked_vec512 of Type_grammar.head_of_kind_naked_vec512
     | Rec_info of Type_grammar.head_of_kind_rec_info
     | Region of Type_grammar.head_of_kind_region
 
@@ -71,14 +93,25 @@ module Expanded_type : sig
     | Value of Type_grammar.head_of_kind_value Or_unknown_or_bottom.t
     | Naked_immediate of
         Type_grammar.head_of_kind_naked_immediate Or_unknown_or_bottom.t
+    | Naked_float32 of
+        Type_grammar.head_of_kind_naked_float32 Or_unknown_or_bottom.t
     | Naked_float of
         Type_grammar.head_of_kind_naked_float Or_unknown_or_bottom.t
+    | Naked_int8 of Type_grammar.head_of_kind_naked_int8 Or_unknown_or_bottom.t
+    | Naked_int16 of
+        Type_grammar.head_of_kind_naked_int16 Or_unknown_or_bottom.t
     | Naked_int32 of
         Type_grammar.head_of_kind_naked_int32 Or_unknown_or_bottom.t
     | Naked_int64 of
         Type_grammar.head_of_kind_naked_int64 Or_unknown_or_bottom.t
     | Naked_nativeint of
         Type_grammar.head_of_kind_naked_nativeint Or_unknown_or_bottom.t
+    | Naked_vec128 of
+        Type_grammar.head_of_kind_naked_vec128 Or_unknown_or_bottom.t
+    | Naked_vec256 of
+        Type_grammar.head_of_kind_naked_vec256 Or_unknown_or_bottom.t
+    | Naked_vec512 of
+        Type_grammar.head_of_kind_naked_vec512 Or_unknown_or_bottom.t
     | Rec_info of Type_grammar.head_of_kind_rec_info Or_unknown_or_bottom.t
     | Region of Type_grammar.head_of_kind_region Or_unknown_or_bottom.t
 
@@ -87,10 +120,16 @@ end = struct
   type descr =
     | Value of TG.head_of_kind_value
     | Naked_immediate of TG.head_of_kind_naked_immediate
+    | Naked_float32 of TG.head_of_kind_naked_float32
     | Naked_float of TG.head_of_kind_naked_float
+    | Naked_int8 of TG.head_of_kind_naked_int8
+    | Naked_int16 of TG.head_of_kind_naked_int16
     | Naked_int32 of TG.head_of_kind_naked_int32
     | Naked_int64 of TG.head_of_kind_naked_int64
     | Naked_nativeint of TG.head_of_kind_naked_nativeint
+    | Naked_vec128 of TG.head_of_kind_naked_vec128
+    | Naked_vec256 of TG.head_of_kind_naked_vec256
+    | Naked_vec512 of TG.head_of_kind_naked_vec512
     | Rec_info of TG.head_of_kind_rec_info
     | Region of TG.head_of_kind_region
 
@@ -106,8 +145,17 @@ end = struct
   let create_naked_immediate head =
     { kind = K.naked_immediate; descr = Ok (Naked_immediate head) }
 
+  let create_naked_float32 head =
+    { kind = K.naked_float32; descr = Ok (Naked_float32 head) }
+
   let create_naked_float head =
     { kind = K.naked_float; descr = Ok (Naked_float head) }
+
+  let create_naked_int8 head =
+    { kind = K.naked_int8; descr = Ok (Naked_int8 head) }
+
+  let create_naked_int16 head =
+    { kind = K.naked_int16; descr = Ok (Naked_int16 head) }
 
   let create_naked_int32 head =
     { kind = K.naked_int32; descr = Ok (Naked_int32 head) }
@@ -118,6 +166,15 @@ end = struct
   let create_naked_nativeint head =
     { kind = K.naked_nativeint; descr = Ok (Naked_nativeint head) }
 
+  let create_naked_vec128 head =
+    { kind = K.naked_vec128; descr = Ok (Naked_vec128 head) }
+
+  let create_naked_vec256 head =
+    { kind = K.naked_vec256; descr = Ok (Naked_vec256 head) }
+
+  let create_naked_vec512 head =
+    { kind = K.naked_vec512; descr = Ok (Naked_vec512 head) }
+
   let create_rec_info head = { kind = K.rec_info; descr = Ok (Rec_info head) }
 
   let create_region head = { kind = K.region; descr = Ok (Region head) }
@@ -125,6 +182,30 @@ end = struct
   let create_bottom kind = { kind; descr = Bottom }
 
   let create_unknown kind = { kind; descr = Unknown }
+
+  let create_const const =
+    match Reg_width_const.descr const with
+    | Naked_immediate i ->
+      create_naked_immediate
+        (TG.Head_of_kind_naked_immediate.create_naked_immediate i)
+    | Tagged_immediate i ->
+      create_value (TG.Head_of_kind_value.create_tagged_immediate i)
+    | Naked_float32 f ->
+      create_naked_float32 (TG.Head_of_kind_naked_float32.create f)
+    | Naked_float f -> create_naked_float (TG.Head_of_kind_naked_float.create f)
+    | Naked_int8 i -> create_naked_int8 (TG.Head_of_kind_naked_int8.create i)
+    | Naked_int16 i -> create_naked_int16 (TG.Head_of_kind_naked_int16.create i)
+    | Naked_int32 i -> create_naked_int32 (TG.Head_of_kind_naked_int32.create i)
+    | Naked_int64 i -> create_naked_int64 (TG.Head_of_kind_naked_int64.create i)
+    | Naked_nativeint i ->
+      create_naked_nativeint (TG.Head_of_kind_naked_nativeint.create i)
+    | Naked_vec128 i ->
+      create_naked_vec128 (TG.Head_of_kind_naked_vec128.create i)
+    | Naked_vec256 i ->
+      create_naked_vec256 (TG.Head_of_kind_naked_vec256.create i)
+    | Naked_vec512 i ->
+      create_naked_vec512 (TG.Head_of_kind_naked_vec512.create i)
+    | Null -> create_value TG.Head_of_kind_value.null
 
   let bottom_like t = create_bottom t.kind
 
@@ -135,6 +216,17 @@ end = struct
 
   let is_unknown t =
     match t.descr with Unknown -> true | Bottom | Ok _ -> false
+
+  let is_unknown_maybe_null t =
+    match t.descr with
+    | Unknown | Ok (Value { is_null = _; non_null = Unknown }) -> true
+    | Bottom
+    | Ok
+        ( Value _ | Naked_immediate _ | Naked_float32 _ | Naked_float _
+        | Naked_int8 _ | Naked_int16 _ | Naked_int32 _ | Naked_int64 _
+        | Naked_nativeint _ | Naked_vec128 _ | Naked_vec256 _ | Naked_vec512 _
+        | Rec_info _ | Region _ ) ->
+      false
 
   let of_non_alias_type ?coercion ty : t =
     match TG.descr ty with
@@ -156,6 +248,15 @@ end = struct
         match TG.apply_coercion_head_of_kind_naked_immediate head coercion with
         | Bottom -> create_bottom K.naked_immediate
         | Ok head -> create_naked_immediate head))
+    | Naked_float32 Unknown -> create_unknown K.naked_float32
+    | Naked_float32 Bottom -> create_bottom K.naked_float32
+    | Naked_float32 (Ok (No_alias head)) -> (
+      match coercion with
+      | None -> create_naked_float32 head
+      | Some coercion -> (
+        match TG.apply_coercion_head_of_kind_naked_float32 head coercion with
+        | Bottom -> create_bottom K.naked_float32
+        | Ok head -> create_naked_float32 head))
     | Naked_float Unknown -> create_unknown K.naked_float
     | Naked_float Bottom -> create_bottom K.naked_float
     | Naked_float (Ok (No_alias head)) -> (
@@ -165,6 +266,51 @@ end = struct
         match TG.apply_coercion_head_of_kind_naked_float head coercion with
         | Bottom -> create_bottom K.naked_float
         | Ok head -> create_naked_float head))
+    | Naked_vec128 Unknown -> create_unknown K.naked_vec128
+    | Naked_vec128 Bottom -> create_bottom K.naked_vec128
+    | Naked_vec128 (Ok (No_alias head)) -> (
+      match coercion with
+      | None -> create_naked_vec128 head
+      | Some coercion -> (
+        match TG.apply_coercion_head_of_kind_naked_vec128 head coercion with
+        | Bottom -> create_bottom K.naked_vec128
+        | Ok head -> create_naked_vec128 head))
+    | Naked_vec256 Unknown -> create_unknown K.naked_vec256
+    | Naked_vec256 Bottom -> create_bottom K.naked_vec256
+    | Naked_vec256 (Ok (No_alias head)) -> (
+      match coercion with
+      | None -> create_naked_vec256 head
+      | Some coercion -> (
+        match TG.apply_coercion_head_of_kind_naked_vec256 head coercion with
+        | Bottom -> create_bottom K.naked_vec256
+        | Ok head -> create_naked_vec256 head))
+    | Naked_vec512 Unknown -> create_unknown K.naked_vec512
+    | Naked_vec512 Bottom -> create_bottom K.naked_vec512
+    | Naked_vec512 (Ok (No_alias head)) -> (
+      match coercion with
+      | None -> create_naked_vec512 head
+      | Some coercion -> (
+        match TG.apply_coercion_head_of_kind_naked_vec512 head coercion with
+        | Bottom -> create_bottom K.naked_vec512
+        | Ok head -> create_naked_vec512 head))
+    | Naked_int8 Unknown -> create_unknown K.naked_int8
+    | Naked_int8 Bottom -> create_bottom K.naked_int8
+    | Naked_int8 (Ok (No_alias head)) -> (
+      match coercion with
+      | None -> create_naked_int8 head
+      | Some coercion -> (
+        match TG.apply_coercion_head_of_kind_naked_int8 head coercion with
+        | Bottom -> create_bottom K.naked_int8
+        | Ok head -> create_naked_int8 head))
+    | Naked_int16 Unknown -> create_unknown K.naked_int16
+    | Naked_int16 Bottom -> create_bottom K.naked_int16
+    | Naked_int16 (Ok (No_alias head)) -> (
+      match coercion with
+      | None -> create_naked_int16 head
+      | Some coercion -> (
+        match TG.apply_coercion_head_of_kind_naked_int16 head coercion with
+        | Bottom -> create_bottom K.naked_int16
+        | Ok head -> create_naked_int16 head))
     | Naked_int32 Unknown -> create_unknown K.naked_int32
     | Naked_int32 Bottom -> create_bottom K.naked_int32
     | Naked_int32 (Ok (No_alias head)) -> (
@@ -213,6 +359,12 @@ end = struct
     | Value (Ok (Equals _))
     | Naked_immediate (Ok (Equals _))
     | Naked_float (Ok (Equals _))
+    | Naked_float32 (Ok (Equals _))
+    | Naked_vec128 (Ok (Equals _))
+    | Naked_vec256 (Ok (Equals _))
+    | Naked_vec512 (Ok (Equals _))
+    | Naked_int8 (Ok (Equals _))
+    | Naked_int16 (Ok (Equals _))
     | Naked_int32 (Ok (Equals _))
     | Naked_int64 (Ok (Equals _))
     | Naked_nativeint (Ok (Equals _))
@@ -228,10 +380,16 @@ end = struct
       match descr with
       | Value head -> TG.create_from_head_value head
       | Naked_immediate head -> TG.create_from_head_naked_immediate head
+      | Naked_float32 head -> TG.create_from_head_naked_float32 head
       | Naked_float head -> TG.create_from_head_naked_float head
+      | Naked_int8 head -> TG.create_from_head_naked_int8 head
+      | Naked_int16 head -> TG.create_from_head_naked_int16 head
       | Naked_int32 head -> TG.create_from_head_naked_int32 head
       | Naked_int64 head -> TG.create_from_head_naked_int64 head
       | Naked_nativeint head -> TG.create_from_head_naked_nativeint head
+      | Naked_vec128 head -> TG.create_from_head_naked_vec128 head
+      | Naked_vec256 head -> TG.create_from_head_naked_vec256 head
+      | Naked_vec512 head -> TG.create_from_head_naked_vec512 head
       | Rec_info head -> TG.create_from_head_rec_info head
       | Region head -> TG.create_from_head_region head)
 
@@ -239,14 +397,25 @@ end = struct
     | Value of Type_grammar.head_of_kind_value Or_unknown_or_bottom.t
     | Naked_immediate of
         Type_grammar.head_of_kind_naked_immediate Or_unknown_or_bottom.t
+    | Naked_float32 of
+        Type_grammar.head_of_kind_naked_float32 Or_unknown_or_bottom.t
     | Naked_float of
         Type_grammar.head_of_kind_naked_float Or_unknown_or_bottom.t
+    | Naked_int8 of Type_grammar.head_of_kind_naked_int8 Or_unknown_or_bottom.t
+    | Naked_int16 of
+        Type_grammar.head_of_kind_naked_int16 Or_unknown_or_bottom.t
     | Naked_int32 of
         Type_grammar.head_of_kind_naked_int32 Or_unknown_or_bottom.t
     | Naked_int64 of
         Type_grammar.head_of_kind_naked_int64 Or_unknown_or_bottom.t
     | Naked_nativeint of
         Type_grammar.head_of_kind_naked_nativeint Or_unknown_or_bottom.t
+    | Naked_vec128 of
+        Type_grammar.head_of_kind_naked_vec128 Or_unknown_or_bottom.t
+    | Naked_vec256 of
+        Type_grammar.head_of_kind_naked_vec256 Or_unknown_or_bottom.t
+    | Naked_vec512 of
+        Type_grammar.head_of_kind_naked_vec512 Or_unknown_or_bottom.t
     | Rec_info of Type_grammar.head_of_kind_rec_info Or_unknown_or_bottom.t
     | Region of Type_grammar.head_of_kind_region Or_unknown_or_bottom.t
 
@@ -256,28 +425,46 @@ end = struct
       match t.kind with
       | Value -> Value Unknown
       | Naked_number Naked_immediate -> Naked_immediate Unknown
+      | Naked_number Naked_float32 -> Naked_float32 Unknown
       | Naked_number Naked_float -> Naked_float Unknown
+      | Naked_number Naked_int8 -> Naked_int8 Unknown
+      | Naked_number Naked_int16 -> Naked_int16 Unknown
       | Naked_number Naked_int32 -> Naked_int32 Unknown
       | Naked_number Naked_int64 -> Naked_int64 Unknown
       | Naked_number Naked_nativeint -> Naked_nativeint Unknown
+      | Naked_number Naked_vec128 -> Naked_vec128 Unknown
+      | Naked_number Naked_vec256 -> Naked_vec256 Unknown
+      | Naked_number Naked_vec512 -> Naked_vec512 Unknown
       | Rec_info -> Rec_info Unknown
       | Region -> Region Unknown)
     | Bottom -> (
       match t.kind with
       | Value -> Value Bottom
       | Naked_number Naked_immediate -> Naked_immediate Bottom
+      | Naked_number Naked_float32 -> Naked_float32 Bottom
       | Naked_number Naked_float -> Naked_float Bottom
+      | Naked_number Naked_int8 -> Naked_int8 Bottom
+      | Naked_number Naked_int16 -> Naked_int16 Bottom
       | Naked_number Naked_int32 -> Naked_int32 Bottom
       | Naked_number Naked_int64 -> Naked_int64 Bottom
       | Naked_number Naked_nativeint -> Naked_nativeint Bottom
+      | Naked_number Naked_vec128 -> Naked_vec128 Bottom
+      | Naked_number Naked_vec256 -> Naked_vec256 Bottom
+      | Naked_number Naked_vec512 -> Naked_vec512 Bottom
       | Rec_info -> Rec_info Bottom
       | Region -> Region Bottom)
     | Ok (Value head) -> Value (Ok head)
     | Ok (Naked_immediate head) -> Naked_immediate (Ok head)
+    | Ok (Naked_float32 head) -> Naked_float32 (Ok head)
     | Ok (Naked_float head) -> Naked_float (Ok head)
+    | Ok (Naked_int8 head) -> Naked_int8 (Ok head)
+    | Ok (Naked_int16 head) -> Naked_int16 (Ok head)
     | Ok (Naked_int32 head) -> Naked_int32 (Ok head)
     | Ok (Naked_int64 head) -> Naked_int64 (Ok head)
     | Ok (Naked_nativeint head) -> Naked_nativeint (Ok head)
+    | Ok (Naked_vec128 head) -> Naked_vec128 (Ok head)
+    | Ok (Naked_vec256 head) -> Naked_vec256 (Ok head)
+    | Ok (Naked_vec512 head) -> Naked_vec512 (Ok head)
     | Ok (Rec_info head) -> Rec_info (Ok head)
     | Ok (Region head) -> Region (Ok head)
 end
@@ -297,23 +484,7 @@ let expand_head_of_alias_type env kind
         "Canonical alias %a should never have [Equals] type %a:@\n\n%a"
         Simple.print simple TG.print ty TE.print env
   in
-  Simple.pattern_match simple
-    ~const:(fun const ->
-      match Reg_width_const.descr const with
-      | Naked_immediate i ->
-        ET.create_naked_immediate
-          (TG.Head_of_kind_naked_immediate.create_naked_immediate i)
-      | Tagged_immediate i ->
-        ET.create_value (TG.Head_of_kind_value.create_tagged_immediate i)
-      | Naked_float f ->
-        ET.create_naked_float (TG.Head_of_kind_naked_float.create f)
-      | Naked_int32 i ->
-        ET.create_naked_int32 (TG.Head_of_kind_naked_int32.create i)
-      | Naked_int64 i ->
-        ET.create_naked_int64 (TG.Head_of_kind_naked_int64.create i)
-      | Naked_nativeint i ->
-        ET.create_naked_nativeint (TG.Head_of_kind_naked_nativeint.create i))
-    ~name
+  Simple.pattern_match simple ~const:ET.create_const ~name
 
 let expand_head0 env ty ~known_canonical_simple_at_in_types_mode =
   match TG.get_alias_exn ty with
@@ -328,9 +499,9 @@ let expand_head0 env ty ~known_canonical_simple_at_in_types_mode =
       ET.of_non_alias_type (MTC.unknown (TG.kind ty)))
 
 let expand_head env ty =
-  match TG.get_alias_exn ty with
-  | exception Not_found -> ET.of_non_alias_type ty
-  | simple -> (
+  match TG.get_alias_opt ty with
+  | None -> ET.of_non_alias_type ty
+  | Some simple -> (
     let kind = TG.kind ty in
     match
       TE.get_canonical_simple_exn env simple ~min_name_mode:Name_mode.in_types
@@ -347,6 +518,13 @@ let expand_head env ty =
 let is_bottom env t = ET.is_bottom (expand_head env t)
 
 let is_unknown env t = ET.is_unknown (expand_head env t)
+
+let is_unknown_maybe_null env t = ET.is_unknown_maybe_null (expand_head env t)
+
+let is_alias_to_a_symbol t =
+  match TG.get_alias_opt t with
+  | None -> false
+  | Some simple -> Simple.is_symbol simple
 
 let missing_kind env free_names =
   Name_occurrences.fold_variables free_names ~init:false
@@ -389,8 +567,8 @@ let make_suitable_for_environment env (to_erase : to_erase) bind_to_and_types =
         then
           Misc.fatal_errorf
             "Variable to be bound %a is expected to already be\n\
-            \   bound in the [suitable_for] environment:@ %a" Name.print bind_to
-            TE.print suitable_for)
+            \   bound in the [suitable_for] environment:@ %a"
+            Name.print bind_to TE.print suitable_for)
       bind_to_and_types
   | All_variables_except _ -> ());
   (* Do a quick free variables check first to try to catch easy cases. *)
@@ -440,15 +618,16 @@ let make_suitable_for_environment env (to_erase : to_erase) bind_to_and_types =
         in
         Name_occurrences.fold_variables free_vars ~init:([], [], [])
           ~f:(fun
-               (( unavailable_vars_renamed,
-                  unavailable_vars_expanded,
-                  unavailable_vars_removed ) as unavailable_vars)
-               var
-             ->
+              (( unavailable_vars_renamed,
+                 unavailable_vars_expanded,
+                 unavailable_vars_removed ) as unavailable_vars)
+              var
+            ->
             if erase var
             then
-              if Name_occurrences.mem_var free_vars_except_through_value_slots
-                   var
+              if
+                Name_occurrences.mem_var free_vars_except_through_value_slots
+                  var
               then
                 match Name_occurrences.count_variable free_vars var with
                 | Zero ->

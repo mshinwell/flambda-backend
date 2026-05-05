@@ -26,7 +26,7 @@ let is_colour_enabled =
       ((* This avoids having to alter misc.ml *)
        let buf = Buffer.create 10 in
        let ppf = Format.formatter_of_buffer buf in
-       Misc.Color.set_color_tag_handling ppf;
+       Misc.Style.set_tag_handling ppf;
        Format.fprintf ppf "@{<error>@}%!";
        String.length (Buffer.contents buf) > 0)
   in
@@ -102,6 +102,8 @@ let prim_neither ppf = push ~fg:130 ppf
 
 let naked_number ppf = push ~fg:70 ppf
 
+let unboxed_product ppf = push ~fg:198 ppf
+
 let tagged_immediate ppf = push ~fg:70 ppf
 
 let constructor ppf = push ~fg:69 ppf
@@ -159,3 +161,5 @@ let elide ppf = push ~fg:243 ppf
 let each_file ppf = push ~fg:51 ppf
 
 let lambda = expr_keyword
+
+let effect_ ppf = push ~fg:46 ppf

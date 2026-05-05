@@ -19,9 +19,16 @@
    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
    SOFTWARE. *)
+
+(* CR mshinwell: fix properly using -enable-dev PR's changes *)
+[@@@ocaml.warning "-27-32"]
+
+open! Int_replace_polymorphic_compare
+
 module String = Misc.Stdlib.String
 module Section_name = X86_proc.Section_name
 module StringMap = X86_binary_emitter.StringMap
+module DLL = Oxcaml_utils.Doubly_linked_list
 
 let isprefix s1 s2 =
   String.length s1 <= String.length s2
@@ -159,33 +166,35 @@ let make_relocation_section sections ~sym_tbl_idx relocation_table
 
 let assemble_one_section ~name instructions =
   let align =
-    List.fold_left
-      (fun acc i ->
-        match i with X86_ast.Align (data, n) when n > acc -> n | _ -> acc)
-      0 instructions
+    DLL.fold_left instructions
+      ~f:(fun acc i ->
+        match i with
+        | X86_ast.Directive (Align { bytes=n; _ }) when n > acc -> n
+        | _ -> acc)
+      ~init:0
   in
   align,
   X86_binary_emitter.assemble_section X64
     { X86_binary_emitter.sec_name = X86_proc.Section_name.to_string name;
-      sec_instrs = Array.of_list instructions
+      sec_instrs = DLL.to_array instructions
     }
 
-let get_sections sections =
-  let sections = Section_name.Tbl.to_seq sections |> List.of_seq in
-  let text_data, others =
-    List.partition
-      (fun (name, _) -> Section_name.is_text_like name || Section_name.is_data_like name)
-      sections
-  in
-  let aux sections acc =
+let get_sections ~delayed sections =
+  let get acc sections =
     List.fold_left (fun acc (name, instructions) ->
-      let instructions = List.rev !instructions in
       Section_name.Map.add name (assemble_one_section ~name instructions) acc)
       acc sections
   in
-  let acc = aux text_data Section_name.Map.empty in
-  Emitaux.Dwarf_helpers.emit_dwarf ();
-  aux others acc
+  (* DWARF sections must be emitted after .text and .data because they
+     contain information that is produced when .text and .data are emitted.
+     For example, DWARF sections need to know the offset of some instructions
+     from the start of the .text section.
+     Additionally, DWARF sections may add relocations to the object file's
+     relocation table. *)
+  let acc = Section_name.Map.empty in
+  let acc = get acc sections in
+  Emitaux.Dwarf_helpers.emit_delayed_dwarf ();
+  get acc (delayed ())
 
 let make_compiler_sections section_table compiler_sections symbol_table
     sh_string_table =
@@ -200,6 +209,10 @@ let make_compiler_sections section_table compiler_sections symbol_table
       then
         make_data section_table name raw_section ~align:(Int64.of_int align)
           sh_string_table
+      else if Section_name.is_note_like name
+      then
+        make_custom_section section_table name raw_section ~sh_type:7
+          (* SHT_NOTE *) sh_string_table
       else
         make_custom_section section_table name raw_section ~sh_type:1
           (* SHT_PROGBITS *) sh_string_table;
@@ -258,8 +271,8 @@ let write buf header section_table symbol_table relocation_tables string_table =
     relocation_tables;
   String_table.write string_table strtab.sh_offset buf
 
-let assemble unix asm output_file =
-  let compiler_sections = get_sections asm in
+let assemble unix ~delayed asm output_file =
+  let compiler_sections = get_sections ~delayed asm in
   let string_table = String_table.create () in
   let sh_string_table = String_table.create () in
   let sections = Section_table.create () in

@@ -139,6 +139,22 @@ module Set_specs = struct
 
   let union_with_self s = Set.equal (Set.union s s) s
 
+  let union_sharing_vs_union s1 s2 =
+    Set.equal (Set.union_sharing s1 s2) (Set.union s1 s2)
+
+  let union_sharing_with_subset s1 s2 =
+    Set.union_sharing s1 (Set.inter s1 s2) == s1
+
+  let union_sharing_with_self s = Set.union_sharing s s == s
+
+  let union_shared_vs_union_sharing s1 s2 =
+    Set.equal (Set.union_shared s1 s2) (Set.union s1 s2)
+
+  let union_shared_with_subset s1 s2 =
+    Set.union_sharing s1 (Set.inter s1 s2) == s1
+
+  let union_shared_with_self s = Set.union_shared s s == s
+
   let inter_valid s1 s2 = Set.valid (Set.inter s1 s2)
 
   let inter s1 s2 =
@@ -156,6 +172,17 @@ module Set_specs = struct
     Set.equal (Set.diff s1 s2) (Set.filter (fun e -> not (Set.mem e s2)) s1)
 
   let diff_with_self s = Set.is_empty (Set.diff s s)
+
+  let diff_sharing_vs_diff s1 s2 =
+    Set.equal (Set.diff_sharing s1 s2) (Set.diff s1 s2)
+
+  let diff_sharing_of_disjoint s1 s2 =
+    Set.diff_sharing s1 (Set.diff s2 s1) == s1
+
+  let diff_shared_vs_diff s1 s2 =
+    Set.equal (Set.diff_shared s1 s2) (Set.diff s1 s2)
+
+  let diff_shared_of_disjoint s1 s2 = Set.diff_shared s1 (Set.diff s2 s1) == s1
 
   let compare_vs_equal s1 s2 = Set.compare s1 s2 = 0 <=> Set.equal s1 s2
 
@@ -281,15 +308,13 @@ module Set_specs = struct
 
   let of_list_then_elements l =
     List.equal Int.equal
-      (l |> Set.of_list |> Set.elements |> List.sort Int.compare)
+      (l |> Set.of_list |> Set.elements)
       (l |> List.sort_uniq Int.compare)
 
   let elements_then_of_list s = Set.equal s (s |> Set.elements |> Set.of_list)
 
   let to_seq s =
-    List.equal Int.equal
-      (s |> Set.to_seq |> List.of_seq |> List.sort Int.compare)
-      (s |> Set.elements |> List.sort Int.compare)
+    List.equal Int.equal (s |> Set.to_seq |> List.of_seq) (s |> Set.elements)
 
   let union_list l =
     Set.equal (Set.union_list l) (List.fold_left Set.union Set.empty l)
@@ -316,9 +341,6 @@ module Map_specs (V : Value) = struct
   let valid m = Map.valid m
 
   let equal_bindings (k1, v1) (k2, v2) = Int.equal k1 k2 && V.equal v1 v2
-
-  let compare_bindings (k1, v1) (k2, v2) =
-    match Int.compare k1 k2 with 0 -> V.compare v1 v2 | c -> c
 
   let find_opt_vs_find k m =
     Map.find_opt k m =? option_of_not_found (Map.find k) m
@@ -528,7 +550,7 @@ module Map_specs (V : Value) = struct
 
   let to_seq_vs_bindings m =
     List.equal equal_bindings
-      (m |> Map.to_seq |> List.of_seq |> List.sort compare_bindings)
+      (m |> Map.to_seq |> List.of_seq)
       (m |> Map.bindings)
 
   let of_list_valid l = Map.valid (Map.of_list l)
@@ -536,7 +558,7 @@ module Map_specs (V : Value) = struct
   module Equality_on_bindings = struct
     let sort_by_key l = List.sort (fun (k1, _) (k2, _) -> Int.compare k1 k2) l
 
-    let sort_and_group_by_key l =
+    let group_by_key l =
       let rec groups l =
         match l with
         | [] -> []
@@ -552,11 +574,11 @@ module Map_specs (V : Value) = struct
           let g, l = group l in
           (k, v :: g) :: groups l
       in
-      groups (sort_by_key l)
+      groups l
 
     let same_bindings_up_to_duplicate_keys l1 l2 =
-      let l1 = l1 |> sort_and_group_by_key in
-      let l2 = l2 |> sort_and_group_by_key in
+      let l1 = l1 |> group_by_key in
+      let l2 = l2 |> group_by_key in
       let rec check l1 l2 =
         match l1, l2 with
         | [], [] -> true
@@ -572,7 +594,9 @@ module Map_specs (V : Value) = struct
   open Equality_on_bindings
 
   let of_list_then_bindings l =
-    same_bindings_up_to_duplicate_keys (l |> Map.of_list |> Map.bindings) l
+    same_bindings_up_to_duplicate_keys
+      (l |> Map.of_list |> Map.bindings)
+      (sort_by_key l)
 
   let bindings_then_of_list m =
     Map.equal V.equal (m |> Map.bindings |> Map.of_list) m
@@ -584,7 +608,7 @@ module Map_specs (V : Value) = struct
   let map_keys f m =
     same_bindings_up_to_duplicate_keys
       (Map.map_keys f m |> Map.bindings)
-      (List.map (fun (k, v) -> f k, v) (m |> Map.bindings))
+      (sort_by_key (List.map (fun (k, v) -> f k, v) (m |> Map.bindings)))
 
   let keys_vs_of_list m =
     Set.equal (Map.keys m) (m |> Map.bindings |> List.map fst |> Set.of_list)
@@ -604,6 +628,28 @@ module Map_specs (V : Value) = struct
     Map.find_opt k1 md =? if Map.mem k1 m2 then None else Some v1
 
   let diff_domains_self m = Map.is_empty (Map.diff_domains m m)
+
+  let diff_valid f m1 m2 = Map.valid (Map.diff f m1 m2)
+
+  let diff_vs_diff_domains m1 m2 =
+    Map.equal V.equal (Map.diff_domains m1 m2)
+      (Map.diff (fun _ _ _ -> None) m1 m2)
+
+  let diff_sharing_vs_diff f m1 m2 =
+    Map.equal V.equal (Map.diff f m1 m2) (Map.diff_sharing f m1 m2)
+
+  let diff_sharing_fst m1 m2 =
+    Map.diff_sharing (fun _key v1 _v2 -> Some v1) m1 m2 == m1
+
+  let diff_shared_vs_diff f m1 m2 =
+    let f k v1 v2 = if v1 == v2 then None else f k v1 v2 in
+    Map.equal V.equal (Map.diff f m1 m2) (Map.diff_shared f m1 m2)
+
+  let diff_shared_phys_eq f m = Map.is_empty (Map.diff_shared f m m)
+
+  let diff_shared_disjoint f m1 m2 =
+    let m2 = Map.diff_domains m2 m1 in
+    Map.diff_shared f m1 m2 == m1
 
   let inter_valid f m1 m2 = Map.valid (Map.inter f m1 m2)
 
@@ -651,6 +697,14 @@ module Map_specs (V : Value) = struct
     Map.equal V.equal (Map.map_sharing f m) (Map.map f m)
 
   let map_sharing_id m = Map.map_sharing (fun v -> v) m == m
+
+  let filter_map_sharing_valid f m = Map.valid (Map.filter_map_sharing f m)
+
+  let filter_map_sharing_vs_filter_map f m =
+    Map.equal V.equal (Map.filter_map_sharing f m) (Map.filter_map f m)
+
+  let filter_map_sharing_id m =
+    Map.filter_map_sharing (fun _k v -> Some v) m == m
 end
 
 (* CR-someday lmaurer: Move the [Abitrary.t] for perms into a separate module
@@ -752,7 +806,8 @@ module Types = struct
   let generate_key =
     Generator.choose
       [ 1, Generator.one_of [0; 1; 2; 3; -1; Int.min_int; Int.max_int];
-        2, Generator.log_int ]
+        1, Generator.log_int;
+        1, Generator.map Generator.log_int ~f:( ~- ) ]
 
   let drop_leading_digits key : key Seq.t =
     let rec next mask : key Seq.node =
@@ -879,8 +934,8 @@ module Types = struct
       ~is_empty:Map.is_empty
       ~mem:(fun (k, _) m -> Map.mem k m)
     |> Arbitrary.map ~f:(fun (m, (k, v)) ->
-           let v = Arbitrary.value val_arb v in
-           Map_and_binding.{ map = m; key = k; value = v })
+        let v = Arbitrary.value val_arb v in
+        Map_and_binding.{ map = m; key = k; value = v })
 
   module Key_container_types :
     Flambda2_algorithms.Container_types.S with type t = int = struct
@@ -928,7 +983,7 @@ module Types = struct
       ~print_element:(print_two_way_binding Key.print Key.print)
       ~is_empty:Perm.is_empty ~mem:(fun (v, _) p -> v != Perm.apply p v)
     |> Arbitrary.map ~f:(fun (p, (v, _)) ->
-           Perm_and_non_fixed_point.{ perm = p; value = v })
+        Perm_and_non_fixed_point.{ perm = p; value = v })
 end
 
 let () =
@@ -974,6 +1029,12 @@ let () =
     c "union is superset of arguments" union_subset [set; set];
     c "union has no extra elements" union_mem [set; set];
     c "union with self" union_with_self [set];
+    c "union_sharing vs. union" union_sharing_vs_union [set; set];
+    c "union_sharing with subset" union_sharing_with_subset [set; set];
+    c "union_sharing with self" union_sharing_with_self [set];
+    c "union_shared vs. union" union_shared_vs_union_sharing [set; set];
+    c "union_shared with subset" union_shared_with_subset [set; set];
+    c "union_shared with self" union_shared_with_self [set];
     c "inter is valid" inter_valid [set; set];
     c "inter" inter [set; set];
     c "inter with self" inter_with_self [set];
@@ -981,6 +1042,10 @@ let () =
     c "diff is valid" diff_valid [set; set];
     c "diff" diff [set; set];
     c "diff with self" diff_with_self [set];
+    c "diff_sharing vs. diff" diff_sharing_vs_diff [set; set];
+    c "diff_sharing of disjoint" diff_sharing_of_disjoint [set; set];
+    c "diff_shared vs. diff" diff_shared_vs_diff [set; set];
+    c "diff_shared of disjoint" diff_shared_of_disjoint [set; set];
     c "compare vs. equal" compare_vs_equal [set; set];
     c "compare is reflexive" compare_refl [set];
     c "compare is antisymmetric" compare_antisym [set; set];
@@ -1044,6 +1109,7 @@ let () =
     in
     let merging_function = Arbitrary.fn3 (Arbitrary.option value) in
     let union_function = Arbitrary.fn3 (Arbitrary.option value) in
+    let diff_function = Arbitrary.fn3 (Arbitrary.option value) in
     let inter_function = Arbitrary.fn3 value in
     let c ?n ?seed name f arbitrary_impls =
       Runner.check runner ~name:("Map: " ^ name) ?n ?seed ~arbitrary_impls ~f
@@ -1120,6 +1186,13 @@ let () =
     c "diff_domains valid" diff_domains_valid [map; map];
     c "diff_domains" diff_domains [map_and_binding; map];
     c "diff_domains of self" diff_domains_self [map];
+    c "diff valid" diff_valid [diff_function; map; map];
+    c "diff vs. diff_domains" diff_vs_diff_domains [map; map];
+    c "diff_sharing vs. diff" diff_sharing_vs_diff [diff_function; map; map];
+    c "diff_sharing of fst" diff_sharing_fst [map; map];
+    c "diff_shared vs. diff" diff_shared_vs_diff [diff_function; map; map];
+    c "diff_shared of phys. eq" diff_shared_phys_eq [diff_function; map];
+    c "diff_shared of disjoint" diff_shared_disjoint [diff_function; map; map];
     c "inter is valid" inter_valid [inter_function; map; map];
     c "inter then find_opt" inter_then_find_opt [inter_function; map; map];
     c "inter vs. filter" inter_vs_filter [inter_function; map; map];
@@ -1132,6 +1205,11 @@ let () =
     c "map_sharing is valid" map_sharing_valid [value_to_value; map];
     c "map_sharing vs. map" map_sharing_vs_map [value_to_value; map];
     c "map_sharing of id" map_sharing_id [map];
+    c "filter_map_sharing is valid" filter_map_sharing_valid
+      [key_and_value_to_value_option; map];
+    c "filter_map_sharing vs. filter_map" filter_map_sharing_vs_filter_map
+      [key_and_value_to_value_option; map];
+    c "filter_map_sharing of id" filter_map_sharing_id [map];
     ()
   in
   let () =

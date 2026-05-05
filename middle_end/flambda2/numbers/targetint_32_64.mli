@@ -22,7 +22,7 @@
     32-bit target platforms) or signed 64-bit integers (on 64-bit target
     platforms). This integer type has exactly the same width as that of a
     pointer type in the C compiler. All arithmetic operations over are taken
-    modulo 2{^32} or 2{^64} depending on the word size of the target
+    modulo 2{^ 32} or 2{^ 64} depending on the word size of the target
     architecture.
 
     {b Warning:} this module is unstable and part of
@@ -33,14 +33,20 @@ type t
 
 type targetint = t
 
-(** The target integer 0.*)
-val zero : t
+(** The target integer 0. *)
+val zero : Target_system.Machine_width.t -> t
 
-(** The target integer 1.*)
-val one : t
+(** The target integer 0, taking the machine width from the argument. (Note that
+    no function is provided to extract a [Machine_width] given a [t], because we
+    can't distinguish between the [Thirty_two] and [Thirty_two_no_gc_bit]
+    cases.) *)
+val zero_like : t -> t
 
-(** The target integer -1.*)
-val minus_one : t
+(** The target integer 1. *)
+val one : Target_system.Machine_width.t -> t
+
+(** The target integer -1. *)
+val minus_one : Target_system.Machine_width.t -> t
 
 (** Unary negation. *)
 val neg : t -> t
@@ -59,51 +65,40 @@ val mul : t -> t -> t
     specified for {!Stdlib.(/)}. *)
 val div : t -> t -> t
 
-(** Same as {!div}, except that arguments and result are interpreted as {e
-    unsigned} integers. *)
+(** Same as {!div}, except that arguments and result are interpreted as
+    {e unsigned} integers. *)
 val unsigned_div : t -> t -> t
 
-(** Integer remainder. If [y] is not zero, the result * of [Targetint_32_64.rem
-    x y] satisfies the following properties: * [Targetint_32_64.zero <=
-    Nativeint.rem x y < Targetint_32_64.abs y] and * [x = Targetint_32_64.add
-    (Targetint_32_64.mul (Targetint_32_64.div x y) y) * (Targetint_32_64.rem x
-    y)]. * If [y = 0], [Targetint_32_64.rem x y] raises [Division_by_zero]. *)
+(** Integer remainder. If [y] is not zero, the result of
+    [Targetint_32_64.rem x y] satisfies the following properties:
+    - [Targetint_32_64.zero <= Nativeint.rem x y < Targetint_32_64.abs y] and
+    - [x = Targetint_32_64.add (Targetint_32_64.mul (Targetint_32_64.div x y) y)
+       * (Targetint_32_64.rem x y)].
+    - If [y = 0], [Targetint_32_64.rem x y] raises [Division_by_zero]. *)
 val rem : t -> t -> t
 
-(** Same as {!rem}, except that arguments and result are interpreted as {e
-    unsigned} integers. *)
+(** Same as {!rem}, except that arguments and result are interpreted as
+    {e unsigned} integers. *)
 val unsigned_rem : t -> t -> t
 
-(** Successor. [Targetint_32_64.succ x] is [Targetint_32_64.add x
-    Targetint_32_64.one]. *)
+(** Successor. [Targetint_32_64.succ x] is
+    [Targetint_32_64.add x Targetint_32_64.one]. *)
 val succ : t -> t
 
-(** Predecessor. [Targetint_32_64.pred x] is [Targetint_32_64.sub x
-    Targetint_32_64.one]. *)
+(** Predecessor. [Targetint_32_64.pred x] is
+    [Targetint_32_64.sub x Targetint_32_64.one]. *)
 val pred : t -> t
 
 (** Return the absolute value of its argument. *)
 val abs : t -> t
 
-(** The size in bits of a target native integer. *)
-val size : int
+(** The greatest representable target integer, either 2{^ 31} - 1 on a 32-bit
+    platform, or 2{^ 63} - 1 on a 64-bit platform. *)
+val max_int : Target_system.Machine_width.t -> t
 
-(** The possible numbers of bits of a target native integer. *)
-type num_bits =
-  | Thirty_two
-  | Sixty_four
-(**)
-
-val num_bits : num_bits
-(* The number of bits of a target native integer. *)
-
-(** The greatest representable target integer, either 2{^31} - 1 on a 32-bit
-    platform, or 2{^63} - 1 on a 64-bit platform. *)
-val max_int : t
-
-(** The smallest representable target integer, either -2{^31} on a 32-bit
-    platform, or -2{^63} on a 64-bit platform. *)
-val min_int : t
+(** The smallest representable target integer, either -2{^ 31} on a 32-bit
+    platform, or -2{^ 63} on a 64-bit platform. *)
+val min_int : Target_system.Machine_width.t -> t
 
 (** Bitwise logical and. *)
 val logand : t -> t -> t
@@ -142,18 +137,18 @@ val shift_right_logical : t -> int -> t
 
 (** Convert the given integer (type [int]) to a target integer (type [t]),
     modulo the target word size. *)
-val of_int : int -> t
+val of_int : Target_system.Machine_width.t -> int -> t
 
 (** Convert the given integer (type [int]) to a target integer (type [t]).
     Raises a fatal error if the conversion is not exact. *)
-val of_int_exn : int -> t
+val of_int_exn : Target_system.Machine_width.t -> int -> t
 
 (** Convert the given target integer (type [t]) to an integer (type [int]). The
     high-order bit is lost during the conversion. *)
 val to_int : t -> int
 
 (** Like [to_int] but will raise an exception if the integer doesn't fit. *)
-val to_int_checked : t -> int
+val to_int_checked : Target_system.Machine_width.t -> t -> int
 
 (** Convert the given floating-point number to a target integer, discarding the
     fractional part (truncate towards 0).
@@ -161,23 +156,23 @@ val to_int_checked : t -> int
     The result of the conversion is undefined if, after truncation, the number
     is outside the range \[{!Targetint_32_64.min_int},
     {!Targetint_32_64.max_int}\]. *)
-val of_float : float -> t
+val of_float : Target_system.Machine_width.t -> float -> t
 
 (** Convert the given target integer to a floating-point number. *)
 val to_float : t -> float
 
 (** Convert the given 32-bit integer (type [int32]) to a target integer. *)
-val of_int32 : int32 -> t
+val of_int32 : Target_system.Machine_width.t -> int32 -> t
 
 (** Convert the given target integer to a 32-bit integer (type [int32]).
 
-    On 64-bit platforms, the 64-bit native integer is taken modulo 2{^32}, i.e.
+    On 64-bit platforms, the 64-bit native integer is taken modulo 2{^ 32}, i.e.
     the top 32 bits are lost. On 32-bit platforms, the conversion is exact. *)
 val to_int32 : t -> int32
 
 (** Convert the given 64-bit integer (type [int64]) to a target integer, modulo
     the target word size. *)
-val of_int64 : int64 -> t
+val of_int64 : Target_system.Machine_width.t -> int64 -> t
 
 (** Convert the given target integer to a 64-bit integer (type [int64]). *)
 val to_int64 : t -> int64
@@ -190,7 +185,7 @@ val to_int64 : t -> int64
     Raise [Failure "int_of_string"] if the given string is not a valid
     representation of an integer, or if the integer represented exceeds the
     range of integers representable in type [nativeint]. *)
-val of_string : string -> t
+val of_string : Target_system.Machine_width.t -> string -> t
 
 (** Return the string representation of its argument, in decimal. *)
 val to_string : t -> string
@@ -199,7 +194,7 @@ val to_string : t -> string
     integers. *)
 val unsigned_compare : t -> t -> int
 
-type repr =
+type repr = private
   | Int32 of int32
   | Int64 of int64
 

@@ -13,7 +13,14 @@
 (*                                                                        *)
 (**************************************************************************)
 
+[@@@ocaml.warning "+a-40-41-42"]
+
 open Cmm
+
+type t =
+  { extcall : expression;
+    builtin_sign_extends : bool
+  }
 
 (** Create a C function call. *)
 val extcall :
@@ -21,20 +28,10 @@ val extcall :
   returns:bool ->
   alloc:bool ->
   is_c_builtin:bool ->
+  effects:Cmm.effects ->
+  coeffects:Cmm.coeffects ->
   ty_args:exttype list ->
   string ->
   machtype ->
   expression list ->
-  expression
-
-(** [cextcall prim args dbg type_of_result] returns Cextcall operation that
-    corresponds to [prim]. If [prim] is a C builtin supported on the target,
-    returns [Cmm.operation] variant for [prim]'s intrinsics. *)
-val cextcall :
-  Primitive.description ->
-  expression list ->
-  Debuginfo.t ->
-  machtype ->
-  exttype list ->
-  bool ->
-  expression
+  t

@@ -1,6 +1,5 @@
 [@@@ocaml.warning "-fragile-match"]
 
-open! Int_replace_polymorphic_compare
 open! Flambda
 
 (* General notes on comparison
@@ -241,10 +240,10 @@ let subst_unary_primitive env (p : Flambda_primitive.unary_primitive) :
     let move_from = subst_function_slot env move_from in
     let move_to = subst_function_slot env move_to in
     Project_function_slot { move_from; move_to }
-  | Project_value_slot { project_from; value_slot; kind } ->
+  | Project_value_slot { project_from; value_slot } ->
     let project_from = subst_function_slot env project_from in
     let value_slot = subst_value_slot env value_slot in
-    Project_value_slot { project_from; value_slot; kind }
+    Project_value_slot { project_from; value_slot }
   | _ -> p
 
 let subst_primitive env (p : Flambda_primitive.t) : Flambda_primitive.t =
@@ -253,15 +252,21 @@ let subst_primitive env (p : Flambda_primitive.t) : Flambda_primitive.t =
     Unary (subst_unary_primitive env unary_primitive, subst_simple env arg)
   | _ -> p
 
-let subst_func_decl env code_id = subst_code_id env code_id
+let subst_func_decl env
+    (code_id : Function_declarations.code_id_in_function_declaration) :
+    Function_declarations.code_id_in_function_declaration =
+  match code_id with
+  | Deleted _ -> code_id
+  | Code_id { code_id; only_full_applications } ->
+    Code_id { code_id = subst_code_id env code_id; only_full_applications }
 
 let subst_func_decls env decls =
   Function_declarations.funs_in_order decls
   |> Function_slot.Lmap.bindings
   |> List.map (fun (function_slot, func_decl) ->
-         let function_slot = subst_function_slot env function_slot in
-         let func_decl = subst_func_decl env func_decl in
-         function_slot, func_decl)
+      let function_slot = subst_function_slot env function_slot in
+      let func_decl = subst_func_decl env func_decl in
+      function_slot, func_decl)
   |> Function_slot.Lmap.of_list |> Function_declarations.create
 
 let subst_set_of_closures env set =
@@ -270,7 +275,7 @@ let subst_set_of_closures env set =
     Set_of_closures.value_slots set
     |> Value_slot.Map.bindings
     |> List.map (fun (var, simple) ->
-           subst_value_slot env var, subst_simple env simple)
+        subst_value_slot env var, subst_simple env simple)
     |> Value_slot.Map.of_list
   in
   let alloc = Set_of_closures.alloc_mode set in
@@ -281,16 +286,16 @@ let subst_rec_info_expr _env ri =
      symbols and other global names *)
   ri
 
-let subst_field env (field : Field_of_static_block.t) =
-  match field with
-  | Symbol symbol -> Field_of_static_block.Symbol (subst_symbol env symbol)
-  | Tagged_immediate _ | Dynamically_computed _ -> field
+let subst_field env field =
+  Simple.With_debuginfo.create
+    (subst_simple env (Simple.With_debuginfo.simple field))
+    (Simple.With_debuginfo.dbg field)
 
 let subst_call_kind env (call_kind : Call_kind.t) : Call_kind.t =
   match call_kind with
-  | Function { function_call = Direct code_id; alloc_mode } ->
+  | Function { function_call = Direct code_id } ->
     let code_id = subst_code_id env code_id in
-    Call_kind.direct_function_call code_id alloc_mode
+    Call_kind.direct_function_call code_id
   | _ -> call_kind
 
 let rec subst_expr env e =
@@ -343,8 +348,8 @@ and subst_pattern env (pattern : Bound_static.Pattern.t) :
     let closure_symbols =
       Function_slot.Lmap.bindings closure_symbols
       |> List.map (fun (function_slot, symbol) ->
-             let function_slot = subst_function_slot env function_slot in
-             function_slot, symbol)
+          let function_slot = subst_function_slot env function_slot in
+          function_slot, symbol)
       |> Function_slot.Lmap.of_list
     in
     Bound_static.Pattern.set_of_closures closure_symbols
@@ -355,9 +360,10 @@ and subst_static_const env (static_const : Static_const_or_code.t) :
     Static_const_or_code.t =
   match static_const with
   | Code code -> Static_const_or_code.create_code (subst_code env code)
-  | Static_const (Block (tag, mut, fields)) ->
+  | Static_const (Block (tag, mut, shape, fields)) ->
     let fields = List.map (subst_field env) fields in
-    Static_const_or_code.create_static_const (Static_const.block tag mut fields)
+    Static_const_or_code.create_static_const
+      (Static_const.block tag mut shape fields)
   | Static_const (Set_of_closures set_of_closures) ->
     Static_const_or_code.create_static_const
       (Static_const.set_of_closures (subst_set_of_closures env set_of_closures))
@@ -381,24 +387,28 @@ and subst_code env (code : Code.t) : Code.t =
 and subst_params_and_body env params_and_body =
   Function_params_and_body.pattern_match params_and_body
     ~f:(fun
-         ~return_continuation
-         ~exn_continuation
-         params
-         ~body
-         ~my_closure
-         ~is_my_closure_used:_
-         ~my_region
-         ~my_depth
-         ~free_names_of_body
-       ->
+        ~return_continuation
+        ~exn_continuation
+        params
+        ~body
+        ~my_closure
+        ~is_my_closure_used:_
+        ~my_alloc_mode
+        ~my_depth
+        ~free_names_of_body
+      ->
       let body = subst_expr env body in
       Function_params_and_body.create ~return_continuation ~exn_continuation
-        params ~body ~my_closure ~my_region ~free_names_of_body ~my_depth)
+        params ~body ~my_closure ~my_alloc_mode ~free_names_of_body ~my_depth)
 
 and subst_let_cont env (let_cont_expr : Let_cont_expr.t) =
   match let_cont_expr with
   | Non_recursive
-      { handler; num_free_occurrences = _; is_applied_with_traps = _ } ->
+      { handler;
+        num_free_occurrences = _;
+        is_applied_with_traps = _;
+        can_be_lifted = _
+      } ->
     Non_recursive_let_cont_handler.pattern_match handler ~f:(fun cont ~body ->
         let body = subst_expr env body in
         let handler =
@@ -412,7 +422,7 @@ and subst_let_cont env (let_cont_expr : Let_cont_expr.t) =
       ~f:(fun ~invariant_params ~body handlers ->
         let body = subst_expr env body in
         let handlers =
-          Continuation.Map.map_sharing (subst_cont_handler env)
+          Continuation.Lmap.map_sharing (subst_cont_handler env)
             (handlers |> Continuation_handlers.to_map)
         in
         Let_cont_expr.create_recursive handlers ~invariant_params ~body)
@@ -421,25 +431,26 @@ and subst_cont_handler env cont_handler =
   Continuation_handler.pattern_match cont_handler ~f:(fun params ~handler ->
       let handler = subst_expr env handler in
       Continuation_handler.create params ~handler ~free_names_of_handler:Unknown
-        ~is_exn_handler:(Continuation_handler.is_exn_handler cont_handler))
+        ~is_exn_handler:(Continuation_handler.is_exn_handler cont_handler)
+        ~is_cold:(Continuation_handler.is_cold cont_handler))
 
 and subst_apply env apply =
-  let callee = subst_simple env (Apply_expr.callee apply) in
+  let callee = Option.map (subst_simple env) (Apply_expr.callee apply) in
   let continuation = Apply_expr.continuation apply in
   let exn_continuation = Apply_expr.exn_continuation apply in
   let args = List.map (subst_simple env) (Apply_expr.args apply) in
   let call_kind = subst_call_kind env (Apply_expr.call_kind apply) in
+  let alloc_mode = Apply_expr.alloc_mode apply in
   let dbg = Apply_expr.dbg apply in
   let inlined = Apply_expr.inlined apply in
   let inlining_state = Apply_expr.inlining_state apply in
   let relative_history = Apply_expr.relative_history apply in
   let position = Apply_expr.position apply in
-  let region = Apply_expr.region apply in
   let args_arity = Apply_expr.args_arity apply in
   let return_arity = Apply_expr.return_arity apply in
-  Apply_expr.create ~callee ~continuation exn_continuation ~args ~call_kind dbg
-    ~inlined ~inlining_state ~probe:None ~position ~relative_history ~region
-    ~args_arity ~return_arity
+  Apply_expr.create ~callee ~continuation exn_continuation ~args ~call_kind
+    ~alloc_mode dbg ~inlined ~inlining_state ~probe:None ~position
+    ~relative_history ~args_arity ~return_arity
   |> Expr.create_apply
 
 and subst_apply_cont env apply_cont =
@@ -452,7 +463,7 @@ and subst_apply_cont env apply_cont =
 and subst_switch env switch =
   let scrutinee = subst_simple env (Switch_expr.scrutinee switch) in
   let arms =
-    Targetint_31_63.Map.map_sharing (subst_apply_cont env)
+    Target_ocaml_int.Map.map_sharing (subst_apply_cont env)
       (Switch_expr.arms switch)
   in
   Expr.create_switch
@@ -548,6 +559,12 @@ let code_ids env code_id1 code_id2 : Code_id.t Comparison.t =
   then Equivalent
   else Different { approximant = code_id1 }
 
+let code_ids_set env code_ids1 code_ids2 : Code_id.Set.t Comparison.t =
+  let code_ids1 = Code_id.Set.map (subst_code_id env) code_ids1 in
+  if Code_id.Set.equal code_ids1 code_ids2
+  then Equivalent
+  else Different { approximant = code_ids1 }
+
 let function_slots env function_slot1 function_slot2 :
     Function_slot.t Comparison.t =
   match Env.find_function_slot env function_slot1 with
@@ -607,7 +624,7 @@ let simple_exprs env simple1 simple2 : Simple.t Comparison.t =
         ~name:(fun name2 ~coercion:coercion2 ->
           pairs ~f1:names ~f2:coercions env (name1, coercion1) (name2, coercion2)
           |> Comparison.map ~f:(fun (name, coercion) ->
-                 Simple.with_coercion (Simple.name name) coercion))
+              Simple.with_coercion (Simple.name name) coercion))
         ~const:(fun _ ->
           Comparison.Different { approximant = subst_simple env simple1 }))
     ~const:(fun const1 ->
@@ -618,6 +635,21 @@ let simple_exprs env simple1 simple2 : Simple.t Comparison.t =
           if Reg_width_const.equal const1 const2
           then Equivalent
           else Different { approximant = simple1 }))
+
+let simples_with_debuginfo env simple_with_dbg1 simple_with_dbg2 :
+    Simple.With_debuginfo.t Comparison.t =
+  let simple1 = Simple.With_debuginfo.simple simple_with_dbg1 in
+  let simple2 = Simple.With_debuginfo.simple simple_with_dbg2 in
+  let dbg1 = Simple.With_debuginfo.dbg simple_with_dbg1 in
+  let dbg2 = Simple.With_debuginfo.dbg simple_with_dbg2 in
+  Comparison.map
+    ~f:(fun (simple, dbg) -> Simple.With_debuginfo.create simple dbg)
+    (pairs ~f1:simple_exprs
+       ~f2:
+         (Comparator.of_predicate (fun dbg1 dbg2 ->
+              Debuginfo.compare dbg1 dbg2 = 0))
+       ~subst2:(fun _ dbg -> dbg)
+       env (simple1, dbg1) (simple2, dbg2))
 
 let print_list f ppf l =
   let pp_sep ppf () = Format.fprintf ppf ";@;<1 2>" in
@@ -636,29 +668,18 @@ let unary_prim_ops env (prim_op1 : Flambda_primitive.unary_primitive)
     pairs ~f1:function_slots ~f2:function_slots env (move_from1, move_to1)
       (move_from2, move_to2)
     |> Comparison.map ~f:(fun (move_from1', move_to1') ->
-           Flambda_primitive.Project_function_slot
-             { move_from = move_from1'; move_to = move_to1' })
+        Flambda_primitive.Project_function_slot
+          { move_from = move_from1'; move_to = move_to1' })
   | ( Project_value_slot
-        { project_from = function_slot1;
-          value_slot = value_slot1;
-          kind = kind1
-        },
+        { project_from = function_slot1; value_slot = value_slot1 },
       Project_value_slot
-        { project_from = function_slot2;
-          value_slot = value_slot2;
-          kind = kind2
-        } ) ->
-    triples ~f1:function_slots ~f2:value_slots
-      ~f3:(Comparator.of_predicate Flambda_kind.With_subkind.equal)
-      env
-      (function_slot1, value_slot1, kind1)
-      (function_slot2, value_slot2, kind2)
-    |> Comparison.map ~f:(fun (function_slot1', value_slot1', kind1') ->
-           Flambda_primitive.Project_value_slot
-             { project_from = function_slot1';
-               value_slot = value_slot1';
-               kind = kind1'
-             })
+        { project_from = function_slot2; value_slot = value_slot2 } ) ->
+    pairs ~f1:function_slots ~f2:value_slots env
+      (function_slot1, value_slot1)
+      (function_slot2, value_slot2)
+    |> Comparison.map ~f:(fun (function_slot1', value_slot1') ->
+        Flambda_primitive.Project_value_slot
+          { project_from = function_slot1'; value_slot = value_slot1' })
   | _, _ ->
     if Flambda_primitive.equal_unary_primitive prim_op1 prim_op2
     then Equivalent
@@ -674,14 +695,14 @@ let primitives env prim1 prim2 : Flambda_primitive.t Comparison.t =
     pairs ~f1:unary_prim_ops ~f2:simple_exprs ~subst2:subst_simple env
       (prim_op1, arg1) (prim_op2, arg2)
     |> Comparison.map ~f:(fun (prim_op1', arg1') ->
-           Flambda_primitive.Unary (prim_op1', arg1'))
+        Flambda_primitive.Unary (prim_op1', arg1'))
   | Binary (prim_op1, arg1_1, arg2_1), Binary (prim_op2, arg1_2, arg2_2) ->
     if Flambda_primitive.equal_binary_primitive prim_op1 prim_op2
     then
       simple_lists env [arg1_1; arg2_1] [arg1_2; arg2_2]
       |> Comparison.map ~f:(function
-           | [arg1; arg2] -> Flambda_primitive.Binary (prim_op1, arg1, arg2)
-           | _ -> assert false)
+        | [arg1; arg2] -> Flambda_primitive.Binary (prim_op1, arg1, arg2)
+        | _ -> assert false)
     else
       let approximant =
         Flambda_primitive.Binary
@@ -694,9 +715,9 @@ let primitives env prim1 prim2 : Flambda_primitive.t Comparison.t =
     then
       simple_lists env [arg1_1; arg2_1; arg3_1] [arg1_2; arg2_2; arg3_2]
       |> Comparison.map ~f:(function
-           | [arg1; arg2; arg3] ->
-             Flambda_primitive.Ternary (prim_op1, arg1, arg2, arg3)
-           | _ -> assert false)
+        | [arg1; arg2; arg3] ->
+          Flambda_primitive.Ternary (prim_op1, arg1, arg2, arg3)
+        | _ -> assert false)
     else
       let approximant =
         Flambda_primitive.Ternary
@@ -711,7 +732,7 @@ let primitives env prim1 prim2 : Flambda_primitive.t Comparison.t =
     then
       simple_lists env args1 args2
       |> Comparison.map ~f:(fun args : Flambda_primitive.t ->
-             Variadic (prim_op2, args))
+          Variadic (prim_op2, args))
     else
       let approximant : Flambda_primitive.t =
         Variadic (prim_op1, List.map (subst_simple env) args1)
@@ -720,10 +741,26 @@ let primitives env prim1 prim2 : Flambda_primitive.t Comparison.t =
   | _, _ -> Different { approximant = subst_primitive env prim1 }
 
 (* Returns unit because the approximant isn't used by sets_of_closures *)
-let function_decls env code_id1 code_id2 : unit Comparison.t =
-  if code_ids env code_id1 code_id2 |> Comparison.is_equivalent
-  then Equivalent
-  else Different { approximant = () }
+let function_decls env
+    (fun_decl1 : Function_declarations.code_id_in_function_declaration)
+    (fun_decl2 : Function_declarations.code_id_in_function_declaration) :
+    unit Comparison.t =
+  match fun_decl1, fun_decl2 with
+  | ( Deleted { function_slot_size = size1; dbg = _ },
+      Deleted { function_slot_size = size2; dbg = _ } ) ->
+    if Int.equal size1 size2 then Equivalent else Different { approximant = () }
+  | ( Code_id
+        { code_id = code_id1; only_full_applications = only_full_applications1 },
+      Code_id
+        { code_id = code_id2; only_full_applications = only_full_applications2 }
+    ) ->
+    if
+      code_ids env code_id1 code_id2 |> Comparison.is_equivalent
+      && Bool.equal only_full_applications1 only_full_applications2
+    then Equivalent
+    else Different { approximant = () }
+  | Deleted _, Code_id _ | Code_id _, Deleted _ ->
+    Different { approximant = () }
 
 (** Match up equal elements in two lists and iterate through both of them, using
     [f] analogously to [Map.S.merge] *)
@@ -762,14 +799,14 @@ let sets_of_closures env set1 set2 : Set_of_closures.t Comparison.t =
   let value_slots_by_value set =
     Value_slot.Map.bindings (Set_of_closures.value_slots set)
     |> List.map (fun (var, value) ->
-           Value_slot.kind var, subst_simple env value, var)
+        Value_slot.kind var, subst_simple env value, var)
   in
   (* We want to process the whole map to find new correspondences between
    * value slots, so we need to remember whether we've found any mismatches *)
   let ok = ref true in
   let () =
     let compare (kind1, value1, _var1) (kind2, value2, _var2) =
-      let c = Flambda_kind.With_subkind.compare kind1 kind2 in
+      let c = Flambda_kind.compare kind1 kind2 in
       if c = 0 then Simple.compare value1 value2 else c
     in
     iter2_merged (value_slots_by_value set1) (value_slots_by_value set2)
@@ -784,10 +821,27 @@ let sets_of_closures env set1 set2 : Set_of_closures.t Comparison.t =
   in
   let function_slots_and_fun_decls_by_code_id set =
     let map = Function_declarations.funs (Set_of_closures.function_decls set) in
-    Function_slot.Map.bindings map
-    |> List.map (fun (function_slot, code_id) ->
-           subst_code_id env code_id, (function_slot, code_id))
-    |> Code_id.Map.of_list
+    let function_slot_map, deleted_function_slot_set =
+      Function_slot.Map.bindings map
+      |> List.partition_map
+           (fun
+             ( function_slot,
+               (code_id : Function_declarations.code_id_in_function_declaration)
+             )
+           ->
+             match code_id with
+             | Deleted _ -> Right function_slot
+             | Code_id { code_id = code_id0; _ } ->
+               Left (subst_code_id env code_id0, (function_slot, code_id)))
+    in
+    ( Code_id.Map.of_list function_slot_map,
+      Function_slot.Set.of_list deleted_function_slot_set )
+  in
+  let function_slot_map1, deleted_function_slot_set1 =
+    function_slots_and_fun_decls_by_code_id set1
+  in
+  let function_slot_map2, deleted_function_slot_set2 =
+    function_slots_and_fun_decls_by_code_id set2
   in
   (* Using merge here as a map version of [List.iter2]; always returning None
    * means the returned map is always empty, so this shouldn't waste much *)
@@ -806,9 +860,14 @@ let sets_of_closures env set1 set2 : Set_of_closures.t Comparison.t =
           | Equivalent -> ()
           | Different _ -> ok := false));
         None)
-      (function_slots_and_fun_decls_by_code_id set1)
-      (function_slots_and_fun_decls_by_code_id set2)
+      function_slot_map1 function_slot_map2
   in
+  (* Trying to find a mapping between the deleted function_slots is not easy, so
+     we simply say the sets are equal if they have the same cardinality *)
+  if
+    Function_slot.Set.cardinal deleted_function_slot_set1
+    <> Function_slot.Set.cardinal deleted_function_slot_set2
+  then ok := false;
   if !ok
   then Equivalent
   else Different { approximant = subst_set_of_closures env set1 }
@@ -872,8 +931,8 @@ let patterns env (pattern1 : Bound_static.Pattern.t)
       (closure_symbols1 |> Function_slot.Lmap.bindings)
       (closure_symbols2 |> Function_slot.Lmap.bindings)
     |> Comparison.map ~f:(fun bindings ->
-           Bound_static.Pattern.set_of_closures
-             (bindings |> Function_slot.Lmap.of_list))
+        Bound_static.Pattern.set_of_closures
+          (bindings |> Function_slot.Lmap.of_list))
   | _, _ -> Different { approximant = subst_pattern env pattern1 }
 
 (* Compares the two sets of bound symbols for compatibility *and* adds the
@@ -884,14 +943,9 @@ let bound_static env bound_static1 bound_static2 : Bound_static.t Comparison.t =
     (bound_static2 |> Bound_static.to_list)
   |> Comparison.map ~f:Bound_static.create
 
-let fields env (field1 : Field_of_static_block.t)
-    (field2 : Field_of_static_block.t) : Field_of_static_block.t Comparison.t =
-  match field1, field2 with
-  | Symbol symbol1, Symbol symbol2 ->
-    symbols env symbol1 symbol2
-    |> Comparison.map ~f:(fun symbol1' -> Field_of_static_block.Symbol symbol1')
-  | _, _ ->
-    Comparator.of_predicate Field_of_static_block.equal env field1 field2
+let fields env (field1 : Simple.With_debuginfo.t)
+    (field2 : Simple.With_debuginfo.t) : Simple.With_debuginfo.t Comparison.t =
+  simples_with_debuginfo env field1 field2
 
 let blocks env block1 block2 =
   triples
@@ -911,45 +965,46 @@ let method_kinds _env (method_kind1 : Call_kind.Method_kind.t)
 
 let call_kinds env (call_kind1 : Call_kind.t) (call_kind2 : Call_kind.t) :
     Call_kind.t Comparison.t =
-  let compare_alloc_modes_then alloc_mode1 alloc_mode2 ~f : _ Comparison.t =
-    if Alloc_mode.For_types.compare alloc_mode1 alloc_mode2 = 0
-    then f ()
-    else Different { approximant = call_kind1 }
-  in
   match call_kind1, call_kind2 with
-  | ( Function { function_call = Direct code_id1; alloc_mode = alloc_mode1 },
-      Function { function_call = Direct code_id2; alloc_mode = alloc_mode2 } )
-    ->
-    compare_alloc_modes_then alloc_mode1 alloc_mode2 ~f:(fun () ->
-        if code_ids env code_id1 code_id2 |> Comparison.is_equivalent
-        then Equivalent
-        else Different { approximant = call_kind1 })
-  | ( Function { function_call = Indirect_known_arity; alloc_mode = alloc_mode1 },
-      Function
-        { function_call = Indirect_known_arity; alloc_mode = alloc_mode2 } ) ->
-    compare_alloc_modes_then alloc_mode1 alloc_mode2 ~f:(fun () -> Equivalent)
-  | ( Function
-        { function_call = Indirect_unknown_arity; alloc_mode = alloc_mode1 },
-      Function
-        { function_call = Indirect_unknown_arity; alloc_mode = alloc_mode2 } )
-    ->
-    compare_alloc_modes_then alloc_mode1 alloc_mode2 ~f:(fun () -> Equivalent)
-  | ( Method { kind = kind1; obj = obj1; alloc_mode = alloc_mode1 },
-      Method { kind = kind2; obj = obj2; alloc_mode = alloc_mode2 } ) ->
-    if Alloc_mode.For_types.compare alloc_mode1 alloc_mode2 = 0
-    then
-      pairs ~f1:method_kinds ~f2:simple_exprs ~subst2:subst_simple env
-        (kind1, obj1) (kind2, obj2)
-      |> Comparison.map ~f:(fun (kind, obj) ->
-             Call_kind.method_call kind ~obj alloc_mode1)
-    else
-      Different
-        { approximant =
-            Call_kind.method_call kind1 ~obj:(subst_simple env obj1) alloc_mode1
-        }
-  | ( C_call { alloc = alloc1; is_c_builtin = _ },
-      C_call { alloc = alloc2; is_c_builtin = _ } ) ->
-    if Bool.equal alloc1 alloc2
+  | ( Function { function_call = Direct code_id1 },
+      Function { function_call = Direct code_id2 } ) ->
+    if code_ids env code_id1 code_id2 |> Comparison.is_equivalent
+    then Equivalent
+    else Different { approximant = call_kind1 }
+  | ( Function { function_call = Indirect_known_arity code_ids1 },
+      Function { function_call = Indirect_known_arity code_ids2 } ) -> (
+    match code_ids1, code_ids2 with
+    | Unknown, Unknown -> Equivalent
+    | Known code_ids1, Known code_ids2 ->
+      if code_ids_set env code_ids1 code_ids2 |> Comparison.is_equivalent
+      then Equivalent
+      else Different { approximant = call_kind1 }
+    | Unknown, Known _ | Known _, Unknown ->
+      Different { approximant = call_kind1 })
+  | ( Function { function_call = Indirect_unknown_arity },
+      Function { function_call = Indirect_unknown_arity } ) ->
+    Equivalent
+  | Method { kind = kind1; obj = obj1 }, Method { kind = kind2; obj = obj2 } ->
+    pairs ~f1:method_kinds ~f2:simple_exprs ~subst2:subst_simple env
+      (kind1, obj1) (kind2, obj2)
+    |> Comparison.map ~f:(fun (kind, obj) -> Call_kind.method_call kind ~obj)
+  | ( C_call
+        { needs_caml_c_call = needs_caml_c_call1;
+          is_c_builtin = is_c_builtin1;
+          effects = effects1;
+          coeffects = coeffects1
+        },
+      C_call
+        { needs_caml_c_call = needs_caml_c_call2;
+          is_c_builtin = is_c_builtin2;
+          effects = effects2;
+          coeffects = coeffects2
+        } ) ->
+    if
+      Bool.equal needs_caml_c_call1 needs_caml_c_call2
+      && Bool.equal is_c_builtin1 is_c_builtin2
+      && Effects.compare effects1 effects2 = 0
+      && Coeffects.compare coeffects1 coeffects2 = 0
     then Equivalent
     else Different { approximant = call_kind1 }
   | _, _ -> Different { approximant = call_kind1 }
@@ -977,10 +1032,14 @@ let apply_exprs env apply1 apply2 : Expr.t Comparison.t =
     && Flambda_arity.equal_exact
          (Apply.return_arity apply1)
          (Apply.return_arity apply2)
+    && Alloc_mode.For_applications.compare (Apply.alloc_mode apply1)
+         (Apply.alloc_mode apply2)
+       = 0
   in
   let ok = ref atomic_things_equal in
   let callee1' =
-    simple_exprs env (Apply.callee apply1) (Apply.callee apply2)
+    options ~f:simple_exprs ~subst:subst_simple env (Apply.callee apply1)
+      (Apply.callee apply2)
     |> Comparison.chain ~if_equivalent:(Apply.callee apply2) ~ok
   in
   let args1' =
@@ -999,12 +1058,12 @@ let apply_exprs env apply1 apply2 : Expr.t Comparison.t =
           Apply.create ~callee:callee1'
             ~continuation:(Apply.continuation apply1)
             (Apply.exn_continuation apply1)
-            ~args:args1' ~call_kind:call_kind1' (Apply.dbg apply1)
+            ~args:args1' ~call_kind:call_kind1'
+            ~alloc_mode:(Apply.alloc_mode apply1) (Apply.dbg apply1)
             ~inlined:(Apply.inlined apply1)
             ~inlining_state:(Apply.inlining_state apply1)
             ~probe:None ~position:(Apply.position apply1)
             ~relative_history:(Apply_expr.relative_history apply1)
-            ~region:(Apply_expr.region apply1)
             ~args_arity:(Apply_expr.args_arity apply1)
             ~return_arity:(Apply_expr.return_arity apply1)
           |> Expr.create_apply
@@ -1019,21 +1078,22 @@ let apply_cont_exprs env apply_cont1 apply_cont2 : Apply_cont.t Comparison.t =
     (Format.pp_print_option Trap_action.print)
     (Apply_cont.trap_action apply_cont1)
     (Apply_cont.trap_action apply_cont2);
-  if Option.compare Trap_action.compare
-       (Apply_cont.trap_action apply_cont1)
-       (Apply_cont.trap_action apply_cont2)
-     = 0
-     && Continuation.equal
-          (Apply_cont.continuation apply_cont1)
-          (Apply_cont.continuation apply_cont2)
+  if
+    Option.compare Trap_action.compare
+      (Apply_cont.trap_action apply_cont1)
+      (Apply_cont.trap_action apply_cont2)
+    = 0
+    && Continuation.equal
+         (Apply_cont.continuation apply_cont1)
+         (Apply_cont.continuation apply_cont2)
   then
     simple_lists env (Apply_cont.args apply_cont1) (Apply_cont.args apply_cont2)
     |> Comparison.map ~f:(fun args1' ->
-           Apply_cont.create
-             ?trap_action:(Apply_cont.trap_action apply_cont1)
-             (Apply_cont.continuation apply_cont1)
-             ~args:args1'
-             ~dbg:(Apply_cont.debuginfo apply_cont1))
+        Apply_cont.create
+          ?trap_action:(Apply_cont.trap_action apply_cont1)
+          (Apply_cont.continuation apply_cont1)
+          ~args:args1'
+          ~dbg:(Apply_cont.debuginfo apply_cont1))
   else Different { approximant = subst_apply_cont env apply_cont1 }
 
 let switch_exprs env switch1 switch2 : Expr.t Comparison.t =
@@ -1041,21 +1101,21 @@ let switch_exprs env switch1 switch2 : Expr.t Comparison.t =
     lists
       ~f:
         (pairs
-           ~f1:(Comparator.of_predicate Targetint_31_63.equal)
+           ~f1:(Comparator.of_predicate Target_ocaml_int.equal)
            ~f2:apply_cont_exprs ~subst2:subst_apply_cont)
       ~subst:(fun env (target_imm, apply_cont) ->
         target_imm, subst_apply_cont env apply_cont)
       ~subst_snd:true env
-      (Targetint_31_63.Map.bindings arms1)
-      (Targetint_31_63.Map.bindings arms2)
-    |> Comparison.map ~f:Targetint_31_63.Map.of_list
+      (Target_ocaml_int.Map.bindings arms1)
+      (Target_ocaml_int.Map.bindings arms2)
+    |> Comparison.map ~f:Target_ocaml_int.Map.of_list
   in
   pairs ~f1:compare_arms ~f2:simple_exprs ~subst2:subst_simple env
     (Switch.arms switch1, Switch.scrutinee switch1)
     (Switch.arms switch2, Switch.scrutinee switch2)
   |> Comparison.map ~f:(fun (arms, scrutinee) ->
-         Expr.create_switch
-           (Switch.create ~condition_dbg:Debuginfo.none ~scrutinee ~arms))
+      Expr.create_switch
+        (Switch.create ~condition_dbg:Debuginfo.none ~scrutinee ~arms))
 
 let rec exprs env e1 e2 : Expr.t Comparison.t =
   log Expr.print e1 e2 (fun () ->
@@ -1141,18 +1201,19 @@ and static_consts env (const1 : Static_const_or_code.t)
   match const1, const2 with
   | Code code1, Code code2 ->
     codes env code1 code2 |> Comparison.map ~f:Static_const_or_code.create_code
-  | ( Static_const (Block (tag1, mut1, fields1)),
-      Static_const (Block (tag2, mut2, fields2)) ) ->
+  | ( Static_const (Block (tag1, mut1, shape1, fields1)),
+      Static_const (Block (tag2, mut2, _shape2, fields2)) ) ->
+    (* XXX compare the shapes *)
     blocks env (tag1, mut1, fields1) (tag2, mut2, fields2)
     |> Comparison.map
          ~f:(fun (tag1', mut1', fields1') : Static_const_or_code.t ->
            Static_const_or_code.create_static_const
-             (Static_const.block tag1' mut1' fields1'))
+             (Static_const.block tag1' mut1' shape1 fields1'))
   | Static_const (Set_of_closures set1), Static_const (Set_of_closures set2) ->
     sets_of_closures env set1 set2
     |> Comparison.map ~f:(fun set1' : Static_const_or_code.t ->
-           Static_const_or_code.create_static_const
-             (Static_const.set_of_closures set1'))
+        Static_const_or_code.create_static_const
+          (Static_const.set_of_closures set1'))
   | _, _ ->
     if Static_const_or_code.equal const1 const2
     then Equivalent
@@ -1164,20 +1225,20 @@ and codes env (code1 : Code.t) (code2 : Code.t) =
     Function_params_and_body.pattern_match_pair params_and_body1
       params_and_body2
       ~f:(fun
-           ~return_continuation
-           ~exn_continuation
-           params
-           ~body1
-           ~body2
-           ~my_closure
-           ~my_region
-           ~my_depth
-         ->
+          ~return_continuation
+          ~exn_continuation
+          params
+          ~body1
+          ~body2
+          ~my_closure
+          ~my_alloc_mode
+          ~my_depth
+        ->
         exprs env body1 body2
         |> Comparison.map ~f:(fun body1' ->
-               Function_params_and_body.create ~return_continuation
-                 ~exn_continuation params ~body:body1' ~my_closure ~my_region
-                 ~my_depth ~free_names_of_body:Unknown))
+            Function_params_and_body.create ~return_continuation
+              ~exn_continuation params ~body:body1' ~my_closure ~my_alloc_mode
+              ~my_depth ~free_names_of_body:Unknown))
   in
   pairs ~f1:bodies
     ~f2:(options ~f:code_ids ~subst:subst_code_id)
@@ -1185,14 +1246,14 @@ and codes env (code1 : Code.t) (code2 : Code.t) =
     (Code.params_and_body code1, Code.newer_version_of code1)
     (Code.params_and_body code2, Code.newer_version_of code2)
   |> Comparison.map ~f:(fun (params_and_body, newer_version_of) ->
-         code1
-         |> Code.with_code_id (Code.code_id code2)
-         |> Code.with_params_and_body ~cost_metrics:(Code.cost_metrics code2)
-              ~params_and_body
-                (* CR mshinwell: This needs fixing XXX (used to call a free
-                   names function on Function_params_and_body) *)
-              ~free_names_of_params_and_body:Name_occurrences.empty
-         |> Code.with_newer_version_of newer_version_of)
+      code1
+      |> Code.with_code_id (Code.code_id code2)
+      |> Code.with_params_and_body ~cost_metrics:(Code.cost_metrics code2)
+           ~params_and_body
+             (* CR mshinwell: This needs fixing XXX (used to call a free names
+                function on Function_params_and_body) *)
+           ~free_names_of_params_and_body:Name_occurrences.empty
+      |> Code.with_newer_version_of newer_version_of)
   |> Comparison.add_condition
        ~approximant:(fun () -> subst_code env code1)
        ~cond:
@@ -1211,12 +1272,14 @@ and let_cont_exprs env (let_cont1 : Let_cont.t) (let_cont2 : Let_cont.t) :
   | ( Non_recursive
         { handler = handler1;
           num_free_occurrences = _;
-          is_applied_with_traps = _
+          is_applied_with_traps = _;
+          can_be_lifted = can_be_lifted1
         },
       Non_recursive
         { handler = handler2;
           num_free_occurrences = _;
-          is_applied_with_traps = _
+          is_applied_with_traps = _;
+          can_be_lifted = can_be_lifted2
         } ) ->
     let module Non_rec = Non_recursive_let_cont_handler in
     let sorts_match =
@@ -1226,21 +1289,24 @@ and let_cont_exprs env (let_cont1 : Let_cont.t) (let_cont2 : Let_cont.t) :
       in
       Continuation.Sort.equal (sort handler1) (sort handler2)
     in
+    (* Note: the order here is important, due to the dominator-scoping of
+       symbols. Indeed, we need to ensure walk both bodies first to ensure the
+       environment contains the definitions of symbols. *)
     Non_rec.pattern_match_pair handler1 handler2 ~f:(fun cont ~body1 ~body2 ->
-        pairs ~f1:cont_handlers ~f2:exprs env
-          (Non_rec.handler handler1, body1)
-          (Non_rec.handler handler2, body2)
+        pairs ~f1:exprs ~f2:cont_handlers env
+          (body1, Non_rec.handler handler1)
+          (body2, Non_rec.handler handler2)
         |> Comparison.add_condition
              ~approximant:(fun () ->
-               ( subst_cont_handler env (Non_rec.handler handler1),
-                 subst_expr env body1 ))
-             ~cond:sorts_match
-        |> Comparison.map ~f:(fun (handler, body) ->
-               Let_cont.create_non_recursive cont handler ~body
-                 ~free_names_of_body:Unknown))
+               ( subst_expr env body1,
+                 subst_cont_handler env (Non_rec.handler handler1) ))
+             ~cond:(sorts_match && Bool.equal can_be_lifted1 can_be_lifted2)
+        |> Comparison.map ~f:(fun (body, handler) ->
+            Let_cont.create_non_recursive cont handler ~body
+              ~free_names_of_body:Unknown))
   | Recursive handlers1, Recursive handlers2 ->
     let compare_handler_maps env map1 map2 :
-        Continuation_handler.t Continuation.Map.t Comparison.t =
+        Continuation_handler.t Continuation.Lmap.t Comparison.t =
       lists
         ~f:(fun env (cont, handler1) (_cont, handler2) ->
           cont_handlers env handler1 handler2
@@ -1249,20 +1315,20 @@ and let_cont_exprs env (let_cont1 : Let_cont.t) (let_cont2 : Let_cont.t) :
           |> Comparison.map ~f:(fun handler1' -> cont, handler1'))
         ~subst:(fun env (cont, handler) -> cont, subst_cont_handler env handler)
         ~subst_snd:false env
-        (map1 |> Continuation.Map.bindings)
-        (map2 |> Continuation.Map.bindings)
-      |> Comparison.map ~f:Continuation.Map.of_list
+        (map1 |> Continuation.Lmap.bindings)
+        (map2 |> Continuation.Lmap.bindings)
+      |> Comparison.map ~f:Continuation.Lmap.of_list
     in
     Recursive_let_cont_handlers.pattern_match_pair handlers1 handlers2
       ~f:(fun ~invariant_params ~body1 ~body2 cont_handlers1 cont_handlers2 ->
         pairs ~f1:exprs ~f2:compare_handler_maps
           ~subst2:(fun env map ->
-            Continuation.Map.map_sharing (subst_cont_handler env) map)
+            Continuation.Lmap.map_sharing (subst_cont_handler env) map)
           env
           (body1, cont_handlers1 |> Continuation_handlers.to_map)
           (body2, cont_handlers2 |> Continuation_handlers.to_map)
         |> Comparison.map ~f:(fun (body, handlers) ->
-               Let_cont_expr.create_recursive handlers ~invariant_params ~body))
+            Let_cont_expr.create_recursive handlers ~invariant_params ~body))
   | _, _ -> Different { approximant = subst_let_cont env let_cont1 }
 
 and cont_handlers env handler1 handler2 =
@@ -1270,14 +1336,21 @@ and cont_handlers env handler1 handler2 =
     ~f:(fun params ~handler1:expr1 ~handler2:expr2 ->
       exprs env expr1 expr2
       |> Comparison.map ~f:(fun handler ->
-             Continuation_handler.create params ~handler
-               ~free_names_of_handler:Unknown
-               ~is_exn_handler:(Continuation_handler.is_exn_handler handler2))
+          Continuation_handler.create params ~handler
+            ~free_names_of_handler:Unknown
+            ~is_exn_handler:(Continuation_handler.is_exn_handler handler2)
+            ~is_cold:(Continuation_handler.is_cold handler2))
       |> Comparison.add_condition
            ~cond:
              (Bool.equal
                 (Continuation_handler.is_exn_handler handler1)
                 (Continuation_handler.is_exn_handler handler2))
+           ~approximant:(fun () -> subst_cont_handler env handler1)
+      |> Comparison.add_condition
+           ~cond:
+             (Bool.equal
+                (Continuation_handler.is_cold handler1)
+                (Continuation_handler.is_cold handler2))
            ~approximant:(fun () -> subst_cont_handler env handler1))
   |> function
   | Ok comp -> comp
@@ -1287,7 +1360,12 @@ and cont_handlers env handler1 handler2 =
 let flambda_units u1 u2 =
   let ret_cont = Continuation.create ~sort:Toplevel_return () in
   let exn_cont = Continuation.create () in
-  let toplevel_my_region = Variable.create "toplevel_my_region" in
+  let toplevel_my_region =
+    Variable.create "toplevel_my_region" Flambda_kind.region
+  in
+  let toplevel_my_ghost_region =
+    Variable.create "toplevel_my_ghost_region" Flambda_kind.region
+  in
   let mk_renaming u =
     let renaming = Renaming.empty in
     let renaming =
@@ -1305,6 +1383,11 @@ let flambda_units u1 u2 =
         (Flambda_unit.toplevel_my_region u)
         ~guaranteed_fresh:toplevel_my_region
     in
+    let renaming =
+      Renaming.add_fresh_variable renaming
+        (Flambda_unit.toplevel_my_ghost_region u)
+        ~guaranteed_fresh:toplevel_my_ghost_region
+    in
     renaming
   in
   let env = Env.create () in
@@ -1312,7 +1395,7 @@ let flambda_units u1 u2 =
   let body2 = Expr.apply_renaming (Flambda_unit.body u2) (mk_renaming u2) in
   exprs env body1 body2
   |> Comparison.map ~f:(fun body ->
-         let module_symbol = Flambda_unit.module_symbol u1 in
-         Flambda_unit.create ~return_continuation:ret_cont
-           ~exn_continuation:exn_cont ~body ~module_symbol
-           ~used_value_slots:Unknown ~toplevel_my_region)
+      let module_symbol = Flambda_unit.module_symbol u1 in
+      Flambda_unit.create ~return_continuation:ret_cont
+        ~exn_continuation:exn_cont ~body ~module_symbol
+        ~used_value_slots:Unknown ~toplevel_my_region ~toplevel_my_ghost_region)

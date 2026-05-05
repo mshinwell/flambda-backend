@@ -23,17 +23,19 @@ let print ppf t =
     (Format.pp_print_list ~pp_sep:Format.pp_print_space BP.print)
     t
 
+let equal t1 t2 = List.equal BP.equal t1 t2
+
 let empty = []
 
 let create params =
   (if Flambda_features.check_invariants ()
-  then
-    let params_set = BP.Set.of_list params in
-    if List.length params <> BP.Set.cardinal params_set
-    then
-      Misc.fatal_errorf
-        "Names provided to [Bound_parameters.create] must be disjoint:@ %a"
-        print params);
+   then
+     let params_set = BP.Set.of_list params in
+     if List.length params <> BP.Set.cardinal params_set
+     then
+       Misc.fatal_errorf
+         "Names provided to [Bound_parameters.create] must be disjoint:@ %a"
+         print params);
   params
 
 let cons param t = create (param :: t)
@@ -50,6 +52,8 @@ let cardinal t = List.length t
 
 let vars t = List.map BP.var t
 
+let vars_and_uids t = List.map BP.var_and_uid t
+
 let simples t = List.map BP.simple t
 
 let to_set t = Bound_parameter.Set.of_list t
@@ -58,7 +62,14 @@ let var_set t = Variable.Set.of_list (vars t)
 
 let rename t = List.map (fun t -> BP.rename t) t
 
-let arity t = List.map (fun t -> BP.kind t) t |> Flambda_arity.create
+let is_renamed_version_of t t' =
+  Misc.Stdlib.List.equal BP.is_renamed_version_of t t'
+
+let arity t =
+  List.map
+    (fun t -> Flambda_arity.Component_for_creation.Singleton (BP.kind t))
+    t
+  |> Flambda_arity.create
 
 let free_names t =
   List.fold_left
@@ -88,6 +99,8 @@ let renaming t1 ~guaranteed_fresh:t2 =
     assert (List.compare_lengths t1 t2 <> 0);
     Misc.fatal_errorf "Parameter lists are of differing lengths:@ %a@ and@ %a"
       print t1 print t2
+
+let iter f t = List.iter f t
 
 let filter f t = List.filter f t
 

@@ -66,10 +66,10 @@ module type S = sig
 
   val fold : (key -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
 
-  (** Simultaneously map over the elements and accumulate a value. The
-      arguments are ordered so as to make the order preservation as explicit as
-      possible (the accumulator is produced from the values _before_ the key
-      and value being passed). *)
+  (** Simultaneously map over the elements and accumulate a value. The arguments
+      are ordered so as to make the order preservation as explicit as possible
+      (the accumulator is produced from the values _before_ the key and value
+      being passed). *)
   val fold_left_map : ('a -> key -> 'b -> 'a * 'c) -> 'a -> 'b t -> 'a * 'c t
 
   val filter : (key -> 'a -> bool) -> 'a t -> 'a t
@@ -104,6 +104,10 @@ module type S = sig
   val for_all_with_fixed_arg : (key -> 'a -> 'b -> bool) -> 'a t -> 'b -> bool
 
   val exists : (key -> 'a -> bool) -> 'a t -> bool
+
+  (** Returns an unspecified binding from the map
+      @raise Not_found if the map is empty *)
+  val choose : 'a t -> key * 'a
 
   (** Keys in the sequence must be distinct from each other and from keys
       already in the map; neither of these conditions is checked. *)

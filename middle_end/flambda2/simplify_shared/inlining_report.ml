@@ -77,7 +77,7 @@ module Pass = struct
   let print ppf pass =
     match pass with
     | After_closure_conversion ->
-      Format.fprintf ppf "afte@r closure@ conversion"
+      Format.fprintf ppf "after@ closure@ conversion"
     | Before_simplify -> Format.fprintf ppf "before@ simplify"
     | After_simplify -> Format.fprintf ppf "after@ simplify"
 end
@@ -193,6 +193,10 @@ module Context = struct
             `Int (Inlining_arguments.large_function_size args);
             `String "branch cost";
             `Float (Inlining_arguments.branch_cost args) ];
+          [ `String "small functor size";
+            `Int (Inlining_arguments.small_functor_size args);
+            `String "large functor size";
+            `Int (Inlining_arguments.large_functor_size args) ];
           [ `String "threshold";
             `Float (Inlining_arguments.threshold args);
             `String "indirect call cost";
@@ -299,8 +303,9 @@ let log : raw_decision list ref = ref []
 
 let record_decision_at_call_site_for_known_function ~tracker ~unrolling_depth
     ~apply ~pass ~callee ~are_rebuilding_terms decision =
-  if Flambda_features.inlining_report ()
-     || Flambda_features.inlining_report_bin ()
+  if
+    Flambda_features.inlining_report ()
+    || Flambda_features.inlining_report_bin ()
   then
     let dbg = Apply_expr.dbg apply in
     let path =
@@ -325,8 +330,9 @@ let record_decision_at_call_site_for_known_function ~tracker ~unrolling_depth
 
 let record_decision_at_call_site_for_unknown_function ~tracker ~apply ~pass:_ ()
     =
-  if Flambda_features.inlining_report ()
-     || Flambda_features.inlining_report_bin ()
+  if
+    Flambda_features.inlining_report ()
+    || Flambda_features.inlining_report_bin ()
   then
     let dbg = Apply_expr.dbg apply in
     let path =
@@ -339,8 +345,9 @@ let record_decision_at_call_site_for_unknown_function ~tracker ~apply ~pass:_ ()
 
 let record_decision_at_function_definition ~absolute_history ~code_metadata
     ~pass ~are_rebuilding_terms decision =
-  if Flambda_features.inlining_report ()
-     || Flambda_features.inlining_report_bin ()
+  if
+    Flambda_features.inlining_report ()
+    || Flambda_features.inlining_report_bin ()
   then
     let dbg = Code_metadata.dbg code_metadata in
     let args = Code_metadata.inlining_arguments code_metadata in
@@ -373,17 +380,20 @@ module Uid = struct
     then Format.fprintf ppf "[[%s][here]]" t
     else
       let external_reports =
-        Format.asprintf "%a.0.inlining.org" Compilation_unit.print_name cu_uid
+        Format_doc.asprintf "%a.0.inlining.org" Compilation_unit.print_name
+          cu_uid
       in
       try
-        let file = Load_path.find_uncap external_reports in
+        let file = Load_path.find_normalized external_reports in
         Format.fprintf ppf "[[file:%s::%s][in compilation unit %a]]" t file
-          Compilation_unit.print cu_uid
+          (Format_doc.compat Compilation_unit.print)
+          cu_uid
       with Not_found ->
         Format.fprintf ppf
           "in@ compilation@ unit@ %a@ but@ no@ inlining@ reports@ were@ \
            generated@ for@ this@ unit."
-          Compilation_unit.print cu_uid
+          (Format_doc.compat Compilation_unit.print)
+          cu_uid
 end
 
 module Inlining_tree = struct
@@ -615,7 +625,10 @@ module Inlining_tree = struct
       let defined_in = IHA.compilation_unit to_ in
       if Compilation_unit.equal defined_in compilation_unit
       then Format.fprintf ppf "this compilation unit"
-      else Format.fprintf ppf "%a" Compilation_unit.print_name defined_in
+      else
+        Format.fprintf ppf "%a"
+          (Format_doc.compat Compilation_unit.print_name)
+          defined_in
     in
     Format.fprintf ppf
       "@[<hov>The@ decision@ to@ inline@ this@ call@ was@ taken@ in@ %a@ at@ \

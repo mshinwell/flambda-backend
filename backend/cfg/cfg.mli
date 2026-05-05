@@ -23,7 +23,7 @@
  * SOFTWARE.                                                                      *
  *                                                                                *
  **********************************************************************************)
-[@@@ocaml.warning "+a-30-40-41-42"]
+[@@@ocaml.warning "+a-40-41-42"]
 
 val verbose : bool ref
 
@@ -32,10 +32,10 @@ include module type of struct
 end
 
 type basic_instruction_list =
-  basic instruction Flambda_backend_utils.Doubly_linked_list.t
+  basic instruction Oxcaml_utils.Doubly_linked_list.t
 
 type basic_block =
-  { start : Label.t;
+  { mutable start : Label.t;
     body : basic_instruction_list;
     mutable terminator : terminator instruction;
     mutable predecessors : Label.Set.t;
@@ -54,44 +54,85 @@ type basic_block =
     mutable is_trap_handler : bool;
         (** Is this block a trap handler (i.e. is it an exn successor of another
             block) or not? *)
-    mutable dead : bool
-        (** This block must be unreachable from function entry. This field is
-            set during cfg construction (if trap stacks are unresolved) and used
-            during dead block elimination for checking. *)
+    mutable cold : bool
         (* CR-someday gyorsh: The current implementation allows multiple
            pushtraps in each block means that different trap stacks are
            associated with the block at different points. At most one
-           instruction in each block can raise, and always the last one. After
-           we split the blocks based on Pushtrap/Poptrap, each block will have a
+           instruction in each block can raise, and always the last one. If we
+           split the blocks based on Pushtrap/Poptrap, each block will have a
            unique trap stack associated with it. [exns] will not be needed, as
            the exn-successor will be uniquely determined by can_raise + top of
            trap stack. *)
   }
 
+(* Subset of Cmm.codegen_option. *)
+type codegen_option =
+  | Reduce_code_size
+  | No_CSE
+  | Use_linscan_regalloc
+    (* CR-soon xclerc for xclerc: remove the `Use_linscan_regalloc`, and use
+       `Use_regalloc_param` instead. *)
+  | Use_regalloc of Clflags.Register_allocator.t
+  | Use_regalloc_param of string list
+  | Cold
+  | Assume_zero_alloc of
+      { strict : bool;
+        never_returns_normally : bool;
+        never_raises : bool;
+        loc : Location.t
+      }
+  | Check_zero_alloc of
+      { strict : bool;
+        loc : Location.t;
+        custom_error_msg : string option
+      }
+
+val of_cmm_codegen_option : Cmm.codegen_option list -> codegen_option list
+
+(* CR-someday xclerc: we should probably make `t` abstract and make each and
+   every modifiction through accessors; that would help enforce invariants. *)
+
 (** Control Flow Graph of a function. *)
-type t = private
+type t =
   { blocks : basic_block Label.Tbl.t;  (** Map from labels to blocks *)
     fun_name : string;  (** Function name, used for printing messages *)
     fun_args : Reg.t array;
         (** Function arguments. When Cfg is constructed from Linear, this
             information is not needed (Linear.fundecl does not have fun_args
             field) and [fun_args] is an empty array as a dummy value. *)
+    fun_codegen_options : codegen_option list;
+        (** Code generation options passed from Cmm. *)
     fun_dbg : Debuginfo.t;  (** Dwarf debug info for function entry. *)
     entry_label : Label.t;
         (** This label must be the first in all layouts of this cfg. *)
-    fun_fast : bool;  (** Precomputed based on cmmgen information. *)
-    fun_contains_calls : bool;  (** Precomputed at selection time. *)
-    fun_num_stack_slots : int array
+    fun_contains_calls : bool;
+        (** Precomputed during selection and poll insertion. *)
+    fun_num_stack_slots : int Stack_class.Tbl.t;
         (** Precomputed at register allocation time *)
+    fun_poll : Lambda.poll_attribute; (* Whether to insert polling points. *)
+    next_instruction_id : InstructionId.sequence; (* Next instruction id. *)
+    fun_ret_type : Cmm.machtype;
+        (** Function return type. As in [fun_args], this value is not used when
+            starting from Linear. *)
+    mutable allowed_to_be_irreducible : bool;
+        (* Whether rewrites are allowed to make the CFG irreducible (if the CFG
+           is irreducible, the information about loops cannot be trusted). *)
+    mutable register_locations_are_set : bool
+        (* Whether register allocation has set the locations of the `Reg.t`
+           values. *)
   }
 
 val create :
   fun_name:string ->
   fun_args:Reg.t array ->
+  fun_codegen_options:codegen_option list ->
   fun_dbg:Debuginfo.t ->
-  fun_fast:bool ->
   fun_contains_calls:bool ->
-  fun_num_stack_slots:int array ->
+  fun_num_stack_slots:int Stack_class.Tbl.t ->
+  fun_poll:Lambda.poll_attribute ->
+  next_instruction_id:InstructionId.sequence ->
+  fun_ret_type:Cmm.machtype ->
+  allowed_to_be_irreducible:bool ->
   t
 
 val fun_name : t -> string
@@ -112,13 +153,13 @@ val replace_successor_labels :
     vice versa. *)
 val can_raise_interproc : basic_block -> bool
 
-val first_instruction_id : basic_block -> int
+val first_instruction_id : basic_block -> InstructionId.t
+
+val first_instruction_stack_offset : basic_block -> int
 
 val mem_block : t -> Label.t -> bool
 
 val add_block_exn : t -> basic_block -> unit
-
-val remove_block_exn : t -> Label.t -> unit
 
 val remove_blocks : t -> Label.Set.t -> unit
 
@@ -126,10 +167,20 @@ val get_block : t -> Label.t -> basic_block option
 
 val get_block_exn : t -> Label.t -> basic_block
 
+val iter_blocks_dfs : t -> f:(Label.t -> basic_block -> unit) -> unit
+
 val iter_blocks : t -> f:(Label.t -> basic_block -> unit) -> unit
 
 val fold_blocks : t -> f:(Label.t -> basic_block -> 'a -> 'a) -> init:'a -> 'a
 
+val fold_body_instructions :
+  t -> f:('a -> basic instruction -> 'a) -> init:'a -> 'a
+
+(* CR-soon xclerc for xclerc: [register_predecessors_for_all_blocks] only adds
+   blocks to the predecessor sets, and does not clear the sets beforehand. This
+   looks like a mistake; at the very least a named boolean parameter should be
+   added so that the caller has to explicitly decide whether or not to clear the
+   sets before registration . *)
 val register_predecessors_for_all_blocks : t -> unit
 
 (** Printing *)
@@ -153,14 +204,10 @@ val print_instruction :
    exception handling. It has a lot of redundancy and the result of the
    computation is not used.
 
-   Redundancy: linear_to_cfg reconstructs intraprocedural exception handling
-   stacks from linear IR and annotates each block with this information.
-   However, CFG instructions still include the original push/poptraps from
-   Linear.
-
-   To remove these push/poptraps from CFG IR, we need to split blocks at every
-   push/poptrap. Then, we can annotate the blocks with the top of the trap
-   stack, instead of carrying the copy of the stack. *)
+   CFG instructions still include push/poptraps. To remove these push/poptraps
+   from CFG IR, we need to split blocks at every push/poptrap. Then, we can
+   annotate the blocks with the top of the trap stack, instead of carrying the
+   copy of the stack. *)
 
 (* CR-someday gyorsh: store label after separately and update after
    reordering. *)
@@ -169,14 +216,68 @@ val can_raise_terminator : terminator -> bool
 
 val is_pure_terminator : terminator -> bool
 
+val is_never_terminator : terminator -> bool
+
+val is_return_terminator : terminator -> bool
+
 val is_pure_basic : basic -> bool
 
 val is_noop_move : basic instruction -> bool
 
+val is_alloc : basic instruction -> bool
+
+val is_poll : basic instruction -> bool
+
+val is_end_region : basic -> bool
+
 val set_stack_offset : 'a instruction -> int -> unit
 
-val string_of_irc_work_list : irc_work_list -> string
+val set_live : 'a instruction -> Reg.Set.t -> unit
 
 val dump_basic : Format.formatter -> basic -> unit
 
 val dump_terminator : ?sep:string -> Format.formatter -> terminator -> unit
+
+val make_instruction :
+  desc:'a ->
+  ?arg:Reg.t array ->
+  ?res:Reg.t array ->
+  ?dbg:Debuginfo.t ->
+  ?fdo:Fdo_info.t ->
+  ?live:Reg.Set.t ->
+  stack_offset:int ->
+  id:InstructionId.t ->
+  ?available_before:Reg_availability_set.t ->
+  ?available_across:Reg_availability_set.t ->
+  unit ->
+  'a instruction
+
+val make_instruction_from_copy :
+  'a instruction ->
+  desc:'b ->
+  id:InstructionId.t ->
+  ?arg:Reg.t array ->
+  ?res:Reg.t array ->
+  unit ->
+  'b instruction
+
+val make_empty_block : ?label:Label.t -> terminator instruction -> basic_block
+
+(** "Contains calls" in the traditional sense as used in upstream [Selectgen].
+*)
+val basic_block_contains_calls : basic_block -> bool
+
+val equal_func_call_operation :
+  func_call_operation -> func_call_operation -> bool
+
+val equal_external_call_operation :
+  external_call_operation -> external_call_operation -> bool
+
+val equal_prim_call_operation :
+  prim_call_operation -> prim_call_operation -> bool
+
+val equal_basic : basic -> basic -> bool
+
+val equal_terminator : terminator -> terminator -> bool
+
+val invalid_stack_offset : int

@@ -69,10 +69,10 @@ module Function_params_and_body = struct
   type t = Function_params_and_body.t
 
   let create ~return_continuation ~exn_continuation params ~body
-      ~free_names_of_body ~my_closure ~my_region ~my_depth =
+      ~free_names_of_body ~my_closure ~my_alloc_mode ~my_depth =
     Function_params_and_body.create ~return_continuation ~exn_continuation
       params ~body ~free_names_of_body:(Known free_names_of_body) ~my_closure
-      ~my_region ~my_depth
+      ~my_alloc_mode ~my_depth
 
   let to_function_params_and_body t are_rebuilding =
     if ART.do_not_rebuild_terms are_rebuilding
@@ -92,22 +92,23 @@ module Continuation_handler = struct
 
   let dummy =
     Continuation_handler.create Bound_parameters.empty ~handler:term_not_rebuilt
-      ~free_names_of_handler:Unknown ~is_exn_handler:false
+      ~free_names_of_handler:Unknown ~is_exn_handler:false ~is_cold:false
 
   let create are_rebuilding params ~handler ~free_names_of_handler
-      ~is_exn_handler =
+      ~is_exn_handler ~is_cold =
     if ART.do_not_rebuild_terms are_rebuilding
     then dummy
     else
       Continuation_handler.create params ~handler
         ~free_names_of_handler:(Known free_names_of_handler) ~is_exn_handler
+        ~is_cold
 
-  let create' are_rebuilding params ~handler ~is_exn_handler =
+  let create' are_rebuilding params ~handler ~is_exn_handler ~is_cold =
     if ART.do_not_rebuild_terms are_rebuilding
     then dummy
     else
       Continuation_handler.create params ~handler ~free_names_of_handler:Unknown
-        ~is_exn_handler
+        ~is_exn_handler ~is_cold
 end
 
 let create_non_recursive_let_cont are_rebuilding cont handler ~body
@@ -151,9 +152,9 @@ let bind_no_simplification are_rebuilding ~bindings ~body ~cost_metrics_of_body
   ListLabels.fold_left (List.rev bindings)
     ~init:(body, cost_metrics_of_body, free_names_of_body)
     ~f:(fun
-         (expr, cost_metrics, free_names)
-         (var, size_of_defining_expr, defining_expr)
-       ->
+        (expr, cost_metrics, free_names)
+        (var, size_of_defining_expr, defining_expr)
+      ->
       let expr =
         create_let are_rebuilding
           (Bound_pattern.singleton var)

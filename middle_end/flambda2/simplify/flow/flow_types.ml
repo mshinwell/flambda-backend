@@ -131,8 +131,7 @@ module Continuation_info = struct
       code_ids : Name_occurrences.t Code_id.Map.t;
       value_slots : Name_occurrences.t Name.Map.t Value_slot.Map.t;
       apply_cont_args :
-        Cont_arg.t Numeric_types.Int.Map.t Apply_cont_rewrite_id.Map.t
-        Continuation.Map.t
+        Cont_arg.t Numeric_types.Int.Map.t Continuation_callsite_map.t
     }
 
   let [@ocamlformat "disable"] print ppf
@@ -194,6 +193,7 @@ module Acc = struct
     { stack : Continuation_info.t list;
       map : Continuation_info.t Continuation.Map.t;
       extra : Continuation_extra_params_and_args.t Continuation.Map.t;
+      lifted_constants : Lifted_constant_state.t;
       dummy_toplevel_cont : Continuation.t
     }
 
@@ -208,16 +208,19 @@ module Acc = struct
   let print_extra ppf extra =
     Continuation.Map.print Continuation_extra_params_and_args.print ppf extra
 
-  let [@ocamlformat "disable"] print ppf { stack; map; extra; dummy_toplevel_cont = _ } =
+  let [@ocamlformat "disable"] print ppf
+      { stack; map; extra; lifted_constants; dummy_toplevel_cont = _ } =
     Format.fprintf ppf
       "@[<hov 1>(\
        @[<hov 1>(stack %a)@]@ \
        @[<hov 1>(map %a)@]@ \
-       @[<hov 1>(extra %a)@]\
+       @[<hov 1>(extra %a)@]@ \
+       @[<hov 1>(lifted_constants %a)@]\
        )@]"
       print_stack stack
       print_map map
       print_extra extra
+      Lifted_constant_state.print lifted_constants
 end
 
 (* Result of the flow analysis: reachable code ids *)
@@ -268,7 +271,7 @@ module Continuation_param_aliases = struct
 
   type t =
     { removed_aliased_params_and_extra_params : Variable.Set.t;
-      lets_to_introduce : Variable.t Variable.Map.t;
+      lets_to_introduce : Simple.t Variable.Lmap.t;
       extra_args_for_aliases : Variable.Set.t;
       recursive_continuation_wrapper : recursive_continuation_wrapper
     }
@@ -289,7 +292,7 @@ module Continuation_param_aliases = struct
         %a\
        )@]"
       Variable.Set.print removed_aliased_params_and_extra_params
-      (Variable.Map.print Variable.print) lets_to_introduce
+      (Variable.Lmap.print Simple.print) lets_to_introduce
       Variable.Set.print extra_args_for_aliases
       pp_wrapper recursive_continuation_wrapper
 end
@@ -319,17 +322,20 @@ end
 
 module Mutable_unboxing_result = struct
   type t =
-    { additionnal_epa : Continuation_extra_params_and_args.t Continuation.Map.t;
+    { did_unbox_a_mutable_block : bool;
+      additional_epa : Continuation_extra_params_and_args.t Continuation.Map.t;
       let_rewrites : Named_rewrite.t Named_rewrite_id.Map.t
     }
 
-  let [@ocamlformat "disable"] print ppf { additionnal_epa; let_rewrites } =
+  let [@ocamlformat "disable"] print ppf { did_unbox_a_mutable_block; additional_epa; let_rewrites } =
     Format.fprintf ppf
       "@[<hov 1>(\
-         @[<hov 1>(additionnal_epa@ %a)@]@ \
+         @[<hov 1>(did_unbox_a_mutable_block@ %b)@]@ \
+         @[<hov 1>(additional_epa@ %a)@]@ \
          @[<hov 1>(let_rewrites@ %a)@]\
        )@]"
-      (Continuation.Map.print Continuation_extra_params_and_args.print) additionnal_epa
+      did_unbox_a_mutable_block
+      (Continuation.Map.print Continuation_extra_params_and_args.print) additional_epa
       (Named_rewrite_id.Map.print Named_rewrite.print) let_rewrites
 end
 

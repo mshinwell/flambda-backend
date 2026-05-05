@@ -27,73 +27,32 @@
 (** Control flow graph structure types that are shared between the internal
     (mutable) and external (immutable) views of [Cfg]. *)
 
-[@@@ocaml.warning "+a-30-40-41-42"]
+[@@@ocaml.warning "+a-40-41-42"]
+
+open! Int_replace_polymorphic_compare [@@ocaml.warning "-66"]
 
 module S = struct
   type func_call_operation =
-    | Indirect
+    | Indirect of Cmm.symbol list option
     | Direct of Cmm.symbol
 
   type external_call_operation =
     { func_symbol : string;
       alloc : bool;
+      (* CR mshinwell: rename [alloc] -> [needs_caml_c_call] *)
+      effects : Cmm.effects;
       ty_res : Cmm.machtype;
-      ty_args : Cmm.exttype list
+      ty_args : Cmm.exttype list;
+      stack_ofs : int;
+      stack_align : Cmm.stack_align
     }
 
   type prim_call_operation =
     | External of external_call_operation
-    | Alloc of
-        { bytes : int;
-          dbginfo : Debuginfo.alloc_dbginfo;
-          mode : Lambda.alloc_mode
-        }
-    | Checkbound of { immediate : int option }
     | Probe of
         { name : string;
           handler_code_sym : string;
           enabled_at_init : bool
-        }
-
-  type operation =
-    | Move
-    | Spill
-    | Reload
-    | Const_int of nativeint (* CR-someday xclerc: change to `Targetint.t` *)
-    | Const_float of int64
-    | Const_symbol of Cmm.symbol
-    | Stackoffset of int
-    | Load of Cmm.memory_chunk * Arch.addressing_mode * Mach.mutable_flag
-    | Store of Cmm.memory_chunk * Arch.addressing_mode * bool
-    | Intop of Mach.integer_operation
-    | Intop_imm of Mach.integer_operation * int
-    | Intop_atomic of
-        { op : Cmm.atomic_op;
-          size : Cmm.atomic_bitwidth;
-          addr : Arch.addressing_mode
-        }
-    | Negf
-    | Absf
-    | Addf
-    | Subf
-    | Mulf
-    | Divf
-    | Compf of Mach.float_comparison (* CR gyorsh: can merge with float_test? *)
-    | Csel of Mach.test
-    | Floatofint
-    | Intoffloat
-    | Valueofint
-    | Intofvalue
-    | Probe_is_enabled of { name : string }
-    | Opaque
-    | Begin_region
-    | End_region
-    | Specific of Arch.specific_operation
-    | Name_for_debugger of
-        { ident : Ident.t;
-          which_parameter : int option;
-          provenance : unit option;
-          is_assignment : bool
         }
 
   type bool_test =
@@ -103,14 +62,14 @@ module S = struct
 
   (** [int_test] represents all possible outcomes of a comparison between two
       integers. When [imm] field is [None], compare variables x and y, specified
-      by the arguments of the enclosing [instruction]. When [imm] field is [Some
-      n], compare variable x and immediate [n]. This corresponds to
+      by the arguments of the enclosing [instruction]. When [imm] field is
+      [Some n], compare variable x and immediate [n]. This corresponds to
       [Mach.Iinttest] and [Mach.Iinttest_imm] in the compiler. *)
   type int_test =
     { lt : Label.t;  (** if x < y (resp. x < n) goto [lt] label *)
       eq : Label.t;  (** if x = y (resp. x = n) goto [eq] label *)
       gt : Label.t;  (** if x > y (resp. x > n) goto [gt] label *)
-      is_signed : bool;
+      is_signed : Scalar.Signedness.t;
       imm : int option
     }
 
@@ -119,44 +78,41 @@ module S = struct
       outcomes of comparison include "unordered" (see e.g. x86-64 emitter) when
       the arguments involve NaNs. *)
   type float_test =
-    { lt : Label.t;
+    { width : Cmm.float_width;
+      lt : Label.t;
       eq : Label.t;
       gt : Label.t;
       uo : Label.t  (** if at least one of x or y is NaN *)
     }
 
-  type irc_work_list =
-    | Unknown_list
-    | Coalesced
-    | Constrained
-    | Frozen
-    | Work_list
-    | Active
-
   type 'a instruction =
     { desc : 'a;
+      id : InstructionId.t;
       mutable arg : Reg.t array;
       mutable res : Reg.t array;
       mutable dbg : Debuginfo.t;
       mutable fdo : Fdo_info.t;
       mutable live : Reg.Set.t;
       mutable stack_offset : int;
-      id : int;
-      mutable irc_work_list : irc_work_list;
-      mutable ls_order : int
+      mutable available_before : Reg_availability_set.t;
+      mutable available_across : Reg_availability_set.t
+          (** The availability sets will be set to [Unreachable] prior to the
+              availability analysis having run. *)
     }
 
   (* [basic] instruction cannot raise *)
   type basic =
-    | Op of operation
+    | Op of Operation.t
     | Reloadretaddr
         (** This instruction loads the return address from a predefined hidden
             address (e.g. bottom of the current frame) and stores it in a
             special hidden register. It can use standard registers for that
             purpose. They are defined in [Proc.destroyed_at_reloadretaddr]. *)
     | Pushtrap of { lbl_handler : Label.t }
-    | Poptrap
+    | Poptrap of { lbl_handler : Label.t }
     | Prologue
+    | Epilogue
+    | Stack_check of { max_frame_size_bytes : int }
 
   type 'a with_label_after =
     { op : 'a;
@@ -188,10 +144,19 @@ module S = struct
     | Tailcall_self of { destination : Label.t }
     | Tailcall_func of func_call_operation
     | Call_no_return of external_call_operation
+    (* CR mshinwell: [Call_no_return] should have "external" in the name *)
+    | Invalid of
+        { message : string;
+          stack_ofs : int;
+          stack_align : Cmm.stack_align;
+          label_after : Label.t Option.t
+        }
     | Call of func_call_operation with_label_after
     | Prim of prim_call_operation with_label_after
-    | Specific_can_raise of Arch.specific_operation with_label_after
-    | Poll_and_jump of Label.t
+
+  type basic_or_terminator =
+    | Basic of basic
+    | Terminator of terminator
 end
 
 (* CR-someday gyorsh: Switch can be translated to Branch. *)

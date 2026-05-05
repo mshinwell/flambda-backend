@@ -25,7 +25,7 @@ module Expr_with_acc = Closure_conversion_aux.Expr_with_acc
 val close_let :
   Acc.t ->
   Env.t ->
-  (Ident.t * Flambda_kind.With_subkind.t) list ->
+  (Ident.t * Flambda_debug_uid.t * Flambda_kind.With_subkind.t) list ->
   IR.user_visible ->
   IR.named ->
   body:(Acc.t -> Env.t -> Expr_with_acc.t) ->
@@ -36,7 +36,7 @@ val close_let_rec :
   Env.t ->
   function_declarations:Function_decl.t list ->
   body:(Acc.t -> Env.t -> Expr_with_acc.t) ->
-  current_region:Ident.t ->
+  current_region:Ident.t option ->
   Expr_with_acc.t
 
 val close_let_cont :
@@ -44,7 +44,12 @@ val close_let_cont :
   Env.t ->
   name:Continuation.t ->
   is_exn_handler:bool ->
-  params:(Ident.t * IR.user_visible * Flambda_kind.With_subkind.t) list ->
+  params:
+    (Ident.t
+    * Flambda_debug_uid.t
+    * IR.user_visible
+    * Flambda_kind.With_subkind.t)
+    list ->
   recursive:Asttypes.rec_flag ->
   handler:(Acc.t -> Env.t -> Expr_with_acc.t) ->
   body:(Acc.t -> Env.t -> Expr_with_acc.t) ->
@@ -87,16 +92,22 @@ type 'a close_program_metadata =
       * Exported_offsets.t)
       -> [`Classic] close_program_metadata
 
-type 'a close_program_result = Flambda_unit.t * 'a close_program_metadata
+type 'a close_program_result =
+  { unit : Flambda_unit.t;
+    metadata : 'a close_program_metadata;
+    code_slot_offsets : Slot_offsets.t Code_id.Map.t
+  }
 
 val close_program :
   mode:'mode Flambda_features.mode ->
+  machine_width:Target_system.Machine_width.t ->
   big_endian:bool ->
   cmx_loader:Flambda_cmx.loader ->
   compilation_unit:Compilation_unit.t ->
-  module_block_size_in_words:int ->
+  module_repr:Lambda.module_representation ->
   program:(Acc.t -> Env.t -> Expr_with_acc.t) ->
   prog_return_cont:Continuation.t ->
   exn_continuation:Continuation.t ->
   toplevel_my_region:Ident.t ->
+  toplevel_my_ghost_region:Ident.t ->
   'mode close_program_result

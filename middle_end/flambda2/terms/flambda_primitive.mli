@@ -22,12 +22,28 @@
     Primitives that accept float, int32, int64 or nativeint values always take
     (or return) the unboxed versions.
 
-    No primitive raises an exception. (Bounds checking is handled separately.) *)
+    No primitive raises an exception. (Bounds checking is handled separately.)
+*)
+
+module Lazy_block_tag : sig
+  type t = Lambda.lazy_block_tag =
+    | Lazy_tag
+    | Forward_tag
+
+  val print : Format.formatter -> t -> unit
+
+  val compare : t -> t -> int
+
+  val to_tag : t -> Tag.t
+end
 
 module Block_kind : sig
   type t =
     | Values of Tag.Scannable.t * Flambda_kind.With_subkind.t list
     | Naked_floats
+    | Mixed of Tag.Scannable.t * Flambda_kind.Mixed_block_shape.t
+
+  val to_shape : t -> Tag.t * Flambda_kind.Block_shape.t
 
   val print : Format.formatter -> t -> unit
 
@@ -37,20 +53,47 @@ end
 module Array_kind : sig
   type t =
     | Immediates  (** An array consisting only of immediate values. *)
+    | Gc_ignorable_values
+        (** An array consisting of [value]-kind elements that the GC may ignore.
+        *)
     | Values
         (** An array consisting of elements of kind [value]. With the float
             array optimisation enabled, such elements must never be [float]s. *)
     | Naked_floats
         (** An array consisting of naked floats, represented using
             [Double_array_tag]. *)
+    | Naked_float32s
+    | Naked_ints
+    | Naked_int8s
+    | Naked_int16s
+    | Naked_int32s
+    | Naked_int64s
+    | Naked_nativeints
+    | Naked_vec128s
+    | Naked_vec256s
+    | Naked_vec512s
+    | Unboxed_product of t list
+        (** Accesses to arrays of unboxed products are unarized on the way into
+            Flambda 2. The float array optimization never applies for these
+            arrays. Vectors are not yet supported inside these arrays. *)
 
   val print : Format.formatter -> t -> unit
 
   val compare : t -> t -> int
 
-  val to_lambda : t -> Lambda.array_kind
+  val element_kinds : t -> Flambda_kind.With_subkind.t list
 
-  val element_kind : t -> Flambda_kind.With_subkind.t
+  val must_be_gc_scannable : t -> bool
+
+  val width_in_scalars : t -> int
+end
+
+module Array_kind_for_length : sig
+  type t =
+    | Array_kind of Array_kind.t
+    | Float_array_opt_dynamic
+
+  val width_in_scalars : t -> int
 end
 
 module Init_or_assign : sig
@@ -61,34 +104,74 @@ module Init_or_assign : sig
   val to_lambda : t -> Lambda.initialization_or_assignment
 end
 
+module Array_load_kind : sig
+  type t =
+    | Immediates  (** An array consisting only of immediate values. *)
+    | Gc_ignorable_values
+        (** An array consisting of [value]-kind elements that the GC may ignore.
+        *)
+    | Values
+        (** An array consisting of elements of kind [value]. With the float
+            array optimisation enabled, such elements must never be [float]s. *)
+    | Naked_floats
+        (** An array consisting of naked floats, represented using
+            [Double_array_tag]. *)
+    | Naked_float32s
+    | Naked_ints
+    | Naked_int8s
+    | Naked_int16s
+    | Naked_int32s
+    | Naked_int64s
+    | Naked_nativeints
+    | Naked_vec128s
+    | Naked_vec256s
+    | Naked_vec512s
+
+  val print : Format.formatter -> t -> unit
+
+  val compare : t -> t -> int
+
+  val kind_of_loaded_value : t -> Flambda_kind.With_subkind.t
+end
+
 module Array_set_kind : sig
   type t =
     | Immediates  (** An array consisting only of immediate values. *)
+    | Gc_ignorable_values
+        (** An array of [value]-kind elements that the GC may ignore. *)
     | Values of Init_or_assign.t
         (** An array consisting of elements of kind [value]. With the float
             array optimisation enabled, such elements must never be [float]s. *)
     | Naked_floats
         (** An array consisting of naked floats, represented using
             [Double_array_tag]. *)
+    | Naked_float32s
+    | Naked_ints
+    | Naked_int8s
+    | Naked_int16s
+    | Naked_int32s
+    | Naked_int64s
+    | Naked_nativeints
+    | Naked_vec128s
+    | Naked_vec256s
+    | Naked_vec512s
 
   val print : Format.formatter -> t -> unit
 
   val compare : t -> t -> int
-
-  val to_lambda : t -> Lambda.array_set_kind
-
-  val array_kind : t -> Array_kind.t
-
-  val element_kind : t -> Flambda_kind.With_subkind.t
 end
 
 module Duplicate_block_kind : sig
   type t =
     | Values of
         { tag : Tag.Scannable.t;
-          length : Targetint_31_63.t
+          length : Target_ocaml_int.t
         }
-    | Naked_floats of { length : Targetint_31_63.t }
+    | Naked_floats of { length : Target_ocaml_int.t }
+    | Mixed
+        (** We could store tag/length (or other relevant fields) on [Mixed], but
+            we don't because the fields of [t] are currently only used for
+            printing. *)
 
   val print : Format.formatter -> t -> unit
 
@@ -99,7 +182,17 @@ module Duplicate_array_kind : sig
   type t =
     | Immediates
     | Values
-    | Naked_floats of { length : Targetint_31_63.t option }
+    | Naked_floats of { length : Target_ocaml_int.t option }
+    | Naked_float32s of { length : Target_ocaml_int.t option }
+    | Naked_ints of { length : Target_ocaml_int.t option }
+    | Naked_int8s of { length : Target_ocaml_int.t option }
+    | Naked_int16s of { length : Target_ocaml_int.t option }
+    | Naked_int32s of { length : Target_ocaml_int.t option }
+    | Naked_int64s of { length : Target_ocaml_int.t option }
+    | Naked_nativeints of { length : Target_ocaml_int.t option }
+    | Naked_vec128s of { length : Target_ocaml_int.t option }
+    | Naked_vec256s of { length : Target_ocaml_int.t option }
+    | Naked_vec512s of { length : Target_ocaml_int.t option }
 
   val print : Format.formatter -> t -> unit
 
@@ -117,20 +210,46 @@ module Block_access_field_kind : sig
   val compare : t -> t -> int
 end
 
+module Mixed_block_access_field_kind : sig
+  type t =
+    | Value_prefix of Block_access_field_kind.t
+    | Flat_suffix of Flambda_kind.Flat_suffix_element.t
+
+  val print : Format.formatter -> t -> unit
+
+  val compare : t -> t -> int
+end
+
 module Block_access_kind : sig
   type t =
     | Values of
         { tag : Tag.Scannable.t Or_unknown.t;
-          size : Targetint_31_63.t Or_unknown.t;
+          size : Target_ocaml_int.t Or_unknown.t;
           field_kind : Block_access_field_kind.t
         }
-    | Naked_floats of { size : Targetint_31_63.t Or_unknown.t }
+    | Naked_floats of { size : Target_ocaml_int.t Or_unknown.t }
+    | Mixed of
+        { tag : Tag.Scannable.t Or_unknown.t;
+          size : Target_ocaml_int.t Or_unknown.t;
+          field_kind : Mixed_block_access_field_kind.t;
+          shape : Flambda_kind.Mixed_block_shape.t
+        }
 
   val print : Format.formatter -> t -> unit
 
   val compare : t -> t -> int
 
   val element_kind_for_load : t -> Flambda_kind.t
+
+  val element_subkind_for_load : t -> Flambda_kind.With_subkind.t
+
+  val to_block_shape : t -> Flambda_kind.Block_shape.t
+
+  val from_block_shape :
+    Flambda_kind.Block_shape.t ->
+    index:Target_ocaml_int.t ->
+    result_kind:Flambda_kind.With_subkind.t ->
+    t
 end
 
 (* CR-someday mshinwell: We should have unboxed arrays of int32, int64 and
@@ -159,7 +278,15 @@ type equality_comparison =
 
 module Bigarray_kind : sig
   type t =
+    | Float16
+        (** This is analogous to [Float32] in that whilst storage is 16-bit,
+            reading and writing goes via 64-bit floats. *)
     | Float32
+    | Float32_t
+        (** [Float32_t] is used for bigarrays that contain (unboxed) float32
+            values and are read and written to using the [float32] type. This is
+            in contrast to [Float32] bigarrays, where the accesses are done at
+            type [float]. *)
     | Float64
     | Sint8
     | Uint8
@@ -189,13 +316,21 @@ end
 
 type string_accessor_width =
   | Eight
+  | Eight_signed
   | Sixteen
+  | Sixteen_signed
   | Thirty_two
+  | Single
   | Sixty_four
-
-val kind_of_string_accessor_width : string_accessor_width -> Flambda_kind.t
+  | One_twenty_eight of { aligned : bool }
+  | Two_fifty_six of { aligned : bool }
+  | Five_twelve of { aligned : bool }
 
 val byte_width_of_string_accessor_width : string_accessor_width -> int
+
+type float_bitwidth =
+  | Float32
+  | Float64
 
 type string_like_value =
   | String
@@ -214,6 +349,8 @@ type signed_or_unsigned =
 
 (** Primitives taking exactly zero arguments. *)
 type nullary_primitive =
+  (* CR mshinwell: try to remove [Invalid]; we probably shouldn't have two
+     mechanisms for propagating this. *)
   | Invalid of Flambda_kind.t
       (** Used when rebuilding a primitive that turns out to be invalid. This is
           easier to use than turning a whole let-binding into Invalid (which
@@ -223,15 +360,27 @@ type nullary_primitive =
       (** Used for phantom bindings for which there is not enough information
           remaining to build a meaningful value. Can only be used in a phantom
           let-binding. *)
-  | Probe_is_enabled of { name : string }
-      (** Returns a boolean saying whether the given tracing probe is enabled. *)
-  | Begin_region
-      (** Starting delimiter of local allocation region, returning a region
-          name. For regions for the "try" part of a "try...with", use
-          [Begin_try_region] (below) instead. *)
-  | Enter_inlined_apply of { dbg : Debuginfo.t }
+  | Probe_is_enabled of
+      { name : string;
+        enabled_at_init : bool option
+      }
+      (** Returns a boolean saying whether the given tracing probe is enabled.
+          Semaphore initialization code may be emitted as a consequence of
+          seeing this instruction, but the emitter checks that all occurrences
+          of [enabled_at_init] are consistent for a given probe [name]. *)
+  | Enter_inlined_apply of { dbg : Inlined_debuginfo.t }
       (** Used in classic mode to denote the start of an inlined function body.
           This is then used in to_cmm to correctly add inlined debuginfo. *)
+  | Dls_get  (** Obtain the domain-local state block. *)
+  | Tls_get  (** Obtain the thread-local state block. *)
+  | Domain_index  (** Obtain the current domain's index. *)
+  | Poll
+      (** Poll for runtime actions. May run pending actions such as signal
+          handlers, finalizers, memprof callbacks, etc, as well as GCs and GC
+          slices, so should not be moved or optimised away. *)
+  | Cpu_relax
+      (** Arch-specific pause. If poll insertion is disabled, also acts as a
+          polling point. *)
 
 (** Untagged binary integer arithmetic operations.
 
@@ -239,17 +388,31 @@ type nullary_primitive =
     encoding a 16-bit quantity (described in the least significant 16 bits of
     the immediate after untagging) and exchanges the two halves of the 16-bit
     quantity. The higher-order bits are zeroed. *)
-type unary_int_arith_op =
-  | Neg
-  | Swap_byte_endianness
+type unary_int_arith_op = Swap_byte_endianness
+(* CR mshinwell/jvanburen: we should consider splitting this swapping primitive
+   into two, based on the semantics *)
 
 (** Naked float unary arithmetic operations. *)
 type unary_float_arith_op =
   | Abs
   | Neg
 
+(** Reinterpretation operations for 64-bit words. *)
+module Reinterpret_64_bit_word : sig
+  type t =
+    | Tagged_int63_as_unboxed_int64
+    | Unboxed_int64_as_tagged_int63
+    | Unboxed_int64_as_unboxed_float64
+    | Unboxed_float64_as_unboxed_int64
+end
+
 (** Primitives taking exactly one argument. *)
 type unary_primitive =
+  | Block_load of
+      { kind : Block_access_kind.t;
+        mut : Mutability.t;
+        field : Target_ocaml_int.t
+      }
   | Duplicate_block of { kind : Duplicate_block_kind.t }
       (** [Duplicate_block] may not be used to change the tag or the mutability
           of a block. *)
@@ -259,8 +422,12 @@ type unary_primitive =
         destination_mutability : Mutability.t
       }
   | Is_int of { variant_only : bool }
+  | Is_null
   | Get_tag
-  | Array_length
+  | Array_length of Array_kind_for_length.t
+      (** The unarized length of an array. So for an example an array of kind
+          [Unboxed_product [tagged_immediate; tagged_immediate]] always has a
+          length that is a multiple of two. *)
   | Bigarray_length of { dimension : int }
       (** This primitive is restricted by type-checking to bigarrays that have
           at least the correct number of dimensions. More specifically, they
@@ -270,13 +437,13 @@ type unary_primitive =
   (* CR mshinwell/xclerc: Invariant check: dimension >= 0 *)
   (* CR gbury: Invariant check: 0 < dimension <= 3 *)
   | String_length of string_or_bytes
-  | Int_as_pointer
+  | Int_as_pointer of Alloc_mode.For_allocations.t
   | Opaque_identity of
       { middle_end_only : bool;
         kind : Flambda_kind.t
       }
   | Int_arith of Flambda_kind.Standard_int.t * unary_int_arith_op
-  | Float_arith of unary_float_arith_op
+  | Float_arith of float_bitwidth * unary_float_arith_op
   | Num_conv of
       { src : Flambda_kind.Standard_int_or_float.t;
         dst : Flambda_kind.Standard_int_or_float.t
@@ -290,10 +457,9 @@ type unary_primitive =
   (* CR gbury: add test for this as soon as we can write tests in flambda *)
   | Boolean_not
   (* CR-someday mshinwell: We should maybe change int32.ml and friends to use a
-     %-primitive instead of directly calling C stubs for conversions; then we
-     could have a single primitive here taking two
-     [Flambda_kind.Of_naked_number.t] arguments (one input, one output). *)
-  | Reinterpret_int64_as_float
+     %-primitive instead of directly calling C stubs for conversions *)
+  | Reinterpret_64_bit_word of Reinterpret_64_bit_word.t
+  | Reinterpret_boxed_vector
   | Unbox_number of Flambda_kind.Boxable_number.t
   | Box_number of Flambda_kind.Boxable_number.t * Alloc_mode.For_allocations.t
   | Untag_immediate
@@ -308,8 +474,7 @@ type unary_primitive =
           closures. *)
   | Project_value_slot of
       { project_from : Function_slot.t;
-        value_slot : Value_slot.t;
-        kind : Flambda_kind.With_subkind.t
+        value_slot : Value_slot.t
       }
       (** Project a value slot from a set of closures -- in other words, read an
           entry from the closure environment (the captured variables). *)
@@ -317,12 +482,22 @@ type unary_primitive =
       (** Only valid when the float array optimisation is enabled. *)
   | Is_flat_float_array
       (** Only valid when the float array optimisation is enabled. *)
-  | Begin_try_region
-      (** Starting delimiter of local allocation region, when used for a "try"
-          body, accepting the parent region as argument. *)
-  | End_region
-      (** Ending delimiter of local allocation region, accepting a region name. *)
+  | End_region of { ghost : bool }
+      (** Ending delimiter of local allocation region, accepting a region name.
+      *)
+  | End_try_region of { ghost : bool }
+      (** Corresponding delimiter for [Begin_try_region]. *)
   | Obj_dup  (** Corresponds to [Obj.dup]; see the documentation in obj.mli. *)
+  | Get_header
+      (** Get the header of a block. This primitive is invalid if provided with
+          an immediate value. It should also not be used to read tags above
+          [No_scan_tag]. Note: The GC color bits in the header are not reliable
+          except for checking if the value is locally allocated Invariant: never
+          read the tag of a possibly-lazy value from ocamlopt-generated code.
+          Tag reads that are allowed to be lazy tags (by the type system) should
+          always go through caml_obj_tag, which is opaque to the compiler. *)
+  | Peek of Flambda_kind.Standard_int_or_float.t
+  | Make_lazy of Lazy_block_tag.t
 
 (** Whether a comparison is to yield a boolean result, as given by a particular
     comparison operator, or whether it is to behave in the manner of "compare"
@@ -357,8 +532,17 @@ type binary_float_arith_op =
 
 (** Primitives taking exactly two arguments. *)
 type binary_primitive =
-  | Block_load of Block_access_kind.t * Mutability.t
-  | Array_load of Array_kind.t * Mutability.t
+  | Block_set of
+      { kind : Block_access_kind.t;
+        init : Init_or_assign.t;
+        field : Target_ocaml_int.t
+      }
+  | Array_load of Array_kind.t * Array_load_kind.t * Mutability.t
+      (** Unarized or SIMD array load.
+
+          The array kind preserves unboxed product information but the load kind
+          and index all correspond to the unarized representation. See also
+          [Array_length], above. *)
   | String_or_bigstring_load of string_like_value * string_accessor_width
   | Bigarray_load of num_dimensions * Bigarray_kind.t * Bigarray_layout.t
   | Phys_equal of equality_comparison
@@ -367,18 +551,78 @@ type binary_primitive =
   | Int_shift of Flambda_kind.Standard_int.t * int_shift_op
   | Int_comp of
       Flambda_kind.Standard_int.t * signed_or_unsigned comparison_behaviour
-  | Float_arith of binary_float_arith_op
-  | Float_comp of unit comparison_behaviour
+  | Float_arith of float_bitwidth * binary_float_arith_op
+  | Float_comp of float_bitwidth * unit comparison_behaviour
+  | Bigarray_get_alignment of int
+  | Atomic_load_field of Block_access_field_kind.t
+  (* CR mshinwell: consider putting atomicity onto [Peek] and [Poke] then
+     deleting [Atomic_load_field] *)
+  | Poke of Flambda_kind.Standard_int_or_float.t
+  | Read_offset of Flambda_kind.With_subkind.t * Asttypes.mutable_flag
+
+(** Atomic arithmetic operations on integers. *)
+type int_atomic_op =
+  | Fetch_add
+  | Add
+  | Sub
+  | And
+  | Or
+  | Xor
+
+module Write_offset_kind : sig
+  type t =
+    | Into_block
+    | Into_block_or_off_heap
+
+  val compare : t -> t -> int
+end
 
 (** Primitives taking exactly three arguments. *)
 type ternary_primitive =
-  | Block_set of Block_access_kind.t * Init_or_assign.t
-  | Array_set of Array_set_kind.t
+  | Array_set of Array_kind.t * Array_set_kind.t
+      (** Unarized array update, for mutable arrays. See [Array_load] above for
+          more details on the unarization. *)
   | Bytes_or_bigstring_set of bytes_like_value * string_accessor_width
   | Bigarray_set of num_dimensions * Bigarray_kind.t * Bigarray_layout.t
+  | Atomic_field_int_arith of int_atomic_op
+  | Atomic_set_field of Block_access_field_kind.t
+  | Atomic_exchange_field of Block_access_field_kind.t
+  | Write_offset of
+      Write_offset_kind.t
+      * Flambda_kind.With_subkind.t
+      * Alloc_mode.For_assignments.t
+      (** For the arguments (base, byte_offset, payload), write the payload to
+          (base + byte_offset).
+
+          - If the write offset kind is [Into_block], the base must be a pointer
+            to a block.
+          - If it is [Into_block_or_off_heap], then the base can also be NULL,
+            in which case the byte_offset must be a pointer that does not point
+            into the OCaml heap (as the payload will be written via a raw
+            store). *)
+
+(** Primitives taking exactly four arguments. *)
+type quaternary_primitive =
+  | Atomic_compare_and_set_field of Block_access_field_kind.t
+  | Atomic_compare_exchange_field of
+      { atomic_kind : Block_access_field_kind.t;
+            (** The kind of values which the atomic can hold. *)
+        args_kind : Block_access_field_kind.t
+            (** The kind of values which the compare-exchange operation is to be
+                used with on this particular occasion. Note that this might be
+                [Immediate] even though the atomic is marked as [Any_value], for
+                example. *)
+      }
 
 (** Primitives taking zero or more arguments. *)
 type variadic_primitive =
+  | Begin_region of { ghost : bool }
+      (** Starting delimiter of local allocation region, returning a region
+          name. For regions for the "try" part of a "try...with", use
+          [Begin_try_region] (below) instead. *)
+  | Begin_try_region of { ghost : bool }
+      (** Starting delimiter of local allocation region, when used for a "try"
+          body. *)
   | Make_block of Block_kind.t * Mutability.t * Alloc_mode.For_allocations.t
   | Make_array of Array_kind.t * Mutability.t * Alloc_mode.For_allocations.t
 (* CR mshinwell: Invariant checks -- e.g. that the number of arguments matches
@@ -390,6 +634,8 @@ type t =
   | Unary of unary_primitive * Simple.t
   | Binary of binary_primitive * Simple.t * Simple.t
   | Ternary of ternary_primitive * Simple.t * Simple.t * Simple.t
+  | Quaternary of
+      quaternary_primitive * Simple.t * Simple.t * Simple.t * Simple.t
   | Variadic of variadic_primitive * Simple.t list
 
 type primitive_application = t
@@ -400,6 +646,8 @@ include Contains_ids.S with type t := t
 
 val args : t -> Simple.t list
 
+val map_args : (Simple.t -> Simple.t) -> t -> t
+
 (** Simpler version (e.g. for [Inlining_cost]), where only the actual primitive
     matters, not the arguments. *)
 module Without_args : sig
@@ -408,6 +656,7 @@ module Without_args : sig
     | Unary of unary_primitive
     | Binary of binary_primitive
     | Ternary of ternary_primitive
+    | Quaternary of quaternary_primitive
     | Variadic of variadic_primitive
 
   val print : Format.formatter -> t -> unit
@@ -427,9 +676,15 @@ val args_kind_of_binary_primitive :
 val args_kind_of_ternary_primitive :
   ternary_primitive -> Flambda_kind.t * Flambda_kind.t * Flambda_kind.t
 
+val args_kind_of_quaternary_primitive :
+  quaternary_primitive ->
+  Flambda_kind.t * Flambda_kind.t * Flambda_kind.t * Flambda_kind.t
+
 type arg_kinds =
-  | Variadic of Flambda_kind.t list
+  | Variadic_mixed of Flambda_kind.Mixed_block_shape.t
   | Variadic_all_of_kind of Flambda_kind.t
+  | Variadic_zero_or_one of Flambda_kind.t
+  | Variadic_unboxed_product of Flambda_kind.t list
 
 val args_kind_of_variadic_primitive : variadic_primitive -> arg_kinds
 
@@ -448,6 +703,8 @@ val result_kind_of_binary_primitive : binary_primitive -> result_kind
 
 val result_kind_of_ternary_primitive : ternary_primitive -> result_kind
 
+val result_kind_of_quaternary_primitive : quaternary_primitive -> result_kind
+
 val result_kind_of_variadic_primitive : variadic_primitive -> result_kind
 
 (** Describe the kind of the result of the given primitive. *)
@@ -461,6 +718,9 @@ val result_kind_of_unary_primitive' : unary_primitive -> Flambda_kind.t
 val result_kind_of_binary_primitive' : binary_primitive -> Flambda_kind.t
 
 val result_kind_of_ternary_primitive' : ternary_primitive -> Flambda_kind.t
+
+val result_kind_of_quaternary_primitive' :
+  quaternary_primitive -> Flambda_kind.t
 
 val result_kind_of_variadic_primitive' : variadic_primitive -> Flambda_kind.t
 
@@ -519,8 +779,16 @@ val equal_binary_primitive : binary_primitive -> binary_primitive -> bool
 
 val equal_ternary_primitive : ternary_primitive -> ternary_primitive -> bool
 
+val equal_quaternary_primitive :
+  quaternary_primitive -> quaternary_primitive -> bool
+
 val equal_variadic_primitive : variadic_primitive -> variadic_primitive -> bool
 
+val compare_primitive_application :
+  compare_simple:(Simple.t -> Simple.t -> int) -> t -> t -> int
+
 val is_begin_or_end_region : t -> bool
+
+val is_begin_region : t -> bool
 
 val is_end_region : t -> Variable.t option

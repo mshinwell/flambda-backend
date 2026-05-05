@@ -153,7 +153,13 @@ end = struct
       | Equals simple ->
         Simple.pattern_match' simple
           ~const:(fun _ -> Not_expanded t)
-          ~symbol:(fun _ ~coercion:_ -> Not_expanded t)
+          ~symbol:(fun symbol ~coercion ->
+            if Coercion.is_id coercion
+            then Not_expanded t
+            else
+              (* Coercions might contain variables. Removing any coercion
+                 happens to fix all potential problems. *)
+              Not_expanded (Equals (Simple.symbol symbol)))
           ~var:(fun var ~coercion ->
             if Variable.Set.mem var to_project
             then Expanded (expand var ~coercion)
@@ -257,17 +263,7 @@ end
 include T
 
 let print ~print_head ppf t =
-  let colour = Flambda_colours.top_or_bottom_type in
-  match descr t with
-  | Unknown ->
-    if Flambda_features.unicode ()
-    then Format.fprintf ppf "%t@<1>\u{22a4}%t" colour Flambda_colours.pop
-    else Format.fprintf ppf "%tT%t" colour Flambda_colours.pop
-  | Bottom ->
-    if Flambda_features.unicode ()
-    then Format.fprintf ppf "%t@<1>\u{22a5}%t" colour Flambda_colours.pop
-    else Format.fprintf ppf "%t_|_%t" colour Flambda_colours.pop
-  | Ok descr -> Descr.print ~print_head ppf descr
+  Or_unknown_or_bottom.print (Descr.print ~print_head) ppf (descr t)
 
 let[@inline always] apply_coercion ~apply_coercion_head coercion t :
     _ t Or_bottom.t =

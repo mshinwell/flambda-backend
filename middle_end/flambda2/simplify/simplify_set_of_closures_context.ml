@@ -28,7 +28,7 @@ type t =
 
 let function_decl_type ?new_code_id ~rec_info old_code_id =
   let code_id = Option.value new_code_id ~default:old_code_id in
-  Or_unknown_or_bottom.Ok (T.Function_type.create code_id ~rec_info)
+  Or_unknown.Known (T.Function_type.create code_id ~rec_info)
 
 let create_for_stub dacc ~all_code ~simplify_function_body =
   let dacc_inside_functions =
@@ -41,7 +41,7 @@ let create_for_stub dacc ~all_code ~simplify_function_body =
         Code_id.Map.fold
           (fun code_id code denv -> DE.define_code denv ~code_id ~code)
           all_code
-          (DE.enter_set_of_closures (DE.disable_inlining denv)))
+          (DE.enter_set_of_closures denv ~in_stub:true))
   in
   { dacc_prior_to_sets = dacc;
     simplify_function_body;
@@ -68,19 +68,6 @@ let closure_bound_names_inside_functions_exactly_one_set t =
   | [] | _ :: _ :: _ -> Misc.fatal_error "Only one set of closures was expected"
 
 let previously_free_depth_variables t = t.previously_free_depth_variables
-
-let compute_value_slot_types_inside_function ~value_slot_types
-    ~degraded_value_slots =
-  Value_slot.Map.mapi
-    (fun value_slot type_prior_to_sets ->
-      let type_prior_to_sets =
-        (* See comment below about [degraded_value_slots]. *)
-        if Value_slot.Set.mem value_slot degraded_value_slots
-        then T.any_value
-        else type_prior_to_sets
-      in
-      type_prior_to_sets)
-    value_slot_types
 
 let compute_closure_types_inside_functions ~denv ~all_sets_of_closures
     ~closure_bound_names_all_sets ~value_slot_types_inside_functions_all_sets
@@ -109,40 +96,46 @@ let compute_closure_types_inside_functions ~denv ~all_sets_of_closures
         let function_decls = Set_of_closures.function_decls set_of_closures in
         let all_function_slots_in_set =
           Function_slot.Map.mapi
-            (fun function_slot old_code_id ->
-              let code_or_metadata = DE.find_code_exn denv old_code_id in
-              let new_code_id =
-                (* The types of the functions involved should reference the
-                   _new_ code IDs (where such exist), so that direct recursive
-                   calls can be compiled straight to the new code. *)
-                if Code_or_metadata.code_present code_or_metadata
-                   && not
-                        (Code_metadata.stub
-                           (Code_or_metadata.code_metadata code_or_metadata))
-                then Code_id.Map.find old_code_id old_to_new_code_ids_all_sets
-                else old_code_id
-              in
-              let rec_info =
-                (* From inside their own bodies, every function in the set
-                   currently being defined has an unknown recursion depth *)
-                T.unknown K.rec_info
-              in
-              let code_metadata =
-                code_or_metadata |> Code_or_metadata.code_metadata
-              in
-              let absolute_history, _relative_history =
-                DE.inlining_history_tracker denv
-                |> Inlining_history.Tracker.fundecl
-                     ~dbg:(Code_metadata.dbg code_metadata)
-                     ~function_relative_history:
-                       (Code_metadata.relative_history code_metadata)
-                     ~name:(Function_slot.name function_slot)
-              in
-              Inlining_report.record_decision_at_function_definition
-                ~absolute_history ~code_metadata ~pass:Before_simplify
-                ~are_rebuilding_terms:(DE.are_rebuilding_terms denv)
-                (Code_metadata.inlining_decision code_metadata);
-              function_decl_type old_code_id ~new_code_id ~rec_info)
+            (fun function_slot
+                 (old_code_id :
+                   Function_declarations.code_id_in_function_declaration) ->
+              match old_code_id with
+              | Deleted _ -> Or_unknown.Unknown
+              | Code_id { code_id = old_code_id; only_full_applications = _ } ->
+                let code_or_metadata = DE.find_code_exn denv old_code_id in
+                let new_code_id =
+                  (* The types of the functions involved should reference the
+                     _new_ code IDs (where such exist), so that direct recursive
+                     calls can be compiled straight to the new code. *)
+                  if
+                    Code_or_metadata.code_present code_or_metadata
+                    && not
+                         (Code_metadata.stub
+                            (Code_or_metadata.code_metadata code_or_metadata))
+                  then Code_id.Map.find old_code_id old_to_new_code_ids_all_sets
+                  else old_code_id
+                in
+                let rec_info =
+                  (* From inside their own bodies, every function in the set
+                     currently being defined has an unknown recursion depth *)
+                  T.unknown K.rec_info
+                in
+                let code_metadata =
+                  code_or_metadata |> Code_or_metadata.code_metadata
+                in
+                let absolute_history, _relative_history =
+                  DE.inlining_history_tracker denv
+                  |> Inlining_history.Tracker.fundecl
+                       ~dbg:(Code_metadata.dbg code_metadata)
+                       ~function_relative_history:
+                         (Code_metadata.relative_history code_metadata)
+                       ~name:(Function_slot.name function_slot)
+                in
+                Inlining_report.record_decision_at_function_definition
+                  ~absolute_history ~code_metadata ~pass:Before_simplify
+                  ~are_rebuilding_terms:(DE.are_rebuilding_terms denv)
+                  (Code_metadata.inlining_decision code_metadata);
+                function_decl_type old_code_id ~new_code_id ~rec_info)
             (Function_declarations.funs function_decls)
         in
         Function_slot.Map.mapi
@@ -206,18 +199,26 @@ let compute_old_to_new_code_ids_all_sets denv ~all_sets_of_closures =
     (fun old_to_new_code_ids_all_sets set_of_closures ->
       let function_decls = Set_of_closures.function_decls set_of_closures in
       Function_slot.Map.fold
-        (fun _ old_code_id old_to_new_code_ids ->
-          let code =
-            try DE.find_code_exn denv old_code_id
-            with Not_found ->
-              Misc.fatal_errorf "Missing code for %a" Code_id.print old_code_id
-          in
-          if Code_or_metadata.code_present code
-             && not (Code_metadata.stub (Code_or_metadata.code_metadata code))
-          then
-            let new_code_id = Code_id.rename old_code_id in
-            Code_id.Map.add old_code_id new_code_id old_to_new_code_ids
-          else old_to_new_code_ids)
+        (fun _
+             (old_code_id :
+               Function_declarations.code_id_in_function_declaration)
+             old_to_new_code_ids ->
+          match old_code_id with
+          | Deleted _ -> old_to_new_code_ids
+          | Code_id { code_id = old_code_id; only_full_applications = _ } ->
+            let code =
+              try DE.find_code_exn denv old_code_id
+              with Not_found ->
+                Misc.fatal_errorf "Missing code for %a" Code_id.print
+                  old_code_id
+            in
+            if
+              Code_or_metadata.code_present code
+              && not (Code_metadata.stub (Code_or_metadata.code_metadata code))
+            then
+              let new_code_id = Code_id.rename old_code_id in
+              Code_id.Map.add old_code_id new_code_id old_to_new_code_ids
+            else old_to_new_code_ids)
         (Function_declarations.funs function_decls)
         old_to_new_code_ids_all_sets)
     Code_id.Map.empty all_sets_of_closures
@@ -226,8 +227,9 @@ let bind_existing_code_to_new_code_ids denv ~old_to_new_code_ids_all_sets =
   Code_id.Map.fold
     (fun old_code_id new_code_id denv ->
       let code = DE.find_code_exn denv old_code_id in
-      if Code_or_metadata.code_present code
-         && not (Code_metadata.stub (Code_or_metadata.code_metadata code))
+      if
+        Code_or_metadata.code_present code
+        && not (Code_metadata.stub (Code_or_metadata.code_metadata code))
       then
         let code =
           Code_or_metadata.get_code code
@@ -242,41 +244,28 @@ let create ~dacc_prior_to_sets ~simplify_function_body ~all_sets_of_closures
     ~closure_bound_names_all_sets ~value_slot_types_all_sets =
   let denv = DA.denv dacc_prior_to_sets in
   let denv_inside_functions =
-    denv |> DE.enter_set_of_closures
+    DE.enter_set_of_closures denv ~in_stub:false
     (* Even if we are not rebuilding terms we should always rebuild them for
        local functions. The type of a function is dependent on its term and not
        knowing it prohibits us from inlining it. *)
     |> DE.set_rebuild_terms
   in
-  (* We collect a set of "degraded value slots" whose types involve imported
-     variables from missing .cmx files. Since we don't know the kind of these
-     variables, we can't run the code below that checks if they might need
-     binding as "never inline" depth variables (since we don't know if a given
-     variable is a depth variable or not). Instead we will treat the whole value
-     slot as having [Unknown] type. *)
-  let degraded_value_slots = ref Value_slot.Set.empty in
   let free_depth_variables =
     List.concat_map
       (fun value_slot_types ->
         Value_slot.Map.mapi
-          (fun value_slot ty ->
+          (fun _value_slot ty ->
             let vars = TE.free_names_transitive (DE.typing_env denv) ty in
             NO.fold_variables vars ~init:Variable.Set.empty
               ~f:(fun free_depth_variables var ->
-                let ty_opt =
-                  TE.find_or_missing
+                let ty =
+                  TE.find
                     (DE.typing_env denv_inside_functions)
-                    (Name.var var)
+                    (Name.var var) None
                 in
-                match ty_opt with
-                | None ->
-                  degraded_value_slots
-                    := Value_slot.Set.add value_slot !degraded_value_slots;
-                  free_depth_variables
-                | Some ty -> (
-                  match T.kind ty with
-                  | Rec_info -> Variable.Set.add var free_depth_variables
-                  | Value | Naked_number _ | Region -> free_depth_variables)))
+                match T.kind ty with
+                | Rec_info -> Variable.Set.add var free_depth_variables
+                | Value | Naked_number _ | Region -> free_depth_variables))
           value_slot_types
         |> Value_slot.Map.data)
       value_slot_types_all_sets
@@ -304,20 +293,7 @@ let create ~dacc_prior_to_sets ~simplify_function_body ~all_sets_of_closures
           (T.this_rec_info Rec_info_expr.do_not_inline))
       free_depth_variables denv_inside_functions
   in
-  let value_slot_types_all_sets_inside_functions_rev =
-    List.fold_left
-      (fun value_slot_types_all_sets_inside_functions_rev value_slot_types ->
-        let value_slot_types_inside_function =
-          compute_value_slot_types_inside_function ~value_slot_types
-            ~degraded_value_slots:!degraded_value_slots
-        in
-        value_slot_types_inside_function
-        :: value_slot_types_all_sets_inside_functions_rev)
-      [] value_slot_types_all_sets
-  in
-  let value_slot_types_inside_functions_all_sets =
-    List.rev value_slot_types_all_sets_inside_functions_rev
-  in
+  let value_slot_types_inside_functions_all_sets = value_slot_types_all_sets in
   let old_to_new_code_ids_all_sets =
     compute_old_to_new_code_ids_all_sets denv ~all_sets_of_closures
   in

@@ -15,7 +15,8 @@
 (**************************************************************************)
 
 (** The identifiers (implicit and explicit function parameters, together with
-    return and exception continuations) bound at a lambda in the term language. *)
+    return and exception continuations) bound at a lambda in the term language.
+*)
 
 type t
 
@@ -24,7 +25,7 @@ val create :
   exn_continuation:Continuation.t ->
   params:Bound_parameters.t ->
   my_closure:Variable.t ->
-  my_region:Variable.t ->
+  my_alloc_mode:Alloc_mode.For_applications.t ->
   my_depth:Variable.t ->
   t
 
@@ -36,7 +37,11 @@ val params : t -> Bound_parameters.t
 
 val my_closure : t -> Variable.t
 
-val my_region : t -> Variable.t
+val my_region : t -> Variable.t option
+
+val my_ghost_region : t -> Variable.t option
+
+val my_alloc_mode : t -> Alloc_mode.For_applications.t
 
 val my_depth : t -> Variable.t
 

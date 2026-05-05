@@ -17,13 +17,12 @@
 module EC = Exported_code
 module T = Flambda2_types
 module TE = Flambda2_types.Typing_env
+module Imported_unit_map = Global_module.Name.Map
 
 type loader =
   { get_module_info : Compilation_unit.t -> Flambda_cmx_format.t option;
-    mutable imported_names : Name.Set.t;
     mutable imported_code : Exported_code.t;
-    mutable imported_units :
-      TE.Serializable.t option Compilation_unit.Name.Map.t
+    mutable imported_units : TE.Serializable.t option Imported_unit_map.t
   }
 
 let load_cmx_file_contents loader comp_unit =
@@ -31,8 +30,10 @@ let load_cmx_file_contents loader comp_unit =
     Compilation_unit.which_cmx_file comp_unit
       ~accessed_by:(Compilation_unit.get_current_exn ())
   in
-  let cmx_file = Compilation_unit.name accessible_comp_unit in
-  match Compilation_unit.Name.Map.find cmx_file loader.imported_units with
+  let cmx_file =
+    Compilation_unit.to_global_name_without_prefix accessible_comp_unit
+  in
+  match Imported_unit_map.find cmx_file loader.imported_units with
   | typing_env_or_none -> typing_env_or_none
   | exception Not_found -> (
     match loader.get_module_info accessible_comp_unit with
@@ -40,28 +41,26 @@ let load_cmx_file_contents loader comp_unit =
       (* To make things easier to think about, we never retry after a .cmx load
          fails. *)
       loader.imported_units
-        <- Compilation_unit.Name.Map.add cmx_file None loader.imported_units;
+        <- Imported_unit_map.add cmx_file None loader.imported_units;
       None
     | Some cmx ->
-      let typing_env, all_code =
-        Flambda_cmx_format.import_typing_env_and_code cmx
-      in
-      let newly_imported_names = TE.Serializable.name_domain typing_env in
-      loader.imported_names
-        <- Name.Set.union newly_imported_names loader.imported_names;
-      loader.imported_code <- EC.merge all_code loader.imported_code;
-      let offsets = Flambda_cmx_format.exported_offsets cmx in
-      Exported_offsets.import_offsets offsets;
-      loader.imported_units
-        <- Compilation_unit.Name.Map.add cmx_file (Some typing_env)
-             loader.imported_units;
-      Some typing_env)
+      Profile.record_call ~accumulate:true "load_cmx" (fun () ->
+          let typing_env, all_code =
+            Flambda_cmx_format.import_typing_env_and_code cmx
+          in
+          loader.imported_code <- EC.merge all_code loader.imported_code;
+          let offsets = Flambda_cmx_format.exported_offsets cmx in
+          Exported_offsets.import_offsets offsets;
+          loader.imported_units
+            <- Imported_unit_map.add cmx_file (Some typing_env)
+                 loader.imported_units;
+          Some typing_env))
 
 let load_symbol_approx loader symbol : Code_or_metadata.t Value_approximation.t
     =
   let comp_unit = Symbol.compilation_unit symbol in
   match load_cmx_file_contents loader comp_unit with
-  | None -> Value_unknown
+  | None -> Unknown Flambda_kind.value
   | Some typing_env ->
     let find_code code_id =
       match Exported_code.find loader.imported_code code_id with
@@ -80,31 +79,31 @@ let all_predefined_exception_symbols () =
   Predef.all_predef_exns |> List.map symbol_for_global |> Symbol.Set.of_list
 
 let predefined_exception_typing_env () =
-  let comp_unit = Compilation_unit.get_current () in
-  Compilation_unit.set_current (Some Compilation_unit.predef_exn);
+  let unit_info = Env.get_unit_name () in
+  let predef_unit_info =
+    Unit_info.make_dummy ~input_name:"<predefined exceptions>"
+      Compilation_unit.predef_exn
+  in
+  Env.set_unit_name (Some predef_unit_info);
   let typing_env =
     TE.Serializable.predefined_exceptions (all_predefined_exception_symbols ())
   in
-  Compilation_unit.set_current comp_unit;
+  Env.set_unit_name unit_info;
   typing_env
 
 let create_loader ~get_module_info =
   let loader =
     { get_module_info;
-      imported_names = Name.Set.empty;
       imported_code = Exported_code.empty;
-      imported_units = Compilation_unit.Name.Map.empty
+      imported_units = Imported_unit_map.empty
     }
   in
   let predefined_exception_typing_env = predefined_exception_typing_env () in
   loader.imported_units
-    <- Compilation_unit.Name.Map.singleton Compilation_unit.Name.predef_exn
+    <- Imported_unit_map.singleton
+         (Compilation_unit.Name.to_global_name Compilation_unit.Name.predef_exn)
          (Some predefined_exception_typing_env);
-  loader.imported_names
-    <- TE.Serializable.name_domain predefined_exception_typing_env;
   loader
-
-let get_imported_names loader () = loader.imported_names
 
 let get_imported_code loader () = loader.imported_code
 
@@ -117,9 +116,10 @@ let compute_reachable_names_and_code ~module_symbol ~free_names_of_name code =
         Name_occurrences.union names_to_add names_already_added
       in
       let fold_code_id names_to_add code_id =
-        if not
-             (Code_id.in_compilation_unit code_id
-                (Compilation_unit.get_current_exn ()))
+        if
+          not
+            (Code_id.in_compilation_unit code_id
+               (Compilation_unit.get_current_exn ()))
         then
           (* Code in units upon which the current unit depends cannot reference
              this unit. *)
@@ -141,10 +141,11 @@ let compute_reachable_names_and_code ~module_symbol ~free_names_of_name code =
             Name_occurrences.union new_names names_to_add
       in
       let fold_name names_to_add name =
-        if not
-             (Compilation_unit.equal
-                (Name.compilation_unit name)
-                (Compilation_unit.get_current_exn ()))
+        if
+          not
+            (Compilation_unit.equal
+               (Name.compilation_unit name)
+               (Compilation_unit.get_current_exn ()))
         then
           (* Names in units upon which the current unit depends cannot reference
              this unit. *)
@@ -189,10 +190,8 @@ let prepare_cmx ~module_symbol create_typing_env ~free_names_of_name
   let all_code =
     (* CR mshinwell: do we need to remove unused function slot bindings from the
        result types too? *)
-    all_code
-    |> EC.remove_unused_value_slots_from_result_types_and_shortcut_aliases
-         ~used_value_slots ~canonicalise
-    |> EC.remove_unreachable ~reachable_names
+    EC.prepare_for_export all_code ~reachable_names ~used_value_slots
+      ~canonicalise
   in
   let final_typing_env = create_typing_env reachable_names in
   (* We need to re-export offsets for everything reachable from the cmx file;
@@ -203,23 +202,25 @@ let prepare_cmx ~module_symbol create_typing_env ~free_names_of_name
      function_slots/vars reachable from the code of the current compilation
      unit, but since we also re-export code metadata (including return types)
      from other compilation units, we need to take those into account. *)
-  (* CR gbury: it might be more efficient to not compute the free names for all
-     exported code, but fold over the exported code to avoid allocating some
-     free_names *)
-  let free_names_of_all_code = EC.free_names all_code in
+  let free_slots_of_all_code =
+    EC.free_function_slots_and_value_slots all_code
+  in
   let slots_used_in_typing_env =
     TE.Serializable.free_function_slots_and_value_slots final_typing_env
   in
   let exported_offsets =
     exported_offsets
     |> Exported_offsets.reexport_function_slots
-         (Name_occurrences.all_function_slots free_names_of_all_code)
+         (Name_occurrences.all_function_slots_at_normal_mode
+            free_slots_of_all_code)
     |> Exported_offsets.reexport_value_slots
-         (Name_occurrences.all_value_slots free_names_of_all_code)
+         (Name_occurrences.all_value_slots_at_normal_mode free_slots_of_all_code)
     |> Exported_offsets.reexport_function_slots
-         (Name_occurrences.all_function_slots slots_used_in_typing_env)
+         (Name_occurrences.all_function_slots_at_normal_mode
+            slots_used_in_typing_env)
     |> Exported_offsets.reexport_value_slots
-         (Name_occurrences.all_value_slots slots_used_in_typing_env)
+         (Name_occurrences.all_value_slots_at_normal_mode
+            slots_used_in_typing_env)
   in
   let cmx =
     Flambda_cmx_format.create ~final_typing_env ~all_code ~exported_offsets
@@ -242,14 +243,13 @@ let prepare_cmx_file_contents ~final_typing_env ~module_symbol ~used_value_slots
       TE.Serializable.create typing_env ~reachable_names
     in
     let free_names_of_name name =
-      Option.map T.free_names
-        (TE.Pre_serializable.find_or_missing typing_env name)
+      Some (T.free_names (TE.Pre_serializable.find typing_env name))
     in
     prepare_cmx ~module_symbol create_typing_env ~free_names_of_name
       ~used_value_slots ~canonicalise ~exported_offsets all_code
 
-let prepare_cmx_from_approx ~approxs ~module_symbol ~exported_offsets
-    ~used_value_slots all_code =
+let prepare_cmx_from_approx ~machine_width ~approxs ~module_symbol
+    ~exported_offsets ~used_value_slots all_code =
   if Flambda_features.opaque ()
   then Name_occurrences.singleton_symbol module_symbol Name_mode.normal, None
   else
@@ -259,7 +259,8 @@ let prepare_cmx_from_approx ~approxs ~module_symbol ~exported_offsets
           (fun sym _ -> Name_occurrences.mem_symbol reachable_names sym)
           approxs
       in
-      TE.Serializable.create_from_closure_conversion_approx approxs
+      TE.Serializable.create_from_closure_conversion_approx ~machine_width
+        approxs
     in
     let free_names_of_name name =
       let symbol = Name.must_be_symbol name in

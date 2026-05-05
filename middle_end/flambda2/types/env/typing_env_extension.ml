@@ -36,6 +36,8 @@ let from_map equations =
 
 let to_map ({ equations } : t) = equations
 
+let has_equation name ({ equations } : t) = Name.Map.mem name equations
+
 let one_equation name ty =
   More_type_creators.check_equation name ty;
   TG.Env_extension.create ~equations:(Name.Map.singleton name ty)
@@ -47,7 +49,8 @@ let add_or_replace_equation ({ equations } : t) name ty =
     Format.eprintf
       "Warning: Overriding equation for name %a@\n\
        Old equation is@ @[%a@]@\n\
-       New equation is@ @[%a@]@." Name.print name TG.print
+       New equation is@ @[%a@]@."
+      Name.print name TG.print
       (Name.Map.find name equations)
       TG.print ty;
   TG.Env_extension.create ~equations:(Name.Map.add name ty equations)
@@ -55,6 +58,11 @@ let add_or_replace_equation ({ equations } : t) name ty =
 let replace_equation ({ equations } : t) name ty =
   TG.Env_extension.create
     ~equations:(Name.Map.add (* replace *) name ty equations)
+
+let disjoint_union ({ equations = equations1 } : t)
+    ({ equations = equations2 } : t) =
+  TG.Env_extension.create
+    ~equations:(Name.Map.disjoint_union equations1 equations2)
 
 let ids_for_export = TG.Env_extension.ids_for_export
 
@@ -137,7 +145,9 @@ module With_extra_variables = struct
   let existential_vars { existential_vars; _ } =
     Variable.Map.keys existential_vars
 
-  let map_types { existential_vars; equations } ~f =
-    let equations = Name.Map.map f equations in
-    { existential_vars; equations }
+  let map_types ({ existential_vars; equations } as t) ~f =
+    let equations' = Name.Map.map_sharing f equations in
+    if equations == equations'
+    then t
+    else { existential_vars; equations = equations' }
 end

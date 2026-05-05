@@ -20,7 +20,11 @@ type t
 val print : Format.formatter -> t -> unit
 
 (** Create a downwards accumulator. *)
-val create : Downwards_env.t -> Continuation_uses_env.t -> t
+val create :
+  Downwards_env.t ->
+  Slot_offsets.t Code_id.Map.t ->
+  Continuation_uses_env.t ->
+  t
 
 (** Extract the environment component of the given downwards accumulator. *)
 val denv : t -> Downwards_env.t
@@ -33,6 +37,9 @@ val with_denv : t -> Downwards_env.t -> t
 
 (** Extract the dataflow analysis accumulator *)
 val flow_acc : t -> Flow.Acc.t
+
+(** MSet the dataflow analysis accumulator of the given dacc. *)
+val with_flow_acc : Flow.Acc.t -> t -> t
 
 (** Map the dataflow analysis accumulator of the given dacc. *)
 val map_flow_acc : t -> f:(Flow.Acc.t -> Flow.Acc.t) -> t
@@ -98,8 +105,60 @@ val code_ids_to_never_delete : t -> Code_id.Set.t
 val with_code_ids_to_never_delete :
   t -> code_ids_to_never_delete:Code_id.Set.t -> t
 
+val add_code_ids_never_simplified : t -> old_code_ids:Code_id.Set.t -> t
+
+val code_ids_never_simplified : t -> Code_id.Set.t
+
+val with_code_ids_never_simplified :
+  t -> code_ids_never_simplified:Code_id.Set.t -> t
+
 val are_rebuilding_terms : t -> Are_rebuilding_terms.t
 
 val slot_offsets : t -> Slot_offsets.t Code_id.Map.t
 
 val with_slot_offsets : t -> slot_offsets:Slot_offsets.t Code_id.Map.t -> t
+
+val merge_debuginfo_rewrite : t -> bound_to:Simple.t -> Debuginfo.t -> t
+
+val find_debuginfo_rewrite : t -> bound_to:Simple.t -> Debuginfo.t option
+
+val are_lifting_conts : t -> Are_lifting_conts.t
+
+val with_are_lifting_conts : t -> Are_lifting_conts.t -> t
+
+val get_and_clear_lifted_continuations :
+  t -> t * (Downwards_env.t * Original_handlers.t) list
+
+val add_lifted_continuation : Downwards_env.t -> Original_handlers.t -> t -> t
+
+val get_continuation_lifting_budget : t -> int
+
+val reset_continuation_lifting_budget : t -> t
+
+val with_continuation_lifting_budget : t -> int -> t
+
+val decrease_continuation_lifting_budget : t -> int -> t
+
+val get_continuation_specialization_budget : t -> int
+
+val reset_continuation_specialization_budget : t -> t
+
+val with_continuation_specialization_budget : t -> int -> t
+
+val decrease_continuation_specialization_budget : t -> int -> t
+
+val prepare_for_speculative_inlining : t -> t
+
+val continuations_to_specialize : t -> Continuation.Set.t
+
+val add_continuation_to_specialize : t -> Continuation.t -> t
+
+val specialization_map :
+  t -> Continuation.t Apply_cont_rewrite_id.Map.t Continuation.Map.t
+
+val add_specialization :
+  t ->
+  Apply_cont_rewrite_id.t ->
+  old:Continuation.t ->
+  specialized:Continuation.t ->
+  t

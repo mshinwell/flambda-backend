@@ -1,3 +1,8 @@
-[@@@ocaml.warning "+a-4-30-40-41-42"]
+[@@@ocaml.warning "+a-30-40-41-42"]
 
-val run : Cfg_with_liveness.t -> Cfg_with_liveness.t
+(* Returns `None` if the functions is deemed too complex for IRC allocation. *)
+val run : Cfg_with_infos.t -> Cfg_with_infos.t option
+
+module For_testing : sig
+  val rounds : int ref
+end

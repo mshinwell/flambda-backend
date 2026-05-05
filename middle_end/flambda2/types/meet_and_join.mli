@@ -16,10 +16,10 @@
 
 (** Greatest lower bound of two types. *)
 val meet :
-  Typing_env.Meet_env.t ->
+  Typing_env.t ->
   Type_grammar.t ->
   Type_grammar.t ->
-  (Type_grammar.t * Typing_env_extension.t) Or_bottom.t
+  (Type_grammar.t * Typing_env.t) Or_bottom.t
 
 (** Least upper bound of two types. *)
 val join :
@@ -29,16 +29,10 @@ val join :
   Type_grammar.t ->
   Type_grammar.t Or_unknown.t
 
-val meet_shape :
-  Typing_env.t ->
+(* This function has a slightly different interface; it is meant to be used only
+   by functions in Typing_env *)
+val meet_type :
+  Meet_env.t ->
   Type_grammar.t ->
-  shape:Type_grammar.t ->
-  result_var:Bound_var.t ->
-  result_kind:Flambda_kind.t ->
-  Typing_env_extension.t Or_bottom.t
-
-val meet_env_extension :
-  Typing_env.Meet_env.t ->
-  Typing_env_extension.t ->
-  Typing_env_extension.t ->
-  Typing_env_extension.t Or_bottom.t
+  Type_grammar.t ->
+  (Type_grammar.t Meet_env.meet_return_value * Meet_env.t) Or_bottom.t

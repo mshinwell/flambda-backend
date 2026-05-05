@@ -29,82 +29,55 @@ module Int : sig
 end
 
 module Int8 : sig
-  type t
+  type t = private int
 
   val zero : t
 
   val one : t
 
-  val of_int_exn : int -> t
-
-  val to_int : t -> int
-end
-
-module Int16 : sig
-  type t
+  val of_int : int -> t
 
   val of_int_exn : int -> t
+
+  val unsigned_of_int_exn : int -> t
 
   val of_int64_exn : Int64.t -> t
 
+  val unsigned_of_int64_exn : Int64.t -> t
+
   val to_int : t -> int
-end
-
-module Float : Container_types.S with type t = float
-
-module Float_by_bit_pattern : sig
-  (** Floating point numbers whose comparison and equality relations are the
-      usual [Int64] relations on the bit patterns of the floats. This in
-      particular means that different representations of NaN will be
-      distinguished, as will the two signed zeros.
-
-      Never use [Stdlib.compare] on values of type [t]. Use either [compare]
-      (comparison on bit patterns) or [IEEE_semantics.compare] depending on
-      which semantics you want. Likewise for equality. *)
-
-  include Container_types.S
-
-  val create : float -> t
-
-  val of_bits : Int64.t -> t
-
-  val of_string : string -> t
 
   val to_float : t -> float
 
-  val one : t
+  val of_float : float -> t
+
+  include Container_types.S with type t := t
+end
+
+module Int16 : sig
+  type t = private int
 
   val zero : t
 
-  val minus_one : t
+  val one : t
 
-  val is_either_zero : t -> bool
+  val of_int : int -> t
 
-  val is_any_nan : t -> bool
+  val of_int_exn : int -> t
 
-  module IEEE_semantics : sig
-    val add : t -> t -> t
+  val unsigned_of_int_exn : int -> t
 
-    val sub : t -> t -> t
+  val of_int64_exn : Int64.t -> t
 
-    val mul : t -> t -> t
+  val unsigned_of_int64_exn : Int64.t -> t
 
-    val div : t -> t -> t
+  val to_int : t -> int
 
-    val mod_ : t -> t -> t
+  val to_float : t -> float
 
-    val neg : t -> t
+  val of_float : float -> t
 
-    val abs : t -> t
-
-    val compare : t -> t -> int
-
-    val equal : t -> t -> bool
-  end
-
-  module Pair : Container_types.S with type t = t * t
-
-  val cross_product : Set.t -> Set.t -> Pair.Set.t
+  include Container_types.S with type t := t
 end
 
 module Int32 : sig
@@ -134,3 +107,70 @@ module Int64 : sig
 
   val cross_product : Set.t -> Set.t -> Pair.Set.t
 end
+
+module type IEEE_semantics = sig
+  type t
+
+  val add : t -> t -> t
+
+  val sub : t -> t -> t
+
+  val mul : t -> t -> t
+
+  val div : t -> t -> t
+
+  val mod_ : t -> t -> t
+
+  val neg : t -> t
+
+  val abs : t -> t
+
+  val compare : t -> t -> int
+
+  val equal : t -> t -> bool
+end
+
+module type Float_by_bit_pattern = sig
+  (** Floating point numbers whose comparison and equality relations are the
+      usual [Int64/Int32] relations on the bit patterns of the floats. This in
+      particular means that different representations of NaN will be
+      distinguished, as will the two signed zeros.
+
+      Never use [Stdlib.compare] on values of type [t]. Use either [compare]
+      (comparison on bit patterns) or [IEEE_semantics.compare] depending on
+      which semantics you want. Likewise for equality. *)
+
+  type bits
+
+  include Container_types.S
+
+  val create : float -> t
+
+  val of_bits : bits -> t
+
+  val to_bits : t -> bits
+
+  val of_string : string -> t
+
+  val to_float : t -> float
+
+  val one : t
+
+  val zero : t
+
+  val minus_one : t
+
+  val is_either_zero : t -> bool
+
+  val is_any_nan : t -> bool
+
+  module IEEE_semantics : IEEE_semantics with type t = t
+
+  module Pair : Container_types.S with type t = t * t
+
+  val cross_product : Set.t -> Set.t -> Pair.Set.t
+end
+
+module Float_by_bit_pattern : Float_by_bit_pattern with type bits = int64
+
+module Float32_by_bit_pattern : Float_by_bit_pattern with type bits = int32

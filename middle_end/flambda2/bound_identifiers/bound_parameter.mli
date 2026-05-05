@@ -18,10 +18,13 @@
 type t
 
 (** Create a kinded parameter. *)
-val create : Variable.t -> Flambda_kind.With_subkind.t -> t
+val create :
+  Variable.t -> Flambda_kind.With_subkind.t -> Flambda_debug_uid.t -> t
 
 (** The underlying variable. *)
 val var : t -> Variable.t
+
+val var_and_uid : t -> Variable.t * Flambda_debug_uid.t
 
 val name : t -> Name.t
 
@@ -34,11 +37,9 @@ val kind : t -> Flambda_kind.With_subkind.t
 (** Replace the kind of the given parameter. *)
 val with_kind : t -> Flambda_kind.With_subkind.t -> t
 
-(** Returns [true] iff the provided kinded parameters have the same kind and
-    subkind. *)
-val equal_kinds : t -> t -> bool
-
 val rename : t -> t
+
+val is_renamed_version_of : t -> t -> bool
 
 include Container_types.S with type t := t
 

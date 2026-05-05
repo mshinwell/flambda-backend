@@ -42,7 +42,7 @@ val get_used_params : t -> Bound_parameters.t * Bound_parameters.t
 
 val get_unused_params : t -> Bound_parameters.t
 
-val original_params_arity : t -> Flambda_arity.t
+val original_params_arity : t -> [> ] Flambda_arity.t
 
 type rewrite_apply_cont_ctx =
   | Apply_cont
@@ -50,10 +50,12 @@ type rewrite_apply_cont_ctx =
 
 val make_rewrite :
   t ->
+  machine_width:Target_system.Machine_width.t ->
   ctx:rewrite_apply_cont_ctx ->
   Apply_cont_rewrite_id.t ->
   Simple.t list ->
-  (Bound_var.t * Code_size.t * Flambda.Named.t) list * Simple.t list
+  ((Bound_var.t * Code_size.t * Flambda.Named.t) list * Simple.t list)
+  Or_invalid.t
 
 val rewrite_exn_continuation :
   t -> Apply_cont_rewrite_id.t -> Exn_continuation.t -> Exn_continuation.t

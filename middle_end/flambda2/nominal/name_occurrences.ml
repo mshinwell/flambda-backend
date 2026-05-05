@@ -238,9 +238,9 @@ end = struct
   let diff t1 t2 = N.Map.diff_domains t1 t2
 
   let union t1 t2 =
-    N.Map.union
+    N.Map.union_total
       (fun _name for_one_name1 for_one_name2 ->
-        Some (For_one_name.union for_one_name1 for_one_name2))
+        For_one_name.union for_one_name1 for_one_name2)
       t1 t2
 
   let keys t = N.Map.keys t
@@ -388,43 +388,6 @@ let empty =
     code_ids = For_code_ids.empty;
     newer_version_of_code_ids = For_code_ids.empty
   }
-
-let [@ocamlformat "disable"] print ppf
-      ({ names;
-         continuations;
-         continuations_with_traps;
-         continuations_in_trap_actions;
-         function_slots_in_projections;
-         value_slots_in_projections;
-         function_slots_in_declarations;
-         value_slots_in_declarations;
-         code_ids;
-         newer_version_of_code_ids } as t) =
-  if t = empty then
-    Format.fprintf ppf "no_occurrences"
-  else
-  Format.fprintf ppf "@[<hov 1>\
-      @[<hov 1>(names %a)@]@ \
-      @[<hov 1>(continuations %a)@]@ \
-      @[<hov 1>(continuations_with_traps %a)@]@ \
-      @[<hov 1>(continuations_in_trap_actions %a)@]@ \
-      @[<hov 1>(function_slots_in_projections %a)@]@ \
-      @[<hov 1>(value_slots_in_projections %a)@]@ \
-      @[<hov 1>(function_slots_in_declarations %a)@]@ \
-      @[<hov 1>(value_slots_in_declarations %a)@]@ \
-      @[<hov 1>(code_ids %a)@] \
-      @[<hov 1>(newer_version_of_code_ids %a)@]@ \
-      @]"
-    For_names.print names
-    For_continuations.print continuations
-    For_continuations.print continuations_with_traps
-    For_continuations.print continuations_in_trap_actions
-    For_function_slots.print function_slots_in_projections
-    For_value_slots.print value_slots_in_projections
-    For_function_slots.print function_slots_in_declarations
-    For_value_slots.print value_slots_in_declarations
-    For_code_ids.print code_ids
-    For_code_ids.print newer_version_of_code_ids
 
 let singleton_continuation cont =
   { empty with
@@ -686,6 +649,29 @@ let binary_op ~for_names ~for_continuations ~for_function_slots ~for_value_slots
     newer_version_of_code_ids
   }
 
+let is_empty
+    { names;
+      continuations;
+      continuations_with_traps;
+      continuations_in_trap_actions;
+      function_slots_in_projections;
+      value_slots_in_projections;
+      function_slots_in_declarations;
+      value_slots_in_declarations;
+      code_ids;
+      newer_version_of_code_ids
+    } =
+  For_names.is_empty names
+  && For_continuations.is_empty continuations
+  && For_continuations.is_empty continuations_with_traps
+  && For_continuations.is_empty continuations_in_trap_actions
+  && For_function_slots.is_empty function_slots_in_projections
+  && For_value_slots.is_empty value_slots_in_projections
+  && For_function_slots.is_empty function_slots_in_declarations
+  && For_value_slots.is_empty value_slots_in_declarations
+  && For_code_ids.is_empty code_ids
+  && For_code_ids.is_empty newer_version_of_code_ids
+
 let diff
     { names = names1;
       continuations = continuations1;
@@ -753,11 +739,16 @@ let diff
   }
 
 let union t1 t2 =
-  binary_op ~for_names:For_names.union
-    ~for_continuations:For_continuations.union
-    ~for_function_slots:For_function_slots.union
-    ~for_value_slots:For_value_slots.union ~for_code_ids:For_code_ids.union t1
-    t2
+  if is_empty t1
+  then t2
+  else if is_empty t2
+  then t1
+  else
+    binary_op ~for_names:For_names.union
+      ~for_continuations:For_continuations.union
+      ~for_function_slots:For_function_slots.union
+      ~for_value_slots:For_value_slots.union ~for_code_ids:For_code_ids.union t1
+      t2
 
 let equal t1 t2 =
   binary_conjunction ~for_names:For_names.equal
@@ -801,8 +792,7 @@ let inter_domain_is_non_empty t1 t2 =
     ~for_value_slots:For_value_slots.inter_domain_is_non_empty
     ~for_code_ids:For_code_ids.inter_domain_is_non_empty t1 t2
 
-let rec union_list ts =
-  match ts with [] -> empty | t :: ts -> union t (union_list ts)
+let union_list ts = List.fold_left union empty ts
 
 let function_slots_in_normal_projections t =
   For_function_slots.fold_with_mode t.function_slots_in_projections
@@ -811,10 +801,19 @@ let function_slots_in_normal_projections t =
       then Function_slot.Set.add function_slot acc
       else acc)
 
-let all_function_slots t =
-  Function_slot.Set.union
-    (For_function_slots.keys t.function_slots_in_projections)
-    (For_function_slots.keys t.function_slots_in_declarations)
+let all_function_slots_at_normal_mode t =
+  let from_projections =
+    For_function_slots.fold_with_mode t.function_slots_in_projections
+      ~init:Function_slot.Set.empty ~f:(fun acc function_slot name_mode ->
+        if Name_mode.is_normal name_mode
+        then Function_slot.Set.add function_slot acc
+        else acc)
+  in
+  For_function_slots.fold_with_mode t.function_slots_in_declarations
+    ~init:from_projections ~f:(fun acc function_slot name_mode ->
+      if Name_mode.is_normal name_mode
+      then Function_slot.Set.add function_slot acc
+      else acc)
 
 let value_slots_in_normal_projections t =
   For_value_slots.fold_with_mode t.value_slots_in_projections
@@ -823,10 +822,19 @@ let value_slots_in_normal_projections t =
       then Value_slot.Set.add value_slot acc
       else acc)
 
-let all_value_slots t =
-  Value_slot.Set.union
-    (For_value_slots.keys t.value_slots_in_projections)
-    (For_value_slots.keys t.value_slots_in_declarations)
+let all_value_slots_at_normal_mode t =
+  let from_projections =
+    For_value_slots.fold_with_mode t.value_slots_in_projections
+      ~init:Value_slot.Set.empty ~f:(fun acc value_slot name_mode ->
+        if Name_mode.is_normal name_mode
+        then Value_slot.Set.add value_slot acc
+        else acc)
+  in
+  For_value_slots.fold_with_mode t.value_slots_in_declarations
+    ~init:from_projections ~f:(fun acc value_slot name_mode ->
+      if Name_mode.is_normal name_mode
+      then Value_slot.Set.add value_slot acc
+      else acc)
 
 let variables t = For_names.keys t.names |> Name.set_to_var_set
 
@@ -857,6 +865,10 @@ let mem_symbol t symbol = For_names.mem t.names (Name.symbol symbol)
 
 let mem_code_id t code_id = For_code_ids.mem t.code_ids code_id
 
+let mem_continuation t cont =
+  For_continuations.mem t.continuations cont
+  || For_continuations.mem t.continuations_in_trap_actions cont
+
 let value_slot_is_used_or_imported t value_slot =
   Value_slot.is_imported value_slot
   || For_value_slots.mem t.value_slots_in_projections value_slot
@@ -868,6 +880,9 @@ let remove_var t ~var =
     let names = For_names.remove t.names (Name.var var) in
     { t with names }
 
+let remove_var_opt t ~var =
+  match var with None -> t | Some var -> remove_var t ~var
+
 let remove_symbol t ~symbol =
   if For_names.is_empty t.names
   then t
@@ -876,8 +891,9 @@ let remove_symbol t ~symbol =
     { t with names }
 
 let remove_code_id t ~code_id =
-  if For_code_ids.is_empty t.code_ids
-     && For_code_ids.is_empty t.newer_version_of_code_ids
+  if
+    For_code_ids.is_empty t.code_ids
+    && For_code_ids.is_empty t.newer_version_of_code_ids
   then t
   else
     let code_ids = For_code_ids.remove t.code_ids code_id in
@@ -892,8 +908,9 @@ let remove_code_id_or_symbol t ~(code_id_or_symbol : Code_id_or_symbol.t) =
     ~symbol:(fun symbol -> remove_symbol t ~symbol)
 
 let remove_continuation t ~continuation =
-  if For_continuations.is_empty t.continuations
-     && For_continuations.is_empty t.continuations_in_trap_actions
+  if
+    For_continuations.is_empty t.continuations
+    && For_continuations.is_empty t.continuations_in_trap_actions
   then t
   else
     let continuations = For_continuations.remove t.continuations continuation in
@@ -980,6 +997,8 @@ let downgrade_occurrences_at_strictly_greater_name_mode
 let with_only_variables { names; _ } =
   let names = For_names.filter names ~f:Name.is_var in
   { empty with names }
+
+let with_only_names { names; _ } = { empty with names }
 
 let with_only_names_and_code_ids_promoting_newer_version_of
     { names; code_ids; newer_version_of_code_ids; _ } =
@@ -1191,3 +1210,40 @@ let increase_counts
     code_ids;
     newer_version_of_code_ids
   }
+
+let [@ocamlformat "disable"] print ppf
+      ({ names;
+         continuations;
+         continuations_with_traps;
+         continuations_in_trap_actions;
+         function_slots_in_projections;
+         value_slots_in_projections;
+         function_slots_in_declarations;
+         value_slots_in_declarations;
+         code_ids;
+         newer_version_of_code_ids } as t) =
+  if is_empty t then
+    Format.fprintf ppf "no_occurrences"
+  else
+  Format.fprintf ppf "@[<hov 1>\
+      @[<hov 1>(names %a)@]@ \
+      @[<hov 1>(continuations %a)@]@ \
+      @[<hov 1>(continuations_with_traps %a)@]@ \
+      @[<hov 1>(continuations_in_trap_actions %a)@]@ \
+      @[<hov 1>(function_slots_in_projections %a)@]@ \
+      @[<hov 1>(value_slots_in_projections %a)@]@ \
+      @[<hov 1>(function_slots_in_declarations %a)@]@ \
+      @[<hov 1>(value_slots_in_declarations %a)@]@ \
+      @[<hov 1>(code_ids %a)@] \
+      @[<hov 1>(newer_version_of_code_ids %a)@]@ \
+      @]"
+    For_names.print names
+    For_continuations.print continuations
+    For_continuations.print continuations_with_traps
+    For_continuations.print continuations_in_trap_actions
+    For_function_slots.print function_slots_in_projections
+    For_value_slots.print value_slots_in_projections
+    For_function_slots.print function_slots_in_declarations
+    For_value_slots.print value_slots_in_declarations
+    For_code_ids.print code_ids
+    For_code_ids.print newer_version_of_code_ids

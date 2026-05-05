@@ -15,24 +15,20 @@
 
 (* Common functions for emitting assembly code *)
 
-val output_channel: out_channel ref
-val emit_string: string -> unit
-val emit_int: int -> unit
-val emit_nativeint: nativeint -> unit
-val emit_int32: int32 -> unit
-val emit_symbol: char -> string -> unit
-val emit_printf: ('a, out_channel, unit) format -> 'a
-val emit_char: char -> unit
-val emit_string_literal: string -> unit
-val emit_string_directive: string -> string -> unit
-val emit_bytes_directive: string -> string -> unit
-val emit_float64_directive: string -> int64 -> unit
-val emit_float64_split_directive: string -> int64 -> unit
-val emit_float32_directive: string -> int32 -> unit
+[@@@ocaml.warning "+a-40-41-42"]
+
+val output_channel : out_channel ref
+
+val output_prefix : string ref
+
+val emit_string : string -> unit
+
+val emit_buffer : Buffer.t -> unit
 
 val reset : unit -> unit
-val reset_debug_info: unit -> unit
-val emit_debug_info: ?discriminator:int -> Debuginfo.t -> unit
+
+val reset_debug_info : unit -> unit
+
 val emit_debug_info_gen :
   ?discriminator:int ->
   Debuginfo.t ->
@@ -40,56 +36,52 @@ val emit_debug_info_gen :
   (file_num:int -> line:int -> col:int -> ?discriminator:int -> unit -> unit) ->
   unit
 
-(** Get the file number associated with the filename (or allocate one) *)
-val get_file_num
-   : file_emitter:(file_num:int -> file_name:string -> unit)
-  -> string
-  -> int
-
 type frame_debuginfo =
-  | Dbg_alloc of Debuginfo.alloc_dbginfo
+  | Dbg_alloc of Cmm.alloc_dbginfo
   | Dbg_raise of Debuginfo.t
   | Dbg_other of Debuginfo.t
 
 val record_frame_descr :
-  label:int ->              (* Return address *)
-  frame_size:int ->         (* Size of stack frame *)
-  live_offset:int list ->   (* Offsets/regs of live addresses *)
-  frame_debuginfo ->        (* Location, if any *)
+  label:Label.t ->
+  (* Return address *)
+  frame_size:int ->
+  (* Size of stack frame *)
+  live_offset:int list ->
+  (* Offsets/regs of live addresses *)
+  frame_debuginfo ->
+  (* Location, if any *)
   unit
 
+(** [with_snapshot f] runs [f] and returns its result, but also ensures that the
+    state of this [Emitaux] module is unchanged after [f] returns. *)
+val with_snapshot : f:(unit -> 'a) -> 'a
+
 type emit_frame_actions =
-  { efa_code_label: int -> unit;
-    efa_data_label: int -> unit;
-    efa_8: int -> unit;
-    efa_16: int -> unit;
-    efa_32: int32 -> unit;
-    efa_word: int -> unit;
-    efa_align: int -> unit;
-    efa_label_rel: int -> int32 -> unit;
-    efa_def_label: int -> unit;
-    efa_string: string -> unit }
+  { efa_code_label : Label.t -> unit;
+    efa_data_label : Label.t -> unit;
+    efa_i8 : Numbers.Int8.t -> unit;
+    efa_i16 : Numbers.Int16.t -> unit;
+    efa_i32 : Int32.t -> unit;
+    efa_u8 : Numbers.Uint8.t -> unit;
+    efa_u16 : Numbers.Uint16.t -> unit;
+    efa_u32 : Numbers.Uint32.t -> unit;
+    efa_word : int -> unit;
+    efa_align : int -> unit;
+    efa_label_rel : Label.t -> int32 -> unit;
+    efa_def_label : Label.t -> unit;
+    efa_string : string -> unit
+  }
 
-val emit_frames: emit_frame_actions -> unit
+val emit_frames : emit_frame_actions -> unit
 
-val is_generic_function: string -> bool
+val is_generic_function : string -> bool
 
-val cfi_startproc : unit -> unit
-val cfi_endproc : unit -> unit
-val cfi_adjust_cfa_offset : int -> unit
-val cfi_offset : reg:int -> offset:int -> unit
+(** Is a binary backend available. If yes, we don't need to generate the textual
+    assembly file (unless the user request it with -S). *)
+val binary_backend_available : bool ref
 
-val binary_backend_available: bool ref
-    (** Is a binary backend available.  If yes, we don't need
-        to generate the textual assembly file (unless the user
-        request it with -S). *)
-
-val create_asm_file: bool ref
-    (** Are we actually generating the textual assembly file? *)
-
-
-(** Clear global state and compact the heap, so that an external program
-    (such as the assembler or linker) may have more memory available to it.
+(** Clear global state and compact the heap, so that an external program (such
+    as the assembler or linker) may have more memory available to it.
 
     When this frees up around 1.1GB of memory, it takes around 0.6s. We only
     take this time when the job is large enough that we're worried that we'll
@@ -97,10 +89,10 @@ val create_asm_file: bool ref
     heuristically measure how big the job is by how much heap we're using
     ourselves.
 
-    The [reset] parameter will be called before [Gc.compact] if we go ahead
-    with the compaction. It should clear as much as possible from the global
-    state, since the fewer live words there are after GC, the smaller the new
-    heap can be. *)
+    The [reset] parameter will be called before [Gc.compact] if we go ahead with
+    the compaction. It should clear as much as possible from the global state,
+    since the fewer live words there are after GC, the smaller the new heap can
+    be. *)
 val reduce_heap_size : reset:(unit -> unit) -> unit
 
 type error =
@@ -109,35 +101,83 @@ type error =
   | Inconsistent_probe_init of string * Debuginfo.t
 
 module Dwarf_helpers : sig
-  val init: disable_dwarf:bool -> string -> unit
+  val init :
+    ppf_dump:Format.formatter ->
+    disable_dwarf:bool ->
+    sourcefile:string option ->
+    unit
 
-  val begin_dwarf
-    : build_asm_directives:(unit -> (module Asm_targets.Asm_directives_intf.S))
-    -> code_begin:string
-    -> code_end:string
-    -> file_emitter:(file_num:int -> file_name:string -> unit)
-    -> unit
+  val begin_dwarf :
+    code_begin:string ->
+    code_end:string ->
+    file_emitter:(file_num:int -> file_name:string -> unit) ->
+    unit
 
   val emit_dwarf : unit -> unit
 
-  val record_dwarf_for_fundecl : fun_name:string -> Debuginfo.t -> Cmm.label option
+  val emit_delayed_dwarf : unit -> unit
 
-  val record_dwarf_for_source_file :
-    file_name:string -> file_num:int -> unit
+  val record_dwarf_for_fundecl : Linear.fundecl -> Dwarf.fundecl option
 
-  val record_dwarf_for_line_number_matrix_row
-    : instr_address : int
-    -> file_num : int
-    -> line : int
-    -> col : int
-    -> discriminator : int option
-    -> unit
+  val record_dwarf_for_source_file : file_name:string -> file_num:int -> unit
+
+  val record_dwarf_for_line_number_matrix_row :
+    instr_address:int ->
+    file_num:int ->
+    line:int ->
+    col:int ->
+    discriminator:int option ->
+    unit
 
   val checkpoint : unit -> unit
-  
+
   val rollback : unit -> unit
+
+  val record_function_range :
+    function_symbol:Asm_targets.Asm_symbol.t ->
+    start_label:Asm_targets.Asm_label.t ->
+    end_label:Asm_targets.Asm_label.t ->
+    offset_past_end_label:int option ->
+    unit
 end
 
 exception Error of error
-val report_error: Format.formatter -> error -> unit
 
+val report_error : error Format_doc.format_printer
+
+val report_error_doc : error Format_doc.printer
+
+type preproc_stack_check_result =
+  { max_frame_size : int;
+    contains_nontail_calls : bool
+  }
+
+val preproc_stack_check :
+  fun_body:Linear.instruction ->
+  frame_size:int ->
+  trap_size:int ->
+  preproc_stack_check_result
+
+val add_stack_checks_if_needed :
+  Linear.fundecl ->
+  stack_offset:int ->
+  stack_threshold_size:int ->
+  trap_size:int ->
+  Linear.fundecl
+
+val emit_stapsdt_base_section : unit -> unit
+
+val emit_elf_note :
+  section:Asm_targets.Asm_section.t ->
+  owner:string ->
+  typ:int32 ->
+  emit_desc:(unit -> unit) ->
+  unit
+
+type emit_data_item_actions =
+  { global_maybe_protected : Asm_targets.Asm_symbol.t -> unit;
+    symbol_defined : string -> unit;
+    symbol_used : string -> unit
+  }
+
+val emit_data_item : emit_data_item_actions -> Cmm.data_item -> unit

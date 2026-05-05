@@ -19,6 +19,12 @@
    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
    SOFTWARE. *)
+
+(* CR mshinwell: fix properly using -enable-dev PR's changes *)
+[@@@ocaml.warning "-27-32"]
+
+open! Int_replace_polymorphic_compare
+
 type t =
   { st_name : Compiler_owee.Owee_buf.u32;
     st_info : Compiler_owee.Owee_buf.u8;
@@ -32,6 +38,7 @@ type t =
 type bind =
   | Local
   | Global
+  | Weak
 
 type symbol_type =
   | NoType
@@ -73,22 +80,24 @@ let create_symbol (symbol : X86_binary_emitter.symbol) symbol_table sections
     string_table =
   let value = Option.value ~default:0 symbol.sy_pos in
   let size = Option.value ~default:0 symbol.sy_size in
-  let bind =
+  let st_type =
     match symbol.sy_type with
-    (* CR mcollins - modify types to avoid string comparisons *)
-    | Some "@function" -> 2
-    | Some "object" -> 1
-    | Some "tls_object" -> 6
-    | Some "common" -> 5
-    | Some "notype" -> 0
-    | Some s -> failwith ("Unknown symbol type" ^ s)
+    (* Some common additional types, which are currently not used are:
+       tls_object = 6, common = 5, notype = 0 *)
+    | Some Function -> 2
+    | Some Object -> 1
     | None -> 0
   in
-  let global = Bool.to_int symbol.sy_global in
+  let st_binding =
+    match symbol.sy_binding with
+    | Sy_local -> 0
+    | Sy_global -> 1
+    | Sy_weak -> 2
+  in
   let symbol_entry =
     { st_name = String_table.current_length string_table;
-      st_info = (global lsl 4) lor bind;
-      st_other = 0;
+      st_info = (st_binding lsl 4) lor st_type;
+      st_other = if symbol.sy_protected then 3 else 0;
       st_shndx =
         Section_table.get_sec_idx sections
           (X86_proc.Section_name.of_string symbol.sy_sec.sec_name);
@@ -108,6 +117,7 @@ let get_bind t =
   match t.st_info lsr 4 with
   | 0 -> Local
   | 1 -> Global
+  | 2 -> Weak
   | _ -> failwith "Invalid bind"
 
 let get_type t =

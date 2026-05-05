@@ -23,18 +23,21 @@ let merge_cma ~target ~archives =
   Clflags.all_ccopts := [];
   Clflags.dllibs := [];
   List.iter
-    (fun archive -> Load_path.add_dir (Filename.dirname archive))
+    (fun archive ->
+      Load_path.add_dir (Visible { cmx_guaranteed = false })
+        (Filename.dirname archive))
     archives;
   let error reporter err =
-    Format.eprintf "Error whilst merging .cma files:@ %a\n%!" reporter err;
+    Format.eprintf "Error whilst merging .cma files:@ %a\n%!"
+      (Format_doc.compat reporter) err;
     exit 1
   in
   try
     Bytelibrarian.create_archive archives target;
     Warnings.check_fatal ()
   with
-  | Bytelibrarian.Error err -> error Bytelibrarian.report_error err
-  | Bytelink.Error err -> error Bytelink.report_error err
+  | Bytelibrarian.Error err -> error Bytelibrarian.report_error_doc err
+  | Bytelink.Error err -> error Bytelink.report_error_doc err
   | Warnings.Errors ->
     (* Warnings should already have been printed to stderr. *)
     exit 1
@@ -58,9 +61,10 @@ let merge_cmxa0 ~archives =
     | _ :: _ -> failwith "Archives do not agree on the .cmxa magic number"
     | [] -> assert false
   in
-  let ncmxs = ref 0 and ncmis = ref 0 in
+  let ncmxs = ref 0 and ncmis = ref 0 and nquoted_globals = ref 0 in
   let cmi_table = Hashtbl.create 42 in
   let cmx_table = Hashtbl.create 42 in
+  let quoted_globals_table = Hashtbl.create 42 in
   cmxa_list
   |> List.iter (fun (lib : Cmx_format.library_infos) ->
          lib.lib_imports_cmi
@@ -78,12 +82,26 @@ let merge_cmxa0 ~archives =
                 then begin
                   Hashtbl.add cmx_table cu (import, !ncmxs);
                   incr ncmxs
+                end);
+         lib.lib_quoted_globals
+         |> Array.iter (fun quoted_global ->
+                if not (Hashtbl.mem quoted_globals_table quoted_global)
+                then begin
+                  Hashtbl.add quoted_globals_table quoted_global
+                    (quoted_global, !nquoted_globals);
+                  incr nquoted_globals
                 end));
   let cmis = Array.make !ncmis Import_info.dummy in
-  Hashtbl.iter (fun name (import, i) -> cmis.(i) <- import) cmi_table;
+  Hashtbl.iter (fun _name (import, i) -> cmis.(i) <- import) cmi_table;
   let cmxs = Array.make !ncmxs Import_info.dummy in
-  Hashtbl.iter (fun name (import, i) -> cmxs.(i) <- import) cmx_table;
-  let genfns = Cmm_helpers.Generic_fns_tbl.make () in
+  Hashtbl.iter (fun _name (import, i) -> cmxs.(i) <- import) cmx_table;
+  let quoted_globals =
+    Array.make !nquoted_globals Compilation_unit.Name.dummy
+  in
+  Hashtbl.iter
+    (fun quoted_global (_, i) -> quoted_globals.(i) <- quoted_global)
+    quoted_globals_table;
+  let genfns = Generic_fns.Tbl.make () in
   let _, lib_units, lib_ccobjs, lib_ccopts =
     List.fold_left
       (fun (lib_names, lib_units, lib_ccobjs, lib_ccopts)
@@ -99,7 +117,9 @@ let merge_cmxa0 ~archives =
         in
         if not (Compilation_unit.Set.is_empty already_defined)
         then failwith "Archives contain multiply-defined units";
-        Cmm_helpers.Generic_fns_tbl.add genfns cmxa.lib_generic_fns;
+        ignore(Generic_fns.Tbl.add
+                ~imports:Generic_fns.Partition.Set.empty
+                genfns cmxa.lib_generic_fns);
         let lib_names = Compilation_unit.Set.union new_lib_names lib_names in
         let remap oldarr newarr tbl oldb ~get_key =
           let module B = Misc.Bitmap in
@@ -118,7 +138,11 @@ let merge_cmxa0 ~archives =
                     ~get_key:Import_info.name;
                 li_imports_cmx =
                   remap cmxa.lib_imports_cmx cmxs cmx_table li.li_imports_cmx
-                    ~get_key:Import_info.cu
+                    ~get_key:Import_info.cu;
+                li_quoted_globals =
+                  remap cmxa.lib_quoted_globals quoted_globals
+                    quoted_globals_table li.li_quoted_globals
+                    ~get_key:(fun x -> x)
               })
             cmxa.lib_units
         in
@@ -136,7 +160,13 @@ let merge_cmxa0 ~archives =
       lib_ccopts;
       lib_imports_cmi = cmis;
       lib_imports_cmx = cmxs;
-      lib_generic_fns = Cmm_helpers.Generic_fns_tbl.entries genfns
+      lib_quoted_globals = quoted_globals;
+      lib_generic_fns = Generic_fns.Tbl.entries genfns;
+      lib_requires_metaprogramming =
+        List.exists
+          (fun (cmxa : Cmx_format.library_infos) ->
+            cmxa.lib_requires_metaprogramming)
+          cmxa_list
     }
   in
   magic, cmxa

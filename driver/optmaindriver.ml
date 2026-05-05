@@ -15,26 +15,10 @@
 
 open Clflags
 
-module Backend = struct
-  (* See backend_intf.mli. *)
-
-  let really_import_approx = Import_approx.really_import_approx
-  let import_symbol = Import_approx.import_symbol
-
-  let size_int = Arch.size_int
-  let big_endian = Arch.big_endian
-
-  let max_sensible_number_of_arguments =
-    (* The "-1" is to allow for a potential closure environment parameter. *)
-    Proc.max_arguments_for_tailcalls - 1
-end
-
-let backend = (module Backend : Backend_intf.S)
-
 let usage = "Usage: ocamlopt <options> <files>\nOptions are:"
 
-module Options = Flambda_backend_args.Make_optcomp_options
-        (Flambda_backend_args.Default.Optmain)
+module Options = Oxcaml_args.Make_optcomp_options
+        (Oxcaml_args.Default.Optmain)
 
 let main unix argv ppf ~flambda2 =
   native_code := true;
@@ -67,26 +51,47 @@ let main unix argv ppf ~flambda2 =
   match
     Compenv.warnings_for_discarded_params := true;
     Compenv.set_extra_params
-      (Some Flambda_backend_args.Extra_params.read_param);
+      (Some Oxcaml_args.Extra_params.read_param);
     Compenv.readenv ppf Before_args;
     Clflags.add_arguments __LOC__ (Arch.command_line_options @ Options.list);
     Clflags.add_arguments __LOC__
       ["-depend", Arg.Unit Makedepend.main_from_option,
        "<options> Compute dependencies \
         (use 'ocamlopt -depend -help' for details)"];
-    Clflags.Opt_flag_handler.set Flambda_backend_flags.opt_flag_handler;
+    Clflags.Opt_flag_handler.set Oxcaml_flags.opt_flag_handler;
     Compenv.parse_arguments (ref argv) Compenv.anonymous "ocamlopt";
     Compmisc.read_clflags_from_env ();
-    if !Flambda_backend_flags.gc_timings then Gc_timings.start_collection ();
+    (* Set platform-appropriate DWARF fission default when oxcaml-dwarf is
+       enabled *)
+    if Config.oxcaml_dwarf &&
+       !Clflags.dwarf_fission = Clflags.Fission_none &&
+       Target_system.is_macos () then
+      Clflags.dwarf_fission := Clflags.Fission_dsymutil;
+    (* Set up DWARF compression for C compiler invocations *)
+    if !Clflags.debug && !Clflags.native_code then
+      Clflags.dwarf_c_toolchain_flag :=
+        Dwarf_flags.get_dwarf_c_toolchain_flag ();
+    if !Oxcaml_flags.gc_timings then Gc_timings.start_collection ();
     if !Clflags.plugin then
       Compenv.fatal "-plugin is only supported up to OCaml 4.08.0";
+    if !Clflags.requires_metaprogramming
+      && not Language_extension.(is_enabled Runtime_metaprogramming) then
+        Compenv.fatal "The -requires-metaprogramming flag is only supported \
+                       with the runtime metaprogramming extension";
+    if !Clflags.uses_metaprogramming
+      && not Language_extension.(is_enabled Runtime_metaprogramming) then
+        Compenv.fatal "The -uses-metaprogramming flag is only supported \
+                       with the runtime metaprogramming extension";
+    let (module Compiler : Optcompile.S) =
+      Optcompile.native unix ~flambda2
+    in
     begin try
       Compenv.process_deferred_actions
         (ppf,
-         Optcompile.implementation unix ~backend ~flambda2,
-         Optcompile.interface,
-         ".cmx",
-         ".cmxa");
+         Compiler.implementation,
+         Compiler.interface,
+         Compiler.ext_flambda_obj,
+         Compiler.ext_flambda_lib);
     with Arg.Bad msg ->
       begin
         prerr_endline msg;
@@ -97,7 +102,7 @@ let main unix argv ppf ~flambda2 =
     Compenv.readenv ppf Before_link;
     if
       List.length (List.filter (fun x -> !x)
-                     [make_package; make_archive; shared;
+                     [make_package; make_archive; shared; instantiate;
                       Compenv.stop_early; output_c_object]) > 1
     then
     begin
@@ -105,9 +110,10 @@ let main unix argv ppf ~flambda2 =
       match !stop_after with
       | None ->
           Compenv.fatal "Please specify at most one of -pack, -a, -shared, -c, \
-                         -output-obj";
-      | Some ((P.Parsing | P.Typing | P.Scheduling
-              | P.Simplify_cfg | P.Emit | P.Selection) as p) ->
+                         -output-obj, -instantiate";
+      | Some ((P.Parsing | P.Typing | P.Lambda | P.Middle_end | P.Linearization
+              | P.Simplify_cfg | P.Emit | P.Selection
+              | P.Register_allocation | P.Llvmize) as p) ->
         assert (P.is_compilation_pass p);
         Printf.ksprintf Compenv.fatal
           "Options -i and -stop-after (%s) \
@@ -118,7 +124,7 @@ let main unix argv ppf ~flambda2 =
     if !make_archive then begin
       Compmisc.init_path ();
       let target = Compenv.extract_output !output_name in
-      Asmlibrarian.create_archive
+      Compiler.create_archive
         (Compenv.get_objfiles ~with_ocamlparam:false) target;
       Warnings.check_fatal ();
     end
@@ -126,17 +132,33 @@ let main unix argv ppf ~flambda2 =
       Compmisc.init_path ();
       let target = Compenv.extract_output !output_name in
       Compmisc.with_ppf_dump ~file_prefix:target (fun ppf_dump ->
-        Asmpackager.package_files unix
-          ~ppf_dump (Compmisc.initial_env ())
-          (Compenv.get_objfiles ~with_ocamlparam:false) target ~backend
-          ~flambda2);
+        Compiler.package_files ~ppf_dump (Compmisc.initial_env ())
+          (Compenv.get_objfiles ~with_ocamlparam:false) target);
+      Warnings.check_fatal ();
+    end
+    else if !instantiate then begin
+      Compmisc.init_path ();
+      (* Requiring [-o] isn't really necessary, but we don't intend for humans
+         to be invoking [-instantiate] by hand, and computing the correct value
+         here would be awkward *)
+      let target = Compenv.extract_output !output_name in
+      let src, args =
+        match Compenv.get_objfiles ~with_ocamlparam:false with
+        | [] | [_] ->
+          Printf.ksprintf Compenv.fatal
+            "Must specify at least two %s files with -instantiate"
+            Compiler.ext_flambda_obj
+        | src :: args ->
+          src, args
+      in
+      Compiler.instantiate ~src ~args target;
       Warnings.check_fatal ();
     end
     else if !shared then begin
       Compmisc.init_path ();
       let target = Compenv.extract_output !output_name in
       Compmisc.with_ppf_dump ~file_prefix:target (fun ppf_dump ->
-        Asmlink.link_shared unix ~ppf_dump
+        Compiler.link_shared ~ppf_dump (Linkenv.create ())
           (Compenv.get_objfiles ~with_ocamlparam:false) target);
       Warnings.check_fatal ();
     end
@@ -159,7 +181,7 @@ let main unix argv ppf ~flambda2 =
       Compmisc.init_path ();
       Compmisc.with_ppf_dump ~file_prefix:target (fun ppf_dump ->
           let objs = Compenv.get_objfiles ~with_ocamlparam:true in
-          Asmlink.link unix
+          Compiler.link
             ~ppf_dump objs target);
       Warnings.check_fatal ();
     end;
@@ -170,33 +192,51 @@ let main unix argv ppf ~flambda2 =
     Location.report_exception ppf x;
     2
   | () ->
-    if !Flambda_backend_flags.gc_timings then begin
-      let minor = Gc_timings.gc_minor_ns () in
-      let major = Gc_timings.gc_major_ns () in
-      let stats = Gc.quick_stat () in
-      let secs x = x *. 1e-9 in
-      let precision = !Clflags.timings_precision in
-      let w2b n = n * (Sys.word_size / 8) in
-      let fw2b x = w2b (Float.to_int x) in
-      Format.fprintf Format.std_formatter "%0.*fs gc\n" precision (secs (minor +. major));
-      Format.fprintf Format.std_formatter "  %0.*fs minor\n" precision (secs minor);
-      Format.fprintf Format.std_formatter "  %0.*fs major\n" precision (secs major);
-      Format.fprintf Format.std_formatter "- heap\n";
-      (* Having minor + major + promoted = total alloc make more sense for
-         hierarchical stats. *)
-      Format.fprintf Format.std_formatter "  %ib alloc\n"
-        (fw2b stats.minor_words + (fw2b stats.major_words - fw2b stats.promoted_words));
-      Format.fprintf Format.std_formatter "    %ib minor\n"
-        (fw2b stats.minor_words - fw2b stats.promoted_words);
-      Format.fprintf Format.std_formatter "    %ib major\n"
-        (fw2b stats.major_words - fw2b stats.promoted_words);
-      Format.fprintf Format.std_formatter "    %ib promoted\n"
-        (fw2b stats.promoted_words);
-      Format.fprintf Format.std_formatter "  %ib top\n" (w2b stats.top_heap_words);
-      Format.fprintf Format.std_formatter "  %i collections\n"
-        (stats.minor_collections + stats.major_collections);
-      Format.fprintf Format.std_formatter "    %i minor\n" stats.minor_collections;
-      Format.fprintf Format.std_formatter "    %i major\n" stats.major_collections;
-    end;
-    Profile.print Format.std_formatter !Clflags.profile_columns ~timings_precision:!Clflags.timings_precision;
+    let output_profile_csv ppf_file = Profile.output_to_csv
+      ppf_file !Clflags.profile_columns ~timings_precision:!Clflags.timings_precision
+    in
+    let output_profile_standard ppf =
+      if !Oxcaml_flags.gc_timings then begin
+        let minor = Gc_timings.gc_minor_ns () in
+        let major = Gc_timings.gc_major_ns () in
+        let stats = Gc.quick_stat () in
+        let secs x = x *. 1e-9 in
+        let precision = !Clflags.timings_precision in
+        let w2b n = n * (Sys.word_size / 8) in
+        let fw2b x = w2b (Float.to_int x) in
+        Format.fprintf ppf "%0.*fs gc\n" precision (secs (minor +. major));
+        Format.fprintf ppf "  %0.*fs minor\n" precision (secs minor);
+        Format.fprintf ppf "  %0.*fs major\n" precision (secs major);
+        Format.fprintf ppf "- heap\n";
+        (* Having minor + major + promoted = total alloc make more sense for
+          hierarchical stats. *)
+        Format.fprintf ppf "  %ib alloc\n"
+          (fw2b stats.minor_words + (fw2b stats.major_words - fw2b stats.promoted_words));
+        Format.fprintf ppf "    %ib minor\n"
+          (fw2b stats.minor_words - fw2b stats.promoted_words);
+        Format.fprintf ppf "    %ib major\n"
+          (fw2b stats.major_words - fw2b stats.promoted_words);
+        Format.fprintf ppf "    %ib promoted\n"
+          (fw2b stats.promoted_words);
+        Format.fprintf ppf "  %ib top\n" (w2b stats.top_heap_words);
+        Format.fprintf ppf "  %i collections\n"
+          (stats.minor_collections + stats.major_collections);
+        Format.fprintf ppf "    %i minor\n" stats.minor_collections;
+        Format.fprintf ppf "    %i major\n" stats.major_collections;
+      end;
+      Profile.print ppf !Clflags.profile_columns ~timings_precision:!Clflags.timings_precision
+    in
+    (if !Clflags.dump_into_csv then
+      let file_prefix =
+        Compmisc.get_profile_file_prefix
+          ~expected_suffix:".csv" ~default_name:"profile"
+      in
+      Compmisc.with_ppf_file
+        ~file_prefix ~file_extension:".csv" output_profile_csv
+    else if !Oxcaml_flags.gc_timings || !Clflags.profile_columns <> [] then
+      let file_prefix =
+        Compmisc.get_profile_file_prefix
+          ~expected_suffix:".dump" ~default_name:"profile"
+      in
+      Compmisc.with_ppf_dump ~stdout:() ~file_prefix output_profile_standard);
     0

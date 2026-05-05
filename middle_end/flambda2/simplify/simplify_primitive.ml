@@ -36,7 +36,7 @@ let apply_cse dacc ~original_prim =
           Simple.print simple
       | canonical -> Some canonical))
 
-let try_cse dacc ~original_prim ~min_name_mode ~result_var : cse_result =
+let try_cse dacc dbg ~original_prim ~min_name_mode ~result_var : cse_result =
   (* CR-someday mshinwell: Use [meet] and [reify] for CSE? (discuss with
      lwhite) *)
   (* CR-someday mshinwell: Find example that suggested we needed to allow
@@ -47,6 +47,7 @@ let try_cse dacc ~original_prim ~min_name_mode ~result_var : cse_result =
     let result_var' = VB.var result_var in
     match apply_cse dacc ~original_prim with
     | Some replace_with ->
+      let dacc = DA.merge_debuginfo_rewrite dacc ~bound_to:replace_with dbg in
       let named = Named.create_simple replace_with in
       let ty = T.alias_type_of (P.result_kind' original_prim) replace_with in
       let dacc = DA.add_variable dacc result_var ty in
@@ -56,8 +57,9 @@ let try_cse dacc ~original_prim ~min_name_mode ~result_var : cse_result =
             ~operation:(Removed_operations.prim original_prim)
             Cost_metrics.zero
         in
+        let machine_width = DE.machine_width (DA.denv dacc) in
         let simplified_named =
-          Simplified_named.create named
+          Simplified_named.create ~machine_width named
           |> Simplified_named.update_cost_metrics cost_metrics
         in
         Simplify_primitive_result.create_simplified simplified_named
@@ -70,22 +72,30 @@ let try_cse dacc ~original_prim ~min_name_mode ~result_var : cse_result =
         | None -> dacc
         | Some eligible_prim ->
           let bound_to = Simple.var result_var' in
-          DA.map_denv dacc ~f:(fun denv ->
-              DE.add_cse denv eligible_prim ~bound_to)
+          let dacc =
+            DA.map_denv dacc ~f:(fun denv ->
+                DE.add_cse denv eligible_prim ~bound_to ~name_mode:min_name_mode)
+          in
+          DA.merge_debuginfo_rewrite dacc ~bound_to dbg
       in
       Not_applied dacc
 
-let check_arg_kinds prim arg_tys_with_expected_kinds =
+let arg_kind_mismatch prim arg_tys_with_expected_kinds =
+  let found_mismatch = ref false in
   List.iter
     (fun (arg_ty, expected_kind) ->
       let arg_kind = T.kind arg_ty in
       if not (K.equal arg_kind expected_kind)
       then
-        Misc.fatal_errorf
-          "Argument type %a has wrong kind (%a), expected kind %a for \
-           primitive: %a"
-          T.print arg_ty K.print arg_kind K.print expected_kind P.print prim)
-    arg_tys_with_expected_kinds
+        if Flambda_features.kind_checks ()
+        then
+          Misc.fatal_errorf
+            "Argument type %a has wrong kind (%a), expected kind %a for \
+             primitive: %a"
+            T.print arg_ty K.print arg_kind K.print expected_kind P.print prim
+        else found_mismatch := true)
+    arg_tys_with_expected_kinds;
+  !found_mismatch
 
 let simplify_primitive dacc (prim : P.t) dbg ~result_var =
   let min_name_mode = Bound_var.name_mode result_var in
@@ -94,86 +104,132 @@ let simplify_primitive dacc (prim : P.t) dbg ~result_var =
     Simplify_nullary_primitive.simplify_nullary_primitive dacc prim prim' dbg
       ~result_var
   | Unary (unary_prim, orig_arg) -> (
-    let arg_ty = S.simplify_simple dacc orig_arg ~min_name_mode in
-    let arg = T.get_alias_exn arg_ty in
-    (if Flambda_features.check_invariants ()
-    then
-      let arg_kind = P.arg_kind_of_unary_primitive unary_prim in
-      check_arg_kinds prim [arg_ty, arg_kind]);
-    let original_prim : P.t =
-      if orig_arg == arg then prim else Unary (unary_prim, arg)
-    in
-    match try_cse dacc ~original_prim ~min_name_mode ~result_var with
-    | Applied result -> result
-    | Not_applied dacc ->
-      Simplify_unary_primitive.simplify_unary_primitive dacc original_prim
-        unary_prim ~arg ~arg_ty dbg ~result_var)
-  | Binary (binary_prim, orig_arg1, orig_arg2) -> (
-    let arg1_ty = S.simplify_simple dacc orig_arg1 ~min_name_mode in
-    let arg1 = T.get_alias_exn arg1_ty in
-    let arg2_ty = S.simplify_simple dacc orig_arg2 ~min_name_mode in
-    let arg2 = T.get_alias_exn arg2_ty in
-    (if Flambda_features.check_invariants ()
-    then
-      let arg1_kind, arg2_kind = P.args_kind_of_binary_primitive binary_prim in
-      check_arg_kinds prim [arg1_ty, arg1_kind; arg2_ty, arg2_kind]);
-    let original_prim : P.t =
-      if orig_arg1 == arg1 && orig_arg2 == arg2
-      then prim
-      else Binary (binary_prim, arg1, arg2)
-    in
-    match try_cse dacc ~original_prim ~min_name_mode ~result_var with
-    | Applied result -> result
-    | Not_applied dacc ->
-      Simplify_binary_primitive.simplify_binary_primitive dacc original_prim
-        binary_prim ~arg1 ~arg1_ty ~arg2 ~arg2_ty dbg ~result_var)
-  | Ternary (ternary_prim, orig_arg1, orig_arg2, orig_arg3) -> (
-    let arg1_ty = S.simplify_simple dacc orig_arg1 ~min_name_mode in
-    let arg1 = T.get_alias_exn arg1_ty in
-    let arg2_ty = S.simplify_simple dacc orig_arg2 ~min_name_mode in
-    let arg2 = T.get_alias_exn arg2_ty in
-    let arg3_ty = S.simplify_simple dacc orig_arg3 ~min_name_mode in
-    let arg3 = T.get_alias_exn arg3_ty in
-    (if Flambda_features.check_invariants ()
-    then
-      let arg1_kind, arg2_kind, arg3_kind =
-        P.args_kind_of_ternary_primitive ternary_prim
+    let arg_ty, arg = S.simplify_simple dacc orig_arg ~min_name_mode in
+    let arg_kind = P.arg_kind_of_unary_primitive unary_prim in
+    if arg_kind_mismatch prim [arg_ty, arg_kind]
+    then SPR.create_invalid dacc
+    else
+      let original_prim : P.t =
+        if orig_arg == arg then prim else Unary (unary_prim, arg)
       in
-      check_arg_kinds prim
-        [arg1_ty, arg1_kind; arg2_ty, arg2_kind; arg3_ty, arg3_kind]);
-    let original_prim : P.t =
-      if orig_arg1 == arg1 && orig_arg2 == arg2 && orig_arg3 = arg3
-      then prim
-      else Ternary (ternary_prim, arg1, arg2, arg3)
+      match try_cse dacc dbg ~original_prim ~min_name_mode ~result_var with
+      | Applied result -> result
+      | Not_applied dacc ->
+        Simplify_unary_primitive.simplify_unary_primitive dacc original_prim
+          unary_prim ~arg ~arg_ty dbg ~result_var)
+  | Binary (binary_prim, orig_arg1, orig_arg2) -> (
+    let arg1_ty, arg1 = S.simplify_simple dacc orig_arg1 ~min_name_mode in
+    let arg2_ty, arg2 = S.simplify_simple dacc orig_arg2 ~min_name_mode in
+    let arg1_kind, arg2_kind = P.args_kind_of_binary_primitive binary_prim in
+    if arg_kind_mismatch prim [arg1_ty, arg1_kind; arg2_ty, arg2_kind]
+    then SPR.create_invalid dacc
+    else
+      let original_prim : P.t =
+        if orig_arg1 == arg1 && orig_arg2 == arg2
+        then prim
+        else Binary (binary_prim, arg1, arg2)
+      in
+      match try_cse dacc dbg ~original_prim ~min_name_mode ~result_var with
+      | Applied result -> result
+      | Not_applied dacc ->
+        Simplify_binary_primitive.simplify_binary_primitive dacc original_prim
+          binary_prim ~arg1 ~arg1_ty ~arg2 ~arg2_ty dbg ~result_var)
+  | Ternary (ternary_prim, orig_arg1, orig_arg2, orig_arg3) -> (
+    let arg1_ty, arg1 = S.simplify_simple dacc orig_arg1 ~min_name_mode in
+    let arg2_ty, arg2 = S.simplify_simple dacc orig_arg2 ~min_name_mode in
+    let arg3_ty, arg3 = S.simplify_simple dacc orig_arg3 ~min_name_mode in
+    let arg1_kind, arg2_kind, arg3_kind =
+      P.args_kind_of_ternary_primitive ternary_prim
     in
-    match try_cse dacc ~original_prim ~min_name_mode ~result_var with
-    | Applied result -> result
-    | Not_applied dacc ->
-      Simplify_ternary_primitive.simplify_ternary_primitive dacc original_prim
-        ternary_prim ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~arg3 ~arg3_ty dbg
-        ~result_var)
+    if
+      arg_kind_mismatch prim
+        [arg1_ty, arg1_kind; arg2_ty, arg2_kind; arg3_ty, arg3_kind]
+    then SPR.create_invalid dacc
+    else
+      let original_prim : P.t =
+        if orig_arg1 == arg1 && orig_arg2 == arg2 && orig_arg3 == arg3
+        then prim
+        else Ternary (ternary_prim, arg1, arg2, arg3)
+      in
+      match try_cse dacc dbg ~original_prim ~min_name_mode ~result_var with
+      | Applied result -> result
+      | Not_applied dacc ->
+        Simplify_ternary_primitive.simplify_ternary_primitive dacc original_prim
+          ternary_prim ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~arg3 ~arg3_ty dbg
+          ~result_var)
+  | Quaternary (quaternary_prim, orig_arg1, orig_arg2, orig_arg3, orig_arg4)
+    -> (
+    let arg1_ty, arg1 = S.simplify_simple dacc orig_arg1 ~min_name_mode in
+    let arg2_ty, arg2 = S.simplify_simple dacc orig_arg2 ~min_name_mode in
+    let arg3_ty, arg3 = S.simplify_simple dacc orig_arg3 ~min_name_mode in
+    let arg4_ty, arg4 = S.simplify_simple dacc orig_arg4 ~min_name_mode in
+    let arg1_kind, arg2_kind, arg3_kind, arg4_kind =
+      P.args_kind_of_quaternary_primitive quaternary_prim
+    in
+    if
+      arg_kind_mismatch prim
+        [ arg1_ty, arg1_kind;
+          arg2_ty, arg2_kind;
+          arg3_ty, arg3_kind;
+          arg4_ty, arg4_kind ]
+    then SPR.create_invalid dacc
+    else
+      let original_prim : P.t =
+        if
+          orig_arg1 == arg1 && orig_arg2 == arg2 && orig_arg3 == arg3
+          && orig_arg4 == arg4
+        then prim
+        else Quaternary (quaternary_prim, arg1, arg2, arg3, arg4)
+      in
+      match try_cse dacc dbg ~original_prim ~min_name_mode ~result_var with
+      | Applied result -> result
+      | Not_applied dacc ->
+        Simplify_quaternary_primitive.simplify_quaternary_primitive dacc
+          original_prim quaternary_prim ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~arg3
+          ~arg3_ty ~arg4 ~arg4_ty dbg ~result_var)
   | Variadic (variadic_prim, orig_args) -> (
     let args_with_tys =
       ListLabels.fold_right orig_args ~init:[] ~f:(fun arg args_rev ->
-          let arg_ty = S.simplify_simple dacc arg ~min_name_mode in
-          let arg = T.get_alias_exn arg_ty in
+          let arg_ty, arg = S.simplify_simple dacc arg ~min_name_mode in
           (arg, arg_ty) :: args_rev)
     in
-    (if Flambda_features.check_invariants ()
-    then
-      let arg_tys = List.map snd args_with_tys in
-      let arg_tys_and_expected_kinds =
-        match P.args_kind_of_variadic_primitive variadic_prim with
-        | Variadic arg_kinds -> List.combine arg_tys arg_kinds
-        | Variadic_all_of_kind kind ->
-          List.map (fun arg_ty -> arg_ty, kind) arg_tys
-      in
-      check_arg_kinds prim arg_tys_and_expected_kinds);
-    let original_prim : P.t =
-      Variadic (variadic_prim, List.map fst args_with_tys)
+    let arg_tys = List.map snd args_with_tys in
+    let arg_tys_and_expected_kinds =
+      match P.args_kind_of_variadic_primitive variadic_prim with
+      | Variadic_mixed arg_kinds ->
+        List.combine arg_tys
+          (Array.to_list (K.Mixed_block_shape.field_kinds arg_kinds))
+      | Variadic_all_of_kind kind ->
+        List.map (fun arg_ty -> arg_ty, kind) arg_tys
+      | Variadic_zero_or_one kind ->
+        (match arg_tys with
+        | [] | [_] -> ()
+        | _ :: _ :: _ ->
+          Misc.fatal_errorf "Too many arguments for primitive %a" P.print prim);
+        List.map (fun arg_ty -> arg_ty, kind) arg_tys
+      | Variadic_unboxed_product kinds ->
+        (* CR mshinwell: move to Misc, may be useful in e.g.
+           simplify_variadic_primitive.ml for Make_array *)
+        let num_arg_tys = List.length arg_tys in
+        let num_kinds = List.length kinds in
+        if num_arg_tys mod num_kinds <> 0
+        then
+          Misc.fatal_errorf
+            "Number of arguments %d is not a multiple of the number of kinds \
+             %d for:@ %a"
+            num_arg_tys num_kinds P.print prim;
+        let num_repeats = num_arg_tys / num_kinds in
+        let kinds = List.init num_repeats (fun _ -> kinds) |> List.concat in
+        List.combine arg_tys kinds
     in
-    match try_cse dacc ~original_prim ~min_name_mode ~result_var with
-    | Applied result -> result
-    | Not_applied dacc ->
-      Simplify_variadic_primitive.simplify_variadic_primitive dacc original_prim
-        variadic_prim ~args_with_tys dbg ~result_var)
+    if arg_kind_mismatch prim arg_tys_and_expected_kinds
+    then SPR.create_invalid dacc
+    else
+      let original_prim : P.t =
+        Variadic (variadic_prim, List.map fst args_with_tys)
+      in
+      match try_cse dacc dbg ~original_prim ~min_name_mode ~result_var with
+      | Applied result -> result
+      | Not_applied dacc ->
+        Simplify_variadic_primitive.simplify_variadic_primitive dacc
+          original_prim variadic_prim ~args_with_tys dbg ~result_var)

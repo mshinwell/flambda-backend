@@ -25,10 +25,10 @@ let simplify_toplevel_common dacc simplify ~params ~implicit_params
     Continuation.create ~name:"dummy_toplevel_continuation" ()
   in
   let dacc =
-    DA.map_flow_acc dacc
-      ~f:
-        (Flow.Acc.init_toplevel ~dummy_toplevel_cont
-           (Bound_parameters.append params implicit_params))
+    DA.with_are_lifting_conts dacc Are_lifting_conts.no_lifting
+    |> DA.with_flow_acc
+         (Flow.Acc.init_toplevel ~dummy_toplevel_cont
+            (Bound_parameters.append params implicit_params))
   in
   let expr, uacc =
     simplify dacc ~down_to_up:(fun dacc ~rebuild ->
@@ -59,22 +59,29 @@ let simplify_toplevel_common dacc simplify ~params ~implicit_params
           Flow.Analysis.analyze data_flow ~print_name ~code_age_relation
             ~used_value_slots
             ~code_ids_to_never_delete:(DA.code_ids_to_never_delete dacc)
+            ~specialization_map:(DA.specialization_map dacc)
             ~return_continuation ~exn_continuation
+            ~machine_width:(DE.machine_width (DA.denv dacc))
         in
         let uenv =
           UE.add_function_return_or_exn_continuation
-            (UE.create (DA.are_rebuilding_terms dacc))
+            (UE.create
+               (DA.are_rebuilding_terms dacc)
+               ~machine_width:(DE.machine_width (DA.denv dacc)))
             return_continuation return_arity
         in
         let uenv =
           UE.add_function_return_or_exn_continuation uenv exn_continuation
-            (Flambda_arity.create [K.With_subkind.any_value])
+            (Flambda_arity.create_singletons [K.With_subkind.any_value])
         in
         let uacc =
           UA.create ~flow_result ~compute_slot_offsets:true uenv dacc
         in
         let uacc =
-          if Flow.Analysis.did_perform_mutable_unboxing flow_result
+          if
+            Flow.Analysis.did_perform_mutable_unboxing flow_result
+            || Flow.Analysis.added_useful_alias_in_loop (DA.typing_env dacc)
+                 data_flow flow_result
           then UA.set_resimplify uacc
           else uacc
         in
@@ -86,8 +93,9 @@ let simplify_toplevel_common dacc simplify ~params ~implicit_params
      [Simplify_set_of_closures]. *)
   NO.fold_continuations_including_in_trap_actions (UA.name_occurrences uacc)
     ~init:() ~f:(fun () cont ->
-      if (not (Continuation.equal cont return_continuation))
-         && not (Continuation.equal cont exn_continuation)
+      if
+        (not (Continuation.equal cont return_continuation))
+        && not (Continuation.equal cont exn_continuation)
       then
         Misc.fatal_errorf
           "Continuation %a should not be free in toplevel expression after \
@@ -112,9 +120,7 @@ let rec simplify_expr dacc expr ~down_to_up =
   | Apply_cont apply_cont ->
     Simplify_apply_cont_expr.simplify_apply_cont dacc apply_cont ~down_to_up
   | Switch switch ->
-    Simplify_switch_expr.simplify_switch
-      ~simplify_let:Simplify_let_expr.simplify_let ~simplify_function_body dacc
-      switch ~down_to_up
+    Simplify_switch_expr.simplify_switch dacc switch ~down_to_up
   | Invalid { message } ->
     (* CR mshinwell: Make sure that a program can be simplified to just
        [Invalid]. *)
@@ -133,12 +139,13 @@ and simplify_function_body dacc expr ~return_continuation ~return_arity
   | Loopify cont ->
     let call_self_cont_expr =
       let args = Bound_parameters.simples params in
-      Expr.create_apply_cont (Apply_cont_expr.create cont ~args ~dbg:[])
+      Expr.create_apply_cont
+        (Apply_cont_expr.create cont ~args ~dbg:Debuginfo.none)
     in
     let handlers =
-      Continuation.Map.singleton cont
+      Continuation.Lmap.singleton cont
         (Continuation_handler.create params ~handler:expr
-           ~free_names_of_handler:Unknown ~is_exn_handler:false)
+           ~free_names_of_handler:Unknown ~is_exn_handler:false ~is_cold:false)
     in
     simplify_toplevel_common dacc
       (fun dacc ->

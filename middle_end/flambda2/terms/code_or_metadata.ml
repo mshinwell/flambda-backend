@@ -13,7 +13,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
-module File_sections = Flambda_backend_utils.File_sections
+module File_sections = Oxcaml_utils.File_sections
 
 type code_status =
   | Loaded of Code.t
@@ -37,10 +37,23 @@ type raw =
     code_present : code_present
   }
 
+let print_loaded ppf code =
+  Format.fprintf ppf "@[<hov 1>(Code_present@ (@[<hov 1>(code@ %a)@]))@]"
+    Code.print code
+
+let print_metadata_only ppf code_metadata =
+  Format.fprintf ppf "@[<hov 1>(Metadata_only@ (code_metadata@ %a))@]"
+    Code_metadata.print code_metadata
+
 module View = struct
   type t =
     | Code_present of Code.t
     | Metadata_only of Code_metadata.t
+
+  let print ppf t =
+    match t with
+    | Code_present code -> print_loaded ppf code
+    | Metadata_only code_metadata -> print_metadata_only ppf code_metadata
 end
 
 let view t =
@@ -76,17 +89,15 @@ let get_code t =
 
 let print ppf t =
   match t with
-  | Code_present { code_status = Loaded code } ->
-    Format.fprintf ppf "@[<hov 1>(Code_present@ (@[<hov 1>(code@ %a)@]))@]"
-      Code.print code
+  | Code_present { code_status = Loaded code } -> print_loaded ppf code
   | Code_present { code_status = Not_loaded not_loaded } ->
     Format.fprintf ppf
       "@[<hov 1>(Present@ (@[<hov 1>(code@ Not_loaded)@]@[<hov 1>(metadata@ \
        %a)@]))@]"
       Code_metadata.print not_loaded.metadata
-  | Metadata_only code_metadata ->
-    Format.fprintf ppf "@[<hov 1>(Metadata_only@ (code_metadata@ %a))@]"
-      Code_metadata.print code_metadata
+  | Metadata_only code_metadata -> print_metadata_only ppf code_metadata
+
+let print_view ppf t = View.print ppf (view t)
 
 let code_status_metadata = function
   | Loaded code -> Code.code_metadata code
@@ -129,7 +140,7 @@ let merge code_id t1 t2 =
   match t1, t2 with
   | Metadata_only cm1, Metadata_only cm2 ->
     if Code_metadata.approx_equal cm1 cm2
-    then Some t1
+    then t1
     else
       Misc.fatal_errorf
         "Code id %a is imported with different code metadata (%a and %a)"
@@ -141,7 +152,7 @@ let merge code_id t1 t2 =
   | (Code_present { code_status } as t), Metadata_only cm_imported ->
     let cm_present = code_status_metadata code_status in
     if Code_metadata.approx_equal cm_present cm_imported
-    then Some t
+    then t
     else
       Misc.fatal_errorf
         "Code_id %a is present with code metadata@ %abut imported with code \
@@ -167,8 +178,9 @@ let apply_renaming t renaming =
     let delayed_renaming' =
       Renaming.compose ~second:renaming ~first:not_loaded.delayed_renaming
     in
-    if metadata' == not_loaded.metadata
-       && delayed_renaming' == not_loaded.delayed_renaming
+    if
+      metadata' == not_loaded.metadata
+      && delayed_renaming' == not_loaded.delayed_renaming
     then t
     else
       Code_present
@@ -205,9 +217,11 @@ let map_result_types t ~f =
      called before output *)
   match view t with
   | Code_present code ->
-    Code_present { code_status = Loaded (Code.map_result_types code ~f) }
+    let code' = Code.map_result_types code ~f in
+    if code == code' then t else Code_present { code_status = Loaded code' }
   | Metadata_only code_metadata ->
-    Metadata_only (Code_metadata.map_result_types code_metadata ~f)
+    let code_metadata' = Code_metadata.map_result_types code_metadata ~f in
+    if code_metadata == code_metadata' then t else Metadata_only code_metadata'
 
 let code_present t =
   match t with Code_present _ -> true | Metadata_only _ -> false

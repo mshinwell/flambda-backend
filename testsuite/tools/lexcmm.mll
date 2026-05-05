@@ -56,7 +56,6 @@ let keyword_table =
     "int", INT;
     "int32", INT32;
     "intoffloat", INTOFFLOAT;
-    "intofvalue", INTOFVALUE;
     "string", KSTRING;
     "let", LET;
     "letmut", LETMUT;
@@ -65,8 +64,8 @@ let keyword_table =
     "mulh", MULH;
     "or", OR;
     "proj", PROJ;
-    "raise", RAISE Lambda.Raise_regular;
-    "reraise", RAISE Lambda.Raise_reraise;
+    "raise_regular", RAISE Lambda.Raise_regular;
+    "raise_reraise", RAISE Lambda.Raise_reraise;
     "raise_notrace", RAISE Lambda.Raise_notrace;
     "seq", SEQ;
     "signed", SIGNED;
@@ -77,7 +76,6 @@ let keyword_table =
     "unit", UNIT;
     "unsigned", UNSIGNED;
     "val", VAL;
-    "valueofint", VALUEOFINT;
     "while", WHILE;
     "with", WITH;
     "xor", XOR;
@@ -158,28 +156,26 @@ rule token = parse
   | "/f" { DIVF }
   | "/" { DIVI }
   | eof { EOF }
-  | "==a" { EQA }
   | "==f" { EQF }
   | "==" { EQI }
-  | ">=a" { GEA }
   | ">=f" { GEF }
+  | ">=u" { GEU }
   | ">=" { GEI }
-  | ">a" { GTA }
   | ">f" { GTF }
+  | ">u" { GTU }
   | ">" { GTI }
   | "[" { LBRACKET }
-  | "<=a" { LEA }
   | "<=f" { LEF }
   | "<=" { LEI }
+  | "<=u" { LEU }
   | "(" { LPAREN }
   | "<<" { LSL }
   | ">>u" { LSR }
-  | "<a" { LTA }
   | "<f" { LTF }
   | "<" { LTI }
+  | "<u" { LTU }
   | "*f" { MULF }
   | "*" { STAR }
-  | "!=a" { NEA }
   | "!=f" { NEF }
   | "!=" { NEI }
   | "!>=f" { NGEF }

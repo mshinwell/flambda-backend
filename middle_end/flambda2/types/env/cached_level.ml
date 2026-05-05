@@ -89,17 +89,23 @@ let clean_for_export t ~reachable_names =
   let names_to_types =
     Name.Map.filter_map
       (fun name (ty, binding_time_and_mode) ->
-        if Name_occurrences.mem_name reachable_names name
-           && Compilation_unit.equal
-                (Name.compilation_unit name)
-                current_compilation_unit
-        then
+        if
+          Name_occurrences.mem_name reachable_names name
+          && Compilation_unit.equal
+               (Name.compilation_unit name)
+               current_compilation_unit
+        then (
           let binding_time_and_mode =
             if Name.is_var name
             then Binding_time.With_name_mode.imported_variables
             else binding_time_and_mode
           in
-          Some (ty, binding_time_and_mode)
+          (match Type_grammar.get_alias_opt ty with
+          | None -> ()
+          | Some alias ->
+            Misc.fatal_errorf "Remaining alias after cleanup: %a -> %a@."
+              Name.print name Simple.print alias);
+          Some (ty, binding_time_and_mode))
         else None)
       t.names_to_types
   in
@@ -134,10 +140,10 @@ let merge t1 t2 =
   in
   let aliases = Aliases.empty in
   let symbol_projections =
-    Variable.Map.union
+    Variable.Map.union_total_shared
       (fun var proj1 proj2 ->
         if Symbol_projection.equal proj1 proj2
-        then Some proj1
+        then proj1
         else
           Misc.fatal_errorf
             "Cannot merge symbol projections for %a:@ %a@ and@ %a"

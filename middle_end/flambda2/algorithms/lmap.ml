@@ -61,6 +61,8 @@ module type S = sig
 
   val exists : (key -> 'a -> bool) -> 'a t -> bool
 
+  val choose : 'a t -> key * 'a
+
   val add_seq : (key * 'a) Seq.t -> 'a t -> 'a t
 
   val of_seq : (key * 'a) Seq.t -> 'a t
@@ -78,7 +80,7 @@ module Make (T : Thing) : S with type key = T.t = struct
 
   let empty = []
 
-  let is_empty m = m = []
+  let is_empty m = match m with [] -> true | _ :: _ -> false
 
   let add k v m = (k, v) :: m
 
@@ -107,6 +109,8 @@ module Make (T : Thing) : S with type key = T.t = struct
     | (k, v) :: m -> f k v fixed_arg && for_all_with_fixed_arg f m fixed_arg
 
   let exists f m = List.exists (fun (k, v) -> f k v) m
+
+  let choose = function [] -> raise Not_found | res :: _ -> res
 
   let keys m = List.map fst m
 
@@ -147,9 +151,9 @@ module Make (T : Thing) : S with type key = T.t = struct
   let of_seq m = List.of_seq m
 
   let print_assoc print_key print_datum ppf l =
-    if l = []
-    then Format.fprintf ppf "{}"
-    else
+    match l with
+    | [] -> Format.fprintf ppf "{}"
+    | _ :: _ ->
       Format.fprintf ppf "@[<hov 1>{%a}@]"
         (Format.pp_print_list ~pp_sep:Format.pp_print_space
            (fun ppf (key, datum) ->

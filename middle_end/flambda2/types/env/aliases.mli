@@ -23,22 +23,22 @@
 
     If the words "fudge factor" sound like we're being imprecise, happily we can
     be precise about our imprecision. Let [x ~ y] mean [x] and [y] are _equal up
-    to coercion_, which is to say, there exists a coercion [c] such that [x =
-    (coerce y c)]. Coercions form a _groupoid_, meaning they have just the right
-    properties to let [~] be an equivalence relation: {| + There is an identity
-    coercion, so [x = (coerce x id)], meaning [x ~ x].
+    to coercion_, which is to say, there exists a coercion [c] such that
+    [x = (coerce y c)]. Coercions form a _groupoid_, meaning they have just the
+    right properties to let [~] be an equivalence relation:
 
+    + There is an identity coercion, so [x = (coerce x id)], meaning [x ~ x].
     + Coercions can be inverted, so if [x ~ y], meaning [x = (coerce y c)], then
-    (writing [c^-1] for the inverse) we have [y = (coerce x c^-1)], meaning [y ~
-    x].
+      (writing [c^-1] for the inverse) we have [y = (coerce x c^-1)], meaning
+      [y ~ x].
+    + Coercions can be composed, so if [x ~ y] and [y ~ z], meaning
+      [x = (coerce y c_xy)] and [y = (coerce z c_yz)], then (using [>>] as the
+      composition operator) we have [x = (coerce z (c_xy >> c_yz))] and [x ~ z].
 
-    + Coercions can be composed, so if [x ~ y] and [y ~ z], meaning [x = (coerce
-    y c_xy)] and [y = (coerce z c_yz)], then (using [>>] as the composition
-    operator) we have [x = (coerce z (c_xy >> c_yz))] and [x ~ z]. |} Therefore
-    we can safely redefine "alias" to mean [x ~ y] rather than [x = y], and the
-    coercions keep track of the precise sense in which [x] and [y] are "equal
-    enough." In particular, this module keeps track of aliases in this looser
-    sense. *)
+    Therefore we can safely redefine "alias" to mean [x ~ y] rather than
+    [x = y], and the coercions keep track of the precise sense in which [x] and
+    [y] are "equal enough." In particular, this module keeps track of aliases in
+    this looser sense. *)
 
 type t
 
@@ -57,19 +57,18 @@ val empty : t
 
 val is_empty : t -> bool
 
-(** The result of calling [add] to state that two [Simple.t]s are now aliases. *)
+(** The result of calling [add] to state that two [Simple.t]s are now aliases.
+*)
 type add_result = private
   { t : t;  (** The new state of the alias tracker. *)
-    canonical_element : Simple.t;
-        (** The canonical element of the combined equivalence class. In the type
-            environment, this will be the name (if it is a name) that is
-            assigned a concrete type. Does not carry a coercion. *)
-    alias_of_demoted_element : Simple.t
+    demoted_name : Name.t;
         (** Whichever argument to [add] had its equivalence class consumed and
             its canonical element demoted to an alias. It is this name that
-            needs its type to change to record the new canonical element. Its
-            coercion has been adjusted so that it is properly an alias of
-            [canonical_element]. *)
+            needs its type to change to record the new canonical element. *)
+    canonical_element : Simple.t
+        (** The canonical element of the combined equivalence class. In the type
+            environment, this will be the name (if it is a name) that is
+            assigned a concrete type. *)
   }
 
 (** Add an alias relationship to the tracker. The two simple expressions must be
@@ -78,10 +77,10 @@ type add_result = private
     [{ t = t'; canonical_element; alias_of_demoted_element }], then according to
     [t'],
 
-    - [canonical_element] is the canonical element of both [s1] and [s2];
+    - [canonical_element] is either [s1] or [s2] and is now canonical for both,
 
-    - [alias_of_demoted_element] is either [s1] or [s2] (possibly with a new
-    coercion; see note on [add_result]); and
+    - [alias_of_demoted_element] is whichever of [s1] or [s2] is not
+      [canonical_element], and
 
     - [alias_of_demoted_element] is no longer canonical. *)
 val add :
@@ -90,7 +89,7 @@ val add :
   t ->
   canonical_element1:Simple.t ->
   canonical_element2:Simple.t ->
-  add_result
+  add_result Or_bottom.t
 
 (** [get_canonical_element] returns [None] only when the
     [min_order_within_equiv_class] cannot be satisfied. *)
@@ -111,6 +110,8 @@ module Alias_set : sig
   type t
 
   val empty : t
+
+  val is_empty : t -> bool
 
   val singleton : Simple.t -> t
 
@@ -133,6 +134,14 @@ module Alias_set : sig
 
   val print : Format.formatter -> t -> unit
 end
+
+val add_alias_set :
+  binding_time_resolver:(Name.t -> Binding_time.With_name_mode.t) ->
+  binding_times_and_modes:(_ * Binding_time.With_name_mode.t) Name.Map.t ->
+  t ->
+  Name.t ->
+  Alias_set.t ->
+  t
 
 (** [get_aliases] always returns the supplied element in the result set. *)
 val get_aliases : t -> Simple.t -> Alias_set.t

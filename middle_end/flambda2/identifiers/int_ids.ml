@@ -14,8 +14,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-open! Int_replace_polymorphic_compare
-
 let hash_seed =
   let seed = Random.bits () in
   if seed mod 2 = 0 then seed + 1 else seed
@@ -42,12 +40,19 @@ let code_id_flags = 4
 
 module Const_data = struct
   type t =
-    | Naked_immediate of Targetint_31_63.t
-    | Tagged_immediate of Targetint_31_63.t
+    | Naked_immediate of Target_ocaml_int.t
+    | Tagged_immediate of Target_ocaml_int.t
+    | Naked_float32 of Numeric_types.Float32_by_bit_pattern.t
     | Naked_float of Numeric_types.Float_by_bit_pattern.t
+    | Naked_int8 of Numeric_types.Int8.t
+    | Naked_int16 of Numeric_types.Int16.t
     | Naked_int32 of Int32.t
     | Naked_int64 of Int64.t
     | Naked_nativeint of Targetint_32_64.t
+    | Naked_vec128 of Vector_types.Vec128.Bit_pattern.t
+    | Naked_vec256 of Vector_types.Vec256.Bit_pattern.t
+    | Naked_vec512 of Vector_types.Vec512.Bit_pattern.t
+    | Null
 
   let flags = const_flags
 
@@ -59,17 +64,34 @@ module Const_data = struct
       | Naked_immediate i ->
         Format.fprintf ppf "%t#%a%t"
           Flambda_colours.naked_number
-          Targetint_31_63.print i
+          Target_ocaml_int.print i
           Flambda_colours.pop
       | Tagged_immediate i ->
         Format.fprintf ppf "%t%a%t"
           Flambda_colours.tagged_immediate
-          Targetint_31_63.print i
+          Target_ocaml_int.print i
+          Flambda_colours.pop
+      | Naked_float32 f ->
+        Format.fprintf ppf "%t#%as%t"
+          Flambda_colours.naked_number
+          Numeric_types.Float32_by_bit_pattern.print f
           Flambda_colours.pop
       | Naked_float f ->
         Format.fprintf ppf "%t#%a%t"
           Flambda_colours.naked_number
           Numeric_types.Float_by_bit_pattern.print f
+          Flambda_colours.pop
+      | Naked_int8 n ->
+        Format.fprintf ppf "%t#%a%t"
+          Flambda_colours.naked_number
+          Numeric_types.Int8.print
+          n
+          Flambda_colours.pop
+      | Naked_int16 n ->
+        Format.fprintf ppf "%t#%a%t"
+          Flambda_colours.naked_number
+          Numeric_types.Int16.print
+          n
           Flambda_colours.pop
       | Naked_int32 n ->
         Format.fprintf ppf "%t#%ldl%t"
@@ -86,54 +108,118 @@ module Const_data = struct
           Flambda_colours.naked_number
           Targetint_32_64.print n
           Flambda_colours.pop
+      | Naked_vec128 (v) ->
+        Format.fprintf ppf "%t#vec128[%a]%t"
+          Flambda_colours.naked_number
+          Vector_types.Vec128.Bit_pattern.print v
+          Flambda_colours.pop
+      | Naked_vec256 (v) ->
+        Format.fprintf ppf "%t#vec256[%a]%t"
+          Flambda_colours.naked_number
+          Vector_types.Vec256.Bit_pattern.print v
+          Flambda_colours.pop
+      | Naked_vec512 (v) ->
+        Format.fprintf ppf "%t#vec512[%a]%t"
+          Flambda_colours.naked_number
+          Vector_types.Vec512.Bit_pattern.print v
+          Flambda_colours.pop
+      | Null ->
+        Format.fprintf ppf "%t#null%t"
+          Flambda_colours.naked_number
+          Flambda_colours.pop
 
     let compare t1 t2 =
       match t1, t2 with
-      | Naked_immediate i1, Naked_immediate i2 -> Targetint_31_63.compare i1 i2
+      | Naked_immediate i1, Naked_immediate i2 -> Target_ocaml_int.compare i1 i2
       | Tagged_immediate i1, Tagged_immediate i2 ->
-        Targetint_31_63.compare i1 i2
+        Target_ocaml_int.compare i1 i2
+      | Naked_float32 f1, Naked_float32 f2 ->
+        Numeric_types.Float32_by_bit_pattern.compare f1 f2
       | Naked_float f1, Naked_float f2 ->
         Numeric_types.Float_by_bit_pattern.compare f1 f2
+      | Naked_int8 n1, Naked_int8 n2 -> Numeric_types.Int8.compare n1 n2
+      | Naked_int16 n1, Naked_int16 n2 -> Numeric_types.Int16.compare n1 n2
       | Naked_int32 n1, Naked_int32 n2 -> Int32.compare n1 n2
       | Naked_int64 n1, Naked_int64 n2 -> Int64.compare n1 n2
       | Naked_nativeint n1, Naked_nativeint n2 -> Targetint_32_64.compare n1 n2
+      | Naked_vec128 v1, Naked_vec128 v2 ->
+        Vector_types.Vec128.Bit_pattern.compare v1 v2
+      | Naked_vec256 v1, Naked_vec256 v2 ->
+        Vector_types.Vec256.Bit_pattern.compare v1 v2
+      | Naked_vec512 v1, Naked_vec512 v2 ->
+        Vector_types.Vec512.Bit_pattern.compare v1 v2
+      | Null, Null -> 0
       | Naked_immediate _, _ -> -1
       | _, Naked_immediate _ -> 1
       | Tagged_immediate _, _ -> -1
       | _, Tagged_immediate _ -> 1
       | Naked_float _, _ -> -1
       | _, Naked_float _ -> 1
+      | Naked_float32 _, _ -> -1
+      | _, Naked_float32 _ -> 1
+      | Naked_int8 _, _ -> -1
+      | _, Naked_int8 _ -> 1
+      | Naked_int16 _, _ -> -1
+      | _, Naked_int16 _ -> 1
       | Naked_int32 _, _ -> -1
       | _, Naked_int32 _ -> 1
       | Naked_int64 _, _ -> -1
       | _, Naked_int64 _ -> 1
+      | Naked_nativeint _, _ -> -1
+      | _, Naked_nativeint _ -> 1
+      | Naked_vec128 _, _ -> -1
+      | _, Naked_vec128 _ -> 1
+      | Naked_vec256 _, _ -> -1
+      | _, Naked_vec256 _ -> 1
+      | Naked_vec512 _, _ -> -1
+      | _, Naked_vec512 _ -> 1
 
     let equal t1 t2 =
       if t1 == t2
       then true
       else
         match t1, t2 with
-        | Naked_immediate i1, Naked_immediate i2 -> Targetint_31_63.equal i1 i2
+        | Naked_immediate i1, Naked_immediate i2 -> Target_ocaml_int.equal i1 i2
         | Tagged_immediate i1, Tagged_immediate i2 ->
-          Targetint_31_63.equal i1 i2
+          Target_ocaml_int.equal i1 i2
+        | Naked_float32 f1, Naked_float32 f2 ->
+          Numeric_types.Float32_by_bit_pattern.equal f1 f2
         | Naked_float f1, Naked_float f2 ->
           Numeric_types.Float_by_bit_pattern.equal f1 f2
+        | Naked_int8 n1, Naked_int8 n2 -> Numeric_types.Int8.equal n1 n2
+        | Naked_int16 n1, Naked_int16 n2 -> Numeric_types.Int16.equal n1 n2
         | Naked_int32 n1, Naked_int32 n2 -> Int32.equal n1 n2
         | Naked_int64 n1, Naked_int64 n2 -> Int64.equal n1 n2
         | Naked_nativeint n1, Naked_nativeint n2 -> Targetint_32_64.equal n1 n2
+        | Naked_vec128 v1, Naked_vec128 v2 ->
+          Vector_types.Vec128.Bit_pattern.equal v1 v2
+        | Naked_vec256 v1, Naked_vec256 v2 ->
+          Vector_types.Vec256.Bit_pattern.equal v1 v2
+        | Naked_vec512 v1, Naked_vec512 v2 ->
+          Vector_types.Vec512.Bit_pattern.equal v1 v2
+        | Null, Null -> true
         | ( ( Naked_immediate _ | Tagged_immediate _ | Naked_float _
-            | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _ ),
+            | Naked_float32 _ | Naked_vec128 _ | Naked_vec256 _ | Naked_vec512 _
+            | Naked_int8 _ | Naked_int16 _ | Naked_int32 _ | Naked_int64 _
+            | Naked_nativeint _ | Null ),
             _ ) ->
           false
 
     let hash t =
       match t with
-      | Naked_immediate n -> Targetint_31_63.hash n
-      | Tagged_immediate n -> Targetint_31_63.hash n
+      | Naked_immediate n -> Target_ocaml_int.hash n
+      | Tagged_immediate n -> Target_ocaml_int.hash n
+      | Naked_float32 n -> Numeric_types.Float32_by_bit_pattern.hash n
       | Naked_float n -> Numeric_types.Float_by_bit_pattern.hash n
+      | Naked_int8 n -> Numeric_types.Int8.hash n
+      | Naked_int16 n -> Numeric_types.Int16.hash n
       | Naked_int32 n -> Hashtbl.hash n
       | Naked_int64 n -> Hashtbl.hash n
       | Naked_nativeint n -> Targetint_32_64.hash n
+      | Naked_vec128 v -> Vector_types.Vec128.Bit_pattern.hash v
+      | Naked_vec256 v -> Vector_types.Vec256.Bit_pattern.hash v
+      | Naked_vec512 v -> Vector_types.Vec512.Bit_pattern.hash v
+      | Null -> Hashtbl.hash 0
   end)
 end
 
@@ -142,25 +228,29 @@ module Variable_data = struct
     { compilation_unit : Compilation_unit.t;
       name : string;
       name_stamp : int;
+      kind : Flambda_kind.t;
       user_visible : bool
     }
 
   let flags = var_flags
 
   let [@ocamlformat "disable"] print ppf { compilation_unit; name; name_stamp;
-                                           user_visible; } =
+                                           kind; user_visible; } =
     Format.fprintf ppf "@[<hov 1>(\
         @[<hov 1>(compilation_unit@ %a)@]@ \
         @[<hov 1>(name@ %s)@]@ \
         @[<hov 1>(name_stamp@ %d)@]@ \
+        @[<hov 1>(kind@ %a)@]@ \
         @[<hov 1>(user_visible@ %b)@]\
         )@]"
-      Compilation_unit.print_debug compilation_unit
+      (Format_doc.compat Compilation_unit.print_debug) compilation_unit
       name
       name_stamp
+      Flambda_kind.print kind
       user_visible
 
-  let hash { compilation_unit; name = _; name_stamp; user_visible = _ } =
+  let hash
+      { compilation_unit; name = _; name_stamp; kind = _; user_visible = _ } =
     hash2 (Compilation_unit.hash compilation_unit) (Hashtbl.hash name_stamp)
 
   let equal t1 t2 =
@@ -170,6 +260,7 @@ module Variable_data = struct
       let { compilation_unit = compilation_unit1;
             name = _;
             name_stamp = name_stamp1;
+            kind = _;
             user_visible = _
           } =
         t1
@@ -177,6 +268,7 @@ module Variable_data = struct
       let { compilation_unit = compilation_unit2;
             name = _;
             name_stamp = name_stamp2;
+            kind = _;
             user_visible = _
           } =
         t2
@@ -202,7 +294,7 @@ module Symbol_data = struct
         @[<hov 1>(compilation_unit@ %a)@]@ \
         @[<hov 1>(linkage_name@ %a)@]\
         )@]"
-      Compilation_unit.print_debug compilation_unit
+      (Format_doc.compat Compilation_unit.print_debug) compilation_unit
       Linkage_name.print linkage_name
 end
 
@@ -210,28 +302,38 @@ module Code_id_data = struct
   type t =
     { compilation_unit : Compilation_unit.t;
       name : string;
+      debug_info : Debuginfo.t;
       linkage_name : Linkage_name.t
     }
 
   let flags = code_id_flags
 
-  let [@ocamlformat "disable"] print ppf { compilation_unit; name; linkage_name; } =
+  let [@ocamlformat "disable"] print ppf { compilation_unit; name; debug_info = _; linkage_name; } =
     Format.fprintf ppf "@[<hov 1>(\
         @[<hov 1>(compilation_unit@ %a)@]@ \
         @[<hov 1>(name@ %s)@]@ \
         @[<hov 1>(linkage_name@ %a)@]@ \
         )@]"
-      Compilation_unit.print_debug compilation_unit
+      (Format_doc.compat Compilation_unit.print_debug) compilation_unit
       name
       Linkage_name.print linkage_name
 
-  let hash { compilation_unit = _; name = _; linkage_name } =
-    (* As per comment above, just looking at the linkage name suffices (same
-       below), rather than the compilation unit as well. *)
+  let hash { compilation_unit = _; name = _; debug_info = _; linkage_name } =
+    (* Linkage names are unique across a whole project, so there's no need to
+       hash the other fields. *)
     Linkage_name.hash linkage_name
 
-  let equal { compilation_unit = _; name = _; linkage_name = linkage_name1 }
-      { compilation_unit = _; name = _; linkage_name = linkage_name2 } =
+  let equal
+      { compilation_unit = _;
+        name = _;
+        debug_info = _;
+        linkage_name = linkage_name1
+      }
+      { compilation_unit = _;
+        name = _;
+        debug_info = _;
+        linkage_name = linkage_name2
+      } =
     Linkage_name.equal linkage_name1 linkage_name2
 end
 
@@ -256,7 +358,13 @@ module Const = struct
 
   let tagged_immediate imm = create (Tagged_immediate imm)
 
+  let naked_float32 f = create (Naked_float32 f)
+
   let naked_float f = create (Naked_float f)
+
+  let naked_int8 i = create (Naked_int8 i)
+
+  let naked_int16 i = create (Naked_int16 i)
 
   let naked_int32 i = create (Naked_int32 i)
 
@@ -264,25 +372,40 @@ module Const = struct
 
   let naked_nativeint i = create (Naked_nativeint i)
 
-  let const_true = tagged_immediate Targetint_31_63.bool_true
+  let naked_vec128 i = create (Naked_vec128 i)
 
-  let const_false = tagged_immediate Targetint_31_63.bool_false
+  let naked_vec256 i = create (Naked_vec256 i)
 
-  let untagged_const_true = naked_immediate Targetint_31_63.bool_true
+  let naked_vec512 i = create (Naked_vec512 i)
 
-  let untagged_const_false = naked_immediate Targetint_31_63.bool_false
+  let const_true machine_width =
+    tagged_immediate (Target_ocaml_int.bool_true machine_width)
 
-  let untagged_const_zero = naked_immediate Targetint_31_63.zero
+  let const_false machine_width =
+    tagged_immediate (Target_ocaml_int.bool_false machine_width)
+
+  let untagged_const_true machine_width =
+    naked_immediate (Target_ocaml_int.bool_true machine_width)
+
+  let untagged_const_false machine_width =
+    naked_immediate (Target_ocaml_int.bool_false machine_width)
+
+  let untagged_const_zero machine_width =
+    naked_immediate (Target_ocaml_int.zero machine_width)
 
   let untagged_const_int i = naked_immediate i
 
   let const_int i = tagged_immediate i
 
-  let const_zero = tagged_immediate Targetint_31_63.zero
+  let const_zero machine_width =
+    tagged_immediate (Target_ocaml_int.zero machine_width)
 
-  let const_one = tagged_immediate Targetint_31_63.one
+  let const_one machine_width =
+    tagged_immediate (Target_ocaml_int.one machine_width)
 
-  let const_unit = const_zero
+  let const_unit machine_width = const_zero machine_width
+
+  let const_null = create Null
 
   let descr t = find_data t
 
@@ -335,11 +458,13 @@ module Variable = struct
 
   let name_stamp t = (find_data t).name_stamp
 
+  let kind t = (find_data t).kind
+
   let user_visible t = (find_data t).user_visible
 
   let previous_name_stamp = ref (-1)
 
-  let create ?user_visible name =
+  let create ?user_visible name kind =
     let name_stamp =
       (* CR mshinwell: check for overflow on 32 bit *)
       incr previous_name_stamp;
@@ -349,6 +474,7 @@ module Variable = struct
       { compilation_unit = Compilation_unit.get_current_exn ();
         name;
         name_stamp;
+        kind;
         user_visible = Option.is_some user_visible
       }
     in
@@ -364,10 +490,14 @@ module Variable = struct
     let print ppf t =
       let cu = compilation_unit t in
       if Compilation_unit.equal cu (Compilation_unit.get_current_exn ())
-      then Format.fprintf ppf "%s/%d" (name t) (name_stamp t)
+      then
+        Format.fprintf ppf "%s/%d%s" (name t) (name_stamp t)
+          (if user_visible t then "UV" else "N")
       else
-        Format.fprintf ppf "%a.%s/%d" Compilation_unit.print cu (name t)
-          (name_stamp t)
+        Format.fprintf ppf "%a.%s/%d%s"
+          (Format_doc.compat Compilation_unit.print)
+          cu (name t) (name_stamp t)
+          (if user_visible t then "UV" else "N")
   end
 
   include T0
@@ -384,6 +514,7 @@ module Variable = struct
 
   module Set = Tree.Set
   module Map = Tree.Map
+  module Lmap = Lmap.Make (T)
 
   let export t = find_data t
 
@@ -426,6 +557,8 @@ module Symbol = struct
 
   let compilation_unit t = Symbol0.compilation_unit (find_data t)
 
+  let for_compilation_unit t = Symbol0.for_compilation_unit t |> create_wrapped
+
   let linkage_name t = Symbol0.linkage_name (find_data t)
 
   let linkage_name_as_string t = Linkage_name.to_string (linkage_name t)
@@ -439,7 +572,7 @@ module Symbol = struct
 
     let print ppf t =
       Format.fprintf ppf "%t" Flambda_colours.symbol;
-      Compilation_unit.print ppf (compilation_unit t);
+      (Format_doc.compat Compilation_unit.print) ppf (compilation_unit t);
       Format.pp_print_string ppf ".";
       Linkage_name.print ppf (linkage_name t);
       Format.fprintf ppf "%t" Flambda_colours.pop
@@ -470,14 +603,18 @@ module Name = struct
 
   let var v = v
 
+  let var_set s = s
+
+  let var_map m = m
+
   let symbol s = s
 
   let[@inline always] pattern_match t ~var ~symbol =
     let flags = Id.flags t in
     if flags = var_flags
-    then var t
+    then (var [@inlined hint]) t
     else if flags = symbol_flags
-    then symbol t
+    then (symbol [@inlined hint]) t
     else assert false
 
   module T0 = struct
@@ -685,9 +822,11 @@ module Code_id = struct
 
   let name t = (find_data t).name
 
+  let debug t = (find_data t).debug_info
+
   let previous_name_stamp = ref (-1)
 
-  let create ~name compilation_unit =
+  let create ~name ~(debug : Debuginfo.t) compilation_unit =
     let name_stamp =
       if !previous_name_stamp = max_int
       then Misc.fatal_error "Have run out of name stamps";
@@ -695,13 +834,31 @@ module Code_id = struct
       !previous_name_stamp
     in
     let linkage_name =
-      let name = Printf.sprintf "%s_%d_code" name name_stamp in
-      Symbol0.for_name compilation_unit name |> Symbol0.linkage_name
+      match Compilation_unit.name_mangling_scheme_for_current_unit () with
+      | Flat ->
+        let name =
+          if Flambda_features.Expert.shorten_symbol_names ()
+          then Printf.sprintf "%s_%d" name name_stamp
+          else Printf.sprintf "%s_%d_code" name name_stamp
+        in
+        Symbol0.for_name compilation_unit name |> Symbol0.linkage_name
+      | Structured ->
+        let suffix =
+          if Flambda_features.Expert.shorten_symbol_names ()
+          then Printf.sprintf "_%d" name_stamp
+          else Printf.sprintf "_%d_code" name_stamp
+        in
+        let path = Debuginfo.to_structured_mangling_path ~name debug in
+        Symbol0.for_structured_mangling_path ~compilation_unit ~path ~suffix
+        |> Symbol0.linkage_name
     in
-    let data : Code_id_data.t = { compilation_unit; name; linkage_name } in
+    let data : Code_id_data.t =
+      { compilation_unit; name; debug_info = debug; linkage_name }
+    in
     Table.add !grand_table_of_code_ids data
 
-  let rename t = create ~name:(name t) (Compilation_unit.get_current_exn ())
+  let rename t =
+    create ~name:(name t) ~debug:(debug t) (Compilation_unit.get_current_exn ())
 
   let in_compilation_unit t comp_unit =
     Compilation_unit.equal (get_compilation_unit t) comp_unit
@@ -753,12 +910,12 @@ module Code_id_or_symbol = struct
 
   let create_symbol symbol = symbol
 
-  let pattern_match t ~code_id ~symbol =
+  let[@inline always] pattern_match t ~code_id ~symbol =
     let flags = Table_by_int_id.Id.flags t in
     if flags = Code_id_data.flags
-    then code_id t
+    then (code_id [@inlined hint]) t
     else if flags = Symbol_data.flags
-    then symbol t
+    then (symbol [@inlined hint]) t
     else
       Misc.fatal_errorf "Code_id_or_symbol 0x%x with wrong flags 0x%x" t flags
 
@@ -809,6 +966,65 @@ module Code_id_or_symbol = struct
     Symbol.Set.fold
       (fun sym free_syms -> Set.add (create_symbol sym) free_syms)
       symbols Set.empty
+end
+
+module Code_id_or_name = struct
+  type t = Table_by_int_id.Id.t
+
+  let code_id code_id = code_id
+
+  let name name = name
+
+  let var var = var
+
+  let symbol symbol = symbol
+
+  let[@inline always] pattern_match t ~code_id ~var ~symbol =
+    let flags = Table_by_int_id.Id.flags t in
+    if flags = Code_id_data.flags
+    then (code_id [@inlined hint]) t
+    else if flags = Symbol_data.flags
+    then (symbol [@inlined hint]) t
+    else if flags = Variable_data.flags
+    then (var [@inlined hint]) t
+    else
+      Misc.fatal_errorf "Code_id_or_symbol 0x%x with wrong flags 0x%x" t flags
+
+  module T0 = struct
+    let compare = Id.compare
+
+    let equal = Id.equal
+
+    let hash = Id.hash
+
+    let print ppf t =
+      pattern_match t
+        ~code_id:(fun code_id ->
+          Format.fprintf ppf "@[<hov 1>(code_id@ %a)@]" Code_id.print code_id)
+        ~symbol:(fun symbol ->
+          Format.fprintf ppf "@[<hov 1>(symbol@ %a)@]" Symbol.print symbol)
+        ~var:(fun var ->
+          Format.fprintf ppf "@[<hov 1>(var@ %a)@]" Variable.print var)
+  end
+
+  include T0
+
+  module T = struct
+    type nonrec t = t
+
+    include T0
+  end
+
+  module Column = Datalog.Column.Make (struct
+    let name = "code_id_or_name"
+
+    let print = print
+  end)
+
+  module Set = Column.Set
+  module Map = Column.Map
+
+  let datalog_column_id = Column.datalog_column_id
 end
 
 let initialise () =

@@ -128,11 +128,11 @@ val continuations_including_in_trap_actions : t -> Continuation.Set.t
 
 val function_slots_in_normal_projections : t -> Function_slot.Set.t
 
-val all_function_slots : t -> Function_slot.Set.t
+val all_function_slots_at_normal_mode : t -> Function_slot.Set.t
 
 val value_slots_in_normal_projections : t -> Value_slot.Set.t
 
-val all_value_slots : t -> Value_slot.Set.t
+val all_value_slots_at_normal_mode : t -> Value_slot.Set.t
 
 val symbols : t -> Symbol.Set.t
 
@@ -148,12 +148,14 @@ val without_code_ids : t -> t
 
 val with_only_variables : t -> t
 
+val with_only_names : t -> t
+
 (** The value returned by this function only records occurrences in two fields:
 
     - names, as per the input
 
     - code IDs, containing *both* the code IDs and the "newer version of" code
-    IDs from the input.
+      IDs from the input.
 
     The "newer version of" code IDs field in the returned value will always be
     empty. *)
@@ -169,9 +171,13 @@ val mem_name : t -> Name.t -> bool
 
 val mem_code_id : t -> Code_id.t -> bool
 
+val mem_continuation : t -> Continuation.t -> bool
+
 val value_slot_is_used_or_imported : t -> Value_slot.t -> bool
 
 val remove_var : t -> var:Variable.t -> t
+
+val remove_var_opt : t -> var:Variable.t option -> t
 
 val remove_code_id_or_symbol : t -> code_id_or_symbol:Code_id_or_symbol.t -> t
 

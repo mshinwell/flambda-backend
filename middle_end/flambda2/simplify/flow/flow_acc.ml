@@ -34,6 +34,7 @@ let empty () =
     { stack = [];
       map = Continuation.Map.empty;
       extra = Continuation.Map.empty;
+      lifted_constants = Lifted_constant_state.empty;
       dummy_toplevel_cont = wrong_dummy_toplevel_cont
     }
   in
@@ -84,7 +85,7 @@ let enter_continuation continuation ~recursive ~is_exn_handler params (t : t) =
   in
   { t with stack = cont_info :: t.stack }
 
-let init_toplevel ~dummy_toplevel_cont params _t =
+let init_toplevel ~dummy_toplevel_cont params =
   enter_continuation dummy_toplevel_cont ~recursive:false ~is_exn_handler:false
     params
     { (empty ()) with dummy_toplevel_cont }
@@ -154,67 +155,76 @@ let record_ref_named named_rewrite_id ~bound_to ~original_prim ~prim (t : t) =
       in
       { cont_info with mutable_let_prims_rev })
 
+let record_symbol_projection_aux var name_occurrences (elt : cont_info) =
+  let bindings =
+    Name.Map.update (Name.var var)
+      (function
+        | None -> Some name_occurrences
+        | Some prior_occurences as original ->
+          if Name_occurrences.equal prior_occurences name_occurrences
+          then original
+          else
+            Misc.fatal_errorf
+              "@[<v>The following projection has been bound to different \
+               symbols:%a@ previously bound to:@ %a@ and now to@ %a@]"
+              Variable.print var Name_occurrences.print prior_occurences
+              Name_occurrences.print name_occurrences)
+      elt.bindings
+  in
+  { elt with bindings }
+
 let record_symbol_projection var name_occurrences t =
-  update_top_of_stack ~t ~f:(fun elt ->
-      let bindings =
-        Name.Map.update (Name.var var)
-          (function
-            | None -> Some name_occurrences
-            | Some prior_occurences as original ->
-              if Name_occurrences.equal prior_occurences name_occurrences
-              then original
-              else
-                Misc.fatal_errorf
-                  "@[<v>The following projection has been bound to different \
-                   symbols:%a@ previously bound to:@ %a@ and now to@ %a@]"
-                  Variable.print var Name_occurrences.print prior_occurences
-                  Name_occurrences.print name_occurrences)
-          elt.bindings
-      in
-      { elt with bindings })
+  update_top_of_stack ~t ~f:(record_symbol_projection_aux var name_occurrences)
+
+let record_symbol_binding_aux symbol name_occurrences (elt : cont_info) =
+  let bindings =
+    Name.Map.update (Name.symbol symbol)
+      (function
+        | None -> Some name_occurrences
+        | Some _ ->
+          Misc.fatal_errorf "The following symbol has been bound twice: %a"
+            Symbol.print symbol)
+      elt.bindings
+  in
+  { elt with bindings }
 
 let record_symbol_binding symbol name_occurrences t =
-  update_top_of_stack ~t ~f:(fun elt ->
-      let bindings =
-        Name.Map.update (Name.symbol symbol)
-          (function
-            | None -> Some name_occurrences
-            | Some _ ->
-              Misc.fatal_errorf "The following symbol has been bound twice: %a"
-                Symbol.print symbol)
-          elt.bindings
-      in
-      { elt with bindings })
+  update_top_of_stack ~t ~f:(record_symbol_binding_aux symbol name_occurrences)
+
+let record_code_id_binding_aux code_id name_occurrences (elt : cont_info) =
+  let code_ids =
+    Code_id.Map.update code_id
+      (function
+        | None -> Some name_occurrences
+        | Some _ ->
+          Misc.fatal_errorf "The following code_id has been bound twice: %a"
+            Code_id.print code_id)
+      elt.code_ids
+  in
+  { elt with code_ids }
 
 let record_code_id_binding code_id name_occurrences t =
-  update_top_of_stack ~t ~f:(fun elt ->
-      let code_ids =
-        Code_id.Map.update code_id
-          (function
-            | None -> Some name_occurrences
-            | Some _ ->
-              Misc.fatal_errorf "The following code_id has been bound twice: %a"
-                Code_id.print code_id)
-          elt.code_ids
-      in
-      { elt with code_ids })
+  update_top_of_stack ~t
+    ~f:(record_code_id_binding_aux code_id name_occurrences)
+
+let record_value_slot_aux src value_slot dst (elt : cont_info) =
+  let value_slots =
+    Value_slot.Map.update value_slot
+      (function
+        | None -> Some (Name.Map.singleton src dst)
+        | Some map ->
+          Some
+            (Name.Map.update src
+               (function
+                 | None -> Some dst
+                 | Some dst' -> Some (Name_occurrences.union dst dst'))
+               map))
+      elt.value_slots
+  in
+  { elt with value_slots }
 
 let record_value_slot src value_slot dst t =
-  update_top_of_stack ~t ~f:(fun elt ->
-      let value_slots =
-        Value_slot.Map.update value_slot
-          (function
-            | None -> Some (Name.Map.singleton src dst)
-            | Some map ->
-              Some
-                (Name.Map.update src
-                   (function
-                     | None -> Some dst
-                     | Some dst' -> Some (Name_occurrences.union dst dst'))
-                   map))
-          elt.value_slots
-      in
-      { elt with value_slots })
+  update_top_of_stack ~t ~f:(record_value_slot_aux src value_slot dst)
 
 let add_used_in_current_handler name_occurrences t =
   update_top_of_stack ~t ~f:(fun elt ->
@@ -277,7 +287,7 @@ let add_apply_conts ~result_cont ~exn_cont ~result_arity t =
         | None -> apply_cont_args
         | Some (rewrite_id, result_cont) ->
           add_func_result result_cont rewrite_id
-            ~result_arity:(Flambda_arity.cardinal result_arity)
+            ~result_arity:(Flambda_arity.cardinal_unarized result_arity)
             ~extra_args:[] apply_cont_args
       in
       { elt with apply_cont_args })
@@ -321,19 +331,12 @@ let add_apply_cont_args ~rewrite_id cont arg_name_simples t =
       { elt with apply_cont_args })
 
 let get_block_and_constant_field ~block ~field =
-  Simple.pattern_match field
-    ~name:(fun _ ~coercion:_ -> None)
-    ~const:(fun const ->
-      Simple.pattern_match' block
-        ~const:(fun _ -> None)
-        ~symbol:(fun _ ~coercion:_ -> None)
-        ~var:(fun var ~coercion:_ ->
-          let field =
-            match[@ocaml.warning "-4"] Reg_width_const.descr const with
-            | Tagged_immediate i -> Targetint_31_63.to_int i
-            | _ -> assert false
-          in
-          Some (var, field)))
+  Simple.pattern_match' block
+    ~const:(fun _ -> None)
+    ~symbol:(fun _ ~coercion:_ -> None)
+    ~var:(fun var ~coercion:_ ->
+      let field = Target_ocaml_int.to_int field in
+      Some (var, field))
 
 let record_let_binding ~rewrite_id ~generate_phantom_lets ~let_bound
     ~simplified_defining_expr t =
@@ -354,7 +357,7 @@ let record_let_binding ~rewrite_id ~generate_phantom_lets ~let_bound
       let bound_var = Bound_pattern.must_be_singleton let_bound in
       let var = Bound_var.var bound_var in
       match[@ocaml.warning "-4"] original_prim with
-      | Unary (End_region, _region) ->
+      | Unary (End_region { ghost = _ }, _region) ->
         (* Uses of region variables in [End_region] don't count as uses. *)
         t
       | Unary (Is_int _, simple) -> (
@@ -373,7 +376,7 @@ let record_let_binding ~rewrite_id ~generate_phantom_lets ~let_bound
                ~prim:(Get_tag v) t)
             Name_occurrences.empty
         | None -> record_var_bindings t free_names)
-      | Binary (Block_load (bak, mut), block, field) -> (
+      | Unary (Block_load { kind = bak; mut; field }, block) -> (
         match get_block_and_constant_field ~block ~field with
         | Some (block, field) ->
           record_var_bindings
@@ -382,7 +385,7 @@ let record_let_binding ~rewrite_id ~generate_phantom_lets ~let_bound
                t)
             Name_occurrences.empty
         | None -> record_var_bindings t free_names)
-      | Ternary (Block_set (bak, _), block, field, value) -> (
+      | Binary (Block_set { kind = bak; field; _ }, block, value) -> (
         match get_block_and_constant_field ~block ~field with
         | Some (block, field) ->
           record_ref_named rewrite_id ~bound_to:var ~original_prim
@@ -403,13 +406,99 @@ let record_let_binding ~rewrite_id ~generate_phantom_lets ~let_bound
           let t = record_defined_var var t in
           add_used_in_current_handler free_names t))
 
+(* Lifted symbols *)
+
+let record_lifted_function_slot_aux ~free_names ~value_slots _ (symbol, _) elt =
+  let elt = record_symbol_binding_aux symbol free_names elt in
+  Value_slot.Map.fold
+    (fun value_slot simple elt ->
+      record_value_slot_aux (Name.symbol symbol) value_slot
+        (Simple.free_names simple) elt)
+    value_slots elt
+
+let record_lifted_constant_definition_aux ~being_defined elt definition =
+  let module D = Lifted_constant.Definition in
+  match D.descr definition with
+  | Code code_id ->
+    record_code_id_binding_aux code_id
+      (Name_occurrences.union being_defined (D.free_names definition))
+      elt
+  | Block_like { symbol; _ } ->
+    let free_names =
+      Name_occurrences.union being_defined (D.free_names definition)
+    in
+    record_symbol_binding_aux symbol free_names elt
+  | Set_of_closures { closure_symbols_with_types; _ } -> (
+    let expr = D.defining_expr definition in
+    match Rebuilt_static_const.to_const expr with
+    | Some (Static_const const) ->
+      let set_of_closures = Static_const.must_be_set_of_closures const in
+      let free_names =
+        Name_occurrences.union being_defined
+          (Function_declarations.free_names
+             (Set_of_closures.function_decls set_of_closures))
+      in
+      let value_slots = Set_of_closures.value_slots set_of_closures in
+      Function_slot.Lmap.fold
+        (record_lifted_function_slot_aux ~free_names ~value_slots)
+        closure_symbols_with_types elt
+    | None | Some (Code _ | Deleted_code) ->
+      let free_names =
+        Name_occurrences.union being_defined (D.free_names definition)
+      in
+      Function_slot.Lmap.fold
+        (fun _ (symbol, _) elt ->
+          record_symbol_binding_aux symbol free_names elt)
+        closure_symbols_with_types elt)
+
+let normalize_lifted_constant_aux lifted_constant (elt : cont_info) =
+  let being_defined =
+    let bound_static = Lifted_constant.bound_static lifted_constant in
+    (* Note: We're not registering code IDs in the set, because we can actually
+       delete code bindings individually. In particular, code IDs that are only
+       used in the newer_version_of field of another binding will be deleted as
+       expected. *)
+    let symbols = Bound_static.symbols_being_defined bound_static in
+    Name_occurrences.empty
+    |> Symbol.Set.fold
+         (fun symbol acc ->
+           Name_occurrences.add_symbol acc symbol Name_mode.normal)
+         symbols
+  in
+  (* Record all projections as potential dependencies. *)
+  let elt =
+    Variable.Map.fold
+      (fun var proj elt ->
+        record_symbol_projection_aux var (Symbol_projection.free_names proj) elt)
+      (Lifted_constant.symbol_projections lifted_constant)
+      elt
+  in
+  let elt =
+    ListLabels.fold_left ~init:elt
+      (Lifted_constant.definitions lifted_constant)
+      ~f:(record_lifted_constant_definition_aux ~being_defined)
+  in
+  elt
+
+let normalize_lifted_constants_aux lifted_constants elt =
+  Lifted_constant_state.fold lifted_constants ~init:elt
+    ~f:(fun elt lifted_constant ->
+      normalize_lifted_constant_aux lifted_constant elt)
+
+let record_lifted_constants lifted_constants (t : t) =
+  { t with
+    lifted_constants =
+      Lifted_constant_state.union lifted_constants t.lifted_constants
+  }
+
 (* Normalisation *)
 (* ************* *)
 
 let add_extra_args_to_call ~extra_args rewrite_id original_args =
   match Apply_cont_rewrite_id.Map.find rewrite_id extra_args with
-  | exception Not_found -> original_args
-  | extra_args ->
+  | exception Not_found -> Some original_args
+  | Or_invalid.Invalid -> None
+  | Or_invalid.Ok extra_args ->
     let args_acc =
       if Numeric_types.Int.Map.is_empty original_args
       then 0, Numeric_types.Int.Map.empty
@@ -433,23 +522,56 @@ let add_extra_args_to_call ~extra_args rewrite_id original_args =
           i + 1, Numeric_types.Int.Map.add i extra_arg args)
         args_acc extra_args
     in
-    args
+    Some args
 
-let extend_args_with_extra_args (t : T.Acc.t) =
+let normalize_acc ~specialization_map (t : T.Acc.t) =
   let map =
     Continuation.Map.map
       (fun (elt : T.Continuation_info.t) ->
+        (* Note: [cont=elt.continuation] *)
+        (* Rewrite continuations calls to the specialized ones *)
         let apply_cont_args =
-          Continuation.Map.mapi
+          Continuation.Map.fold
+            (fun cont rewrite_ids acc ->
+              match Continuation.Map.find cont specialization_map with
+              | exception Not_found -> Continuation.Map.add cont rewrite_ids acc
+              | specialized_ids ->
+                Apply_cont_rewrite_id.Map.fold
+                  (fun id args acc ->
+                    match Apply_cont_rewrite_id.Map.find id specialized_ids with
+                    | exception Not_found ->
+                      Continuation_callsite_map.add cont id args acc
+                    | specialized ->
+                      Continuation_callsite_map.add specialized id args acc)
+                  rewrite_ids acc)
+            elt.apply_cont_args Continuation.Map.empty
+        in
+        (* Add extra args to the continuation call sites *)
+        let apply_cont_args =
+          Continuation.Map.filter_map
             (fun cont rewrite_ids ->
-              match Continuation.Map.find cont t.extra with
-              | exception Not_found -> rewrite_ids
-              | epa ->
-                let extra_args = EPA.extra_args epa in
-                Apply_cont_rewrite_id.Map.mapi
-                  (add_extra_args_to_call ~extra_args)
-                  rewrite_ids)
-            elt.apply_cont_args
+              let rewrite_ids =
+                match Continuation.Map.find cont t.extra with
+                | exception Not_found -> rewrite_ids
+                | epa ->
+                  let extra_args = EPA.extra_args epa in
+                  Apply_cont_rewrite_id.Map.filter_map
+                    (add_extra_args_to_call ~extra_args)
+                    rewrite_ids
+              in
+              (* We must not leave an empty [Apply_cont_rewrite_id] map here.
+                 Indeed, not having any actual continuation arguments will let
+                 flow analysis find a dominator for parameters of [cont] that we
+                 do not have access to. Since we then only look at which
+                 continuation can call which to know which arguments to add,
+                 this causes the adding of the extra parameters to assume we
+                 need access to that dominator since it looks like we can call
+                 [cont], but since neither we nor any of our callers have access
+                 to it, trying to add the dominator crashes the compiler. *)
+              if Apply_cont_rewrite_id.Map.is_empty rewrite_ids
+              then None
+              else Some rewrite_ids)
+            apply_cont_args
         in
         { elt with apply_cont_args })
       t.map
@@ -470,7 +592,8 @@ let extend_args_with_extra_args (t : T.Acc.t) =
                         (EPA.extra_args epa)
                     with
                     | exception Not_found -> defined
-                    | extra_args ->
+                    | Invalid -> defined
+                    | Ok extra_args ->
                       let defined =
                         List.fold_left
                           (fun defined -> function
@@ -500,5 +623,15 @@ let extend_args_with_extra_args (t : T.Acc.t) =
         in
         Continuation.Map.add cont elt map)
       t.extra map
+  in
+  let map =
+    Continuation.Map.update t.dummy_toplevel_cont
+      (function
+        | None ->
+          Misc.fatal_errorf
+            "Data_flow: missing continuation info for top-level expression"
+        | Some elt ->
+          Some (normalize_lifted_constants_aux t.lifted_constants elt))
+      map
   in
   { t with map; extra = Continuation.Map.empty }

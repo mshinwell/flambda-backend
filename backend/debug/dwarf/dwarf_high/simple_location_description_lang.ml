@@ -14,6 +14,7 @@
 
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
+open! Int_replace_polymorphic_compare [@@ocaml.warning "-66"]
 open Dwarf_low
 module O = Dwarf_operator
 module OB = Operator_builder
@@ -42,6 +43,14 @@ module Lvalue = struct
       Targetint.mul offset_in_words Targetint.size_in_bytes_as_targetint
     in
     OB.address_of_stack_slot ~offset_in_bytes
+
+  let in_domainstate_slot ~offset_in_words
+      ~domainstate_ptr_dwarf_register_number =
+    let offset_in_bytes =
+      Targetint.mul offset_in_words Targetint.size_in_bytes_as_targetint
+    in
+    OB.address_of_domainstate_slot ~offset_in_bytes
+      ~domainstate_ptr_dwarf_register_number
 
   let in_symbol_field symbol ~field =
     let offset_in_bytes =
@@ -109,6 +118,12 @@ module Rvalue = struct
       Targetint.mul offset_in_words Targetint.size_in_bytes_as_targetint
     in
     OB.contents_of_stack_slot ~offset_in_bytes
+
+  let in_domainstate_slot ~offset_in_words =
+    let offset_in_bytes =
+      Targetint.mul offset_in_words Targetint.size_in_bytes_as_targetint
+    in
+    OB.contents_of_domainstate_slot ~offset_in_bytes
 
   let read_field ~block ~field =
     let offset_in_bytes =

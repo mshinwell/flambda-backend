@@ -19,48 +19,74 @@ open! Simplify_import
 let create_static_const dacc dbg (to_lift : T.to_lift) : RSC.t =
   let[@inline always] convert_fields fields =
     ListLabels.map fields ~f:(fun field ->
-        let module F = Field_of_static_block in
         Simple.pattern_match' field
-          ~var:(fun var ~coercion ->
+          ~var:(fun _var ~coercion ->
             if not (Coercion.is_id coercion)
             then
               Misc.fatal_errorf "Expected identity coercion on variable:@ %a"
-                Simple.print field;
-            F.Dynamically_computed (var, dbg))
-          ~symbol:(fun sym ~coercion ->
+                Simple.print field)
+          ~symbol:(fun _sym ~coercion ->
             if not (Coercion.is_id coercion)
             then
               Misc.fatal_errorf "Expected identity coercion on symbol:@ %a"
-                Simple.print field;
-            F.Symbol sym)
-          ~const:(fun const ->
-            match Reg_width_const.descr const with
-            | Tagged_immediate imm -> F.Tagged_immediate imm
-            | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
-            | Naked_nativeint _ ->
-              Misc.fatal_errorf
-                "Expected a constant of kind [Value] but got %a (dbg %a)"
-                Reg_width_const.print const Debuginfo.print_compact dbg))
+                Simple.print field)
+          ~const:(fun _const -> ());
+        Simple.With_debuginfo.create field dbg)
   in
   let art = DA.are_rebuilding_terms dacc in
+  let machine_width = DE.machine_width (DA.denv dacc) in
   match to_lift with
-  | Immutable_block { tag; is_unique; fields } ->
+  | Immutable_block { tag; is_unique; shape; fields } ->
     let fields = convert_fields fields in
     let mut : Mutability.t =
       if is_unique then Immutable_unique else Immutable
     in
-    RSC.create_block art tag mut ~fields
-  | Boxed_float f -> RSC.create_boxed_float art (Const f)
-  | Boxed_int32 i -> RSC.create_boxed_int32 art (Const i)
-  | Boxed_int64 i -> RSC.create_boxed_int64 art (Const i)
-  | Boxed_nativeint i -> RSC.create_boxed_nativeint art (Const i)
+    RSC.create_block art tag mut shape ~fields
+  | Boxed_float32 f -> RSC.create_boxed_float32 art ~machine_width (Const f)
+  | Boxed_float f -> RSC.create_boxed_float art ~machine_width (Const f)
+  | Boxed_int32 i -> RSC.create_boxed_int32 art ~machine_width (Const i)
+  | Boxed_int64 i -> RSC.create_boxed_int64 art ~machine_width (Const i)
+  | Boxed_nativeint i -> RSC.create_boxed_nativeint art ~machine_width (Const i)
+  | Boxed_vec128 v -> RSC.create_boxed_vec128 art ~machine_width (Const v)
+  | Boxed_vec256 v -> RSC.create_boxed_vec256 art ~machine_width (Const v)
+  | Boxed_vec512 v -> RSC.create_boxed_vec512 art ~machine_width (Const v)
+  | Immutable_float32_array { fields } ->
+    let fields = List.map (fun f -> Or_variable.Const f) fields in
+    RSC.create_immutable_float32_array art fields
   | Immutable_float_array { fields } ->
     let fields = List.map (fun f -> Or_variable.Const f) fields in
     RSC.create_immutable_float_array art fields
+  | Immutable_int_array { fields } ->
+    let fields = List.map (fun f -> Or_variable.Const f) fields in
+    RSC.create_immutable_int_array art fields
+  | Immutable_int8_array { fields } ->
+    let fields = List.map (fun f -> Or_variable.Const f) fields in
+    RSC.create_immutable_int8_array art fields
+  | Immutable_int16_array { fields } ->
+    let fields = List.map (fun f -> Or_variable.Const f) fields in
+    RSC.create_immutable_int16_array art fields
+  | Immutable_int32_array { fields } ->
+    let fields = List.map (fun f -> Or_variable.Const f) fields in
+    RSC.create_immutable_int32_array art fields
+  | Immutable_int64_array { fields } ->
+    let fields = List.map (fun f -> Or_variable.Const f) fields in
+    RSC.create_immutable_int64_array art fields
+  | Immutable_nativeint_array { fields } ->
+    let fields = List.map (fun f -> Or_variable.Const f) fields in
+    RSC.create_immutable_nativeint_array art fields
+  | Immutable_vec128_array { fields } ->
+    let fields = List.map (fun f -> Or_variable.Const f) fields in
+    RSC.create_immutable_vec128_array art fields
+  | Immutable_vec256_array { fields } ->
+    let fields = List.map (fun f -> Or_variable.Const f) fields in
+    RSC.create_immutable_vec256_array art fields
+  | Immutable_vec512_array { fields } ->
+    let fields = List.map (fun f -> Or_variable.Const f) fields in
+    RSC.create_immutable_vec512_array art fields
   | Immutable_value_array { fields } ->
     let fields = convert_fields fields in
     RSC.create_immutable_value_array art fields
-  | Empty_array -> RSC.create_empty_array art
+  | Empty_array array_kind -> RSC.create_empty_array art array_kind
 
 let lift dacc ty ~bound_to static_const : _ Or_invalid.t * DA.t =
   let dacc, symbol =
@@ -72,8 +98,9 @@ let lift dacc ty ~bound_to static_const : _ Or_invalid.t * DA.t =
     in
     match existing_symbol with
     | Some symbol ->
-      if Flambda_features.check_invariants ()
-         && not (DE.mem_symbol (DA.denv dacc) symbol)
+      if
+        Flambda_features.check_invariants ()
+        && not (DE.mem_symbol (DA.denv dacc) symbol)
       then
         Misc.fatal_errorf
           "Constant with symbol %a is shareable but not in the environment:@ %a"
@@ -118,7 +145,8 @@ let lift dacc ty ~bound_to static_const : _ Or_invalid.t * DA.t =
     DA.map_denv dacc ~f:(fun denv ->
         DE.add_equation_on_variable denv bound_to var_ty)
   in
-  Ok (Simplified_named.create term), dacc
+  let machine_width = DE.machine_width (DA.denv dacc) in
+  Ok (Simplified_named.create ~machine_width term), dacc
 
 let try_to_reify dacc dbg (term : Simplified_named.t) ~bound_to
     ~kind_of_bound_to ~allow_lifting : _ Or_invalid.t * DA.t =
@@ -159,6 +187,8 @@ let try_to_reify dacc dbg (term : Simplified_named.t) ~bound_to
       let denv = DE.add_equation_on_variable denv bound_to ty in
       DA.with_denv dacc denv
     in
-    Ok (Simplified_named.create (Named.create_simple simple)), dacc
+    let machine_width = DE.machine_width (DA.denv dacc) in
+    ( Ok (Simplified_named.create ~machine_width (Named.create_simple simple)),
+      dacc )
   | Cannot_reify -> Ok term, dacc
   | Invalid -> Invalid, dacc

@@ -30,22 +30,47 @@ let simplify_nullary_primitive dacc original_prim (prim : P.nullary_primitive)
     let ty = T.unknown result_kind in
     let dacc = DA.add_variable dacc result_var ty in
     Simplify_primitive_result.create named ~try_reify:false dacc
-  | Probe_is_enabled { name = _ } ->
+  | Probe_is_enabled { name = _; enabled_at_init = _ } ->
     let named = Named.create_prim original_prim dbg in
-    let ty = T.any_naked_bool in
-    let dacc = DA.add_variable dacc result_var ty in
-    Simplify_primitive_result.create named ~try_reify:false dacc
-  | Begin_region ->
-    let named = Named.create_prim original_prim dbg in
-    let ty = T.any_region in
+    let ty =
+      T.any_naked_bool ~machine_width:(DE.machine_width (DA.denv dacc))
+    in
     let dacc = DA.add_variable dacc result_var ty in
     Simplify_primitive_result.create named ~try_reify:false dacc
   | Enter_inlined_apply { dbg } ->
     let dacc =
       DA.map_denv dacc ~f:(fun denv ->
-          DE.set_inlined_debuginfo denv (DE.add_inlined_debuginfo denv dbg))
+          DE.merge_inlined_debuginfo denv ~from_apply_expr:dbg)
     in
-    let named = Named.create_simple Simple.const_unit in
-    let ty = T.this_tagged_immediate Targetint_31_63.zero in
+    let machine_width = DE.machine_width (DA.denv dacc) in
+    let named = Named.create_simple (Simple.const_unit machine_width) in
+    let ty = T.this_tagged_immediate (Target_ocaml_int.zero machine_width) in
+    let dacc = DA.add_variable dacc result_var ty in
+    Simplify_primitive_result.create named ~try_reify:false dacc
+  | Dls_get ->
+    let named = Named.create_prim original_prim dbg in
+    let ty = T.any_value in
+    let dacc = DA.add_variable dacc result_var ty in
+    Simplify_primitive_result.create named ~try_reify:false dacc
+  | Tls_get ->
+    let named = Named.create_prim original_prim dbg in
+    let ty = T.any_value in
+    let dacc = DA.add_variable dacc result_var ty in
+    Simplify_primitive_result.create named ~try_reify:false dacc
+  | Domain_index ->
+    let named = Named.create_prim original_prim dbg in
+    let ty = T.any_naked_immediate in
+    let dacc = DA.add_variable dacc result_var ty in
+    Simplify_primitive_result.create named ~try_reify:false dacc
+  | Poll ->
+    let named = Named.create_prim original_prim dbg in
+    let machine_width = DE.machine_width (DA.denv dacc) in
+    let ty = T.this_tagged_immediate (Target_ocaml_int.zero machine_width) in
+    let dacc = DA.add_variable dacc result_var ty in
+    Simplify_primitive_result.create named ~try_reify:false dacc
+  | Cpu_relax ->
+    let named = Named.create_prim original_prim dbg in
+    let machine_width = DE.machine_width (DA.denv dacc) in
+    let ty = T.this_tagged_immediate (Target_ocaml_int.zero machine_width) in
     let dacc = DA.add_variable dacc result_var ty in
     Simplify_primitive_result.create named ~try_reify:false dacc

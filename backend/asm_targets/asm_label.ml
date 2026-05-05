@@ -25,6 +25,8 @@
  **********************************************************************************)
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
+open! Int_replace_polymorphic_compare
+
 type label =
   | Int of int
   | String of string
@@ -34,14 +36,19 @@ type t =
     label : label
   }
 
+let encode_label label =
+  match label with Int i -> string_of_int i | String s -> s
+
 include Identifiable.Make (struct
   type nonrec t = t
 
-  let compare t1 t2 = Stdlib.compare t1.label t2.label
+  (* Use encoded string for comparison to ensure Int 42 = String "42" *)
+  let compare t1 t2 =
+    String.compare (encode_label t1.label) (encode_label t2.label)
 
   let equal t1 t2 = compare t1 t2 = 0
 
-  let hash t = Hashtbl.hash t.label
+  let hash t = Hashtbl.hash (encode_label t.label)
 
   let print ppf t =
     match t.label with
@@ -66,6 +73,11 @@ let contains_escapable_char label =
 let create_string section label =
   assert (not (contains_escapable_char label));
   { section; label = String label }
+
+let create_string_unchecked section label = { section; label = String label }
+
+let create_label_for_local_symbol section symbol =
+  create_string_unchecked section (Asm_symbol.encode symbol)
 
 let label_prefix =
   match Target_system.assembler () with MacOS -> "L" | MASM | GAS_like -> ".L"
@@ -126,5 +138,5 @@ let for_dwarf_section (dwarf_section : Asm_section.dwarf_section) =
 
 let for_section (section : Asm_section.t) =
   match section with
-  | DWARF dwarf_section -> for_dwarf_section dwarf_section
-  | Text -> Misc.fatal_error "Not yet implemented"
+  | DWARF d -> for_dwarf_section d
+  | _ -> Misc.fatal_error "Non DWARF sections are not pre-defined with a label."

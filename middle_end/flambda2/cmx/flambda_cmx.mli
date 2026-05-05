@@ -22,8 +22,6 @@ type loader
 val create_loader :
   get_module_info:(Compilation_unit.t -> Flambda_cmx_format.t option) -> loader
 
-val get_imported_names : loader -> unit -> Name.Set.t
-
 val get_imported_code : loader -> unit -> Exported_code.t
 
 val load_cmx_file_contents :
@@ -43,6 +41,7 @@ val prepare_cmx_file_contents :
   Name_occurrences.t * Flambda_cmx_format.t option
 
 val prepare_cmx_from_approx :
+  machine_width:Target_system.Machine_width.t ->
   approxs:Code_or_metadata.t Value_approximation.t Symbol.Map.t ->
   module_symbol:Symbol.t ->
   exported_offsets:Exported_offsets.t ->

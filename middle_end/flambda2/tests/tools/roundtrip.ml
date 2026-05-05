@@ -25,12 +25,10 @@ let dump_text filename =
 let () =
   try
     let file = Sys.argv.(1) in
-    let modname =
-      Parse_flambda.make_compilation_unit ~filename:file ~extension:".fl" ()
-    in
+    let unit_info = Parse_flambda.make_unit_info ~filename:file in
     (* Need to get this right or the conversion will complain about binding
        non-local symbols *)
-    Compilation_unit.set_current (Some modname);
+    Env.set_unit_name (Some unit_info);
     let unit =
       match Parse_flambda.parse file with
       | Ok unit -> unit
@@ -39,6 +37,8 @@ let () =
         dump_text file;
         raise Test_utils.Failure
     in
+    (* CR Keryan: Changing filename kills function slot matching because of
+       freshly generated computation unit name *)
     let temp_file =
       Filename.temp_file ("roundtrip_" ^ Filename.remove_extension file) ".fl"
     in
