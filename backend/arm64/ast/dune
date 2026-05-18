@@ -5,5 +5,6 @@
  (wrapped true)
  (ocamlopt_flags
   (:standard -w +4
-   (:include %{project_root}/ocamlopt_flags.sexp)))
+   (:include %{project_root}/ocamlopt_flags.sexp)
+   (:include %{project_root}/ocamlopt_compiler_libs_extra_flags.sexp)))
  (libraries ocamlcommon asm_targets))

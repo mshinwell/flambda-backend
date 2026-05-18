@@ -6,6 +6,7 @@
   (ocamlopt_flags
    (:standard
     (:include %{project_root}/ocamlopt_flags.sexp)
+    (:include %{project_root}/ocamlopt_compiler_libs_extra_flags.sexp)
     -O3))
   (libraries dwarf_low asm_targets)
 )

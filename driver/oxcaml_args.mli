@@ -86,6 +86,8 @@ module type Oxcaml_options = sig
   val disable_builtin_check : unit -> unit
   val disable_poll_insertion : unit -> unit
   val enable_poll_insertion : unit -> unit
+  val poll_insertion : unit -> unit
+  val no_poll_insertion : unit -> unit
   val symbol_visibility_protected : unit -> unit
   val no_symbol_visibility_protected : unit -> unit
   val long_frames : unit -> unit

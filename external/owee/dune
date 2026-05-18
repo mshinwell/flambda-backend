@@ -2,6 +2,9 @@
  (name compiler_owee)
  (flags
   (:standard -w -27-69))
+ (ocamlopt_flags
+  (:standard
+   (:include %{project_root}/ocamlopt_compiler_libs_extra_flags.sexp)))
  (foreign_stubs
   (language c)
   (names owee_stubs)

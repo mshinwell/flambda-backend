@@ -162,6 +162,16 @@ duneconf/main.ws: export contents = $(dune_main_context)
 duneconf/%.ws:
 	echo "$$contents" > $@
 
+# Extra ocamlopt flags applied only to the compiler libraries (ocamlcommon,
+# ocamlbytecomp, ocamloptcomp and the libraries merged into them via
+# tools/merge_archives.exe). Not applied to stdlib/ or otherlibs/.
+COMPILER_LIBS_EXTRA_OCAMLOPT_FLAGS ?= -no-poll-insertion
+
+ocamlopt_compiler_libs_extra_flags_oxcaml.sexp: \
+    export contents = ( $(COMPILER_LIBS_EXTRA_OCAMLOPT_FLAGS) )
+ocamlopt_compiler_libs_extra_flags_oxcaml.sexp:
+	echo "$$contents" > $@
+
 # We need to disable ocaml/otherlibs when compiling with coverage, because we
 # need to compile against the user's opam instead. Unfortunately, Dune gives us
 # no nicer way of declaring data_only_dirs differently in different workspaces,
@@ -182,7 +192,8 @@ dune_config_targets = \
   $(ocamldir)/duneconf/ox-extra.inc \
   dune-project \
   $(ocamldir)/dune.runtime_selection \
-  $(ocamldir)/otherlibs/dune
+  $(ocamldir)/otherlibs/dune \
+  ocamlopt_compiler_libs_extra_flags_oxcaml.sexp
 
 $(ocamldir)/otherlibs/dune:
 	if [ "$(RUNTIME_DIR)" = "runtime4" ]; then \

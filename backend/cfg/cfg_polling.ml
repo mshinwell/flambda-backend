@@ -10,8 +10,7 @@ let function_is_assumed_to_never_poll func =
   || String.begins_with ~prefix:"caml_send" func
 
 let is_disabled fun_name =
-  (not Config.poll_insertion)
-  || !Oxcaml_flags.disable_poll_insertion
+  (not !Clflags.poll_insertion)
   || function_is_assumed_to_never_poll fun_name
 
 (* These are used for the poll error annotation later on*)

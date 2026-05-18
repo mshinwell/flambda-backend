@@ -365,6 +365,12 @@ let mk_disable_poll_insertion f =
 let mk_enable_poll_insertion f =
   ("-enable-poll-insertion", Arg.Unit f, " Insert poll points")
 
+let mk_poll_insertion f =
+  ("-poll-insertion", Arg.Unit f, " Insert poll points")
+
+let mk_no_poll_insertion f =
+  ("-no-poll-insertion", Arg.Unit f, " Do not insert poll points")
+
 let mk_long_frames f =
   ("-long-frames", Arg.Unit f, " Allow stack frames longer than 2^16 bytes")
 
@@ -1300,6 +1306,8 @@ module type Oxcaml_options = sig
   val disable_builtin_check : unit -> unit
   val disable_poll_insertion : unit -> unit
   val enable_poll_insertion : unit -> unit
+  val poll_insertion : unit -> unit
+  val no_poll_insertion : unit -> unit
   val symbol_visibility_protected : unit -> unit
   val no_symbol_visibility_protected : unit -> unit
   val long_frames : unit -> unit
@@ -1483,6 +1491,8 @@ module Make_oxcaml_options (F : Oxcaml_options) = struct
       mk_disable_builtin_check F.disable_builtin_check;
       mk_disable_poll_insertion F.disable_poll_insertion;
       mk_enable_poll_insertion F.enable_poll_insertion;
+      mk_poll_insertion F.poll_insertion;
+      mk_no_poll_insertion F.no_poll_insertion;
       mk_symbol_visibility_protected F.symbol_visibility_protected;
       mk_no_symbol_visibility_protected F.symbol_visibility_protected;
       mk_long_frames F.long_frames;
@@ -1871,8 +1881,10 @@ module Oxcaml_options_impl = struct
     | None -> ()
 
   let disable_builtin_check = set' Oxcaml_flags.disable_builtin_check
-  let disable_poll_insertion = set' Oxcaml_flags.disable_poll_insertion
-  let enable_poll_insertion = clear' Oxcaml_flags.disable_poll_insertion
+  let disable_poll_insertion = clear' Clflags.poll_insertion
+  let enable_poll_insertion = set' Clflags.poll_insertion
+  let poll_insertion = set' Clflags.poll_insertion
+  let no_poll_insertion = clear' Clflags.poll_insertion
 
   let symbol_visibility_protected =
     set' Oxcaml_flags.symbol_visibility_protected
@@ -2422,7 +2434,7 @@ module Extra_params = struct
             raise (Arg.Bad (Printf.sprintf "Unexpected value %s for %s" v name))
         )
     | "builtin-check" -> set' Oxcaml_flags.disable_builtin_check
-    | "poll-insertion" -> set' Oxcaml_flags.disable_poll_insertion
+    | "poll-insertion" -> set' Clflags.poll_insertion
     | "symbol-visibility-protected" ->
         set' Oxcaml_flags.symbol_visibility_protected
     | "long-frames" -> set' Oxcaml_flags.allow_long_frames
