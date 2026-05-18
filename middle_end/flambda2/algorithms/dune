@@ -35,7 +35,11 @@
 (rule
  (targets ocamlopt_flags.sexp)
  (enabled_if
-  (= %{context_name} "main"))
+  (or
+   (= %{context_name} "main")
+   (= %{context_name} "main_polls_otherlibs")
+   (= %{context_name} "runtime_stdlib")
+   (= %{context_name} "runtime_stdlib_no_polls")))
  (action
   (copy ocamlopt_oxcaml_flags.sexp %{targets})))
 

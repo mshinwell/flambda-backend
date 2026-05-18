@@ -462,7 +462,9 @@
  (enabled_if
   (or
    (= %{context_name} "main")
-   (= %{context_name} "runtime_stdlib")))
+   (= %{context_name} "main_polls_otherlibs")
+   (= %{context_name} "runtime_stdlib")
+   (= %{context_name} "runtime_stdlib_no_polls")))
  (action
   (copy %{project_root}/ocamlopt_oxcaml_flags.sexp %{targets})))
 
@@ -484,7 +486,9 @@
  (enabled_if
   (or
    (= %{context_name} "main")
-   (= %{context_name} "runtime_stdlib")))
+   (= %{context_name} "main_polls_otherlibs")
+   (= %{context_name} "runtime_stdlib")
+   (= %{context_name} "runtime_stdlib_no_polls")))
  (action
   (copy
    %{project_root}/ocamlopt_compiler_libs_extra_flags_oxcaml.sexp

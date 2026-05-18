@@ -2,9 +2,11 @@
 # Build rules common to ocaml-ox and oxcaml
 #
 
-ws_boot   = --root=. --workspace=duneconf/boot.ws
-ws_runstd = --root=. --workspace=duneconf/runtime_stdlib.ws
-ws_main   = --root=. --workspace=duneconf/main.ws
+ws_boot               = --root=. --workspace=duneconf/boot.ws
+ws_runstd             = --root=. --workspace=duneconf/runtime_stdlib.ws
+ws_runstd_no_polls    = --root=. --workspace=duneconf/runtime_stdlib_no_polls.ws
+ws_main               = --root=. --workspace=duneconf/main.ws
+ws_main_polls_otlibs  = --root=. --workspace=duneconf/main_polls_otherlibs.ws
 
 ifeq ($(coverage),yes)
   coverage_dune_flags=--instrument-with bisect_ppx
@@ -52,6 +54,31 @@ define dune_runtime_stdlib_context
     $(ENV_VARS)))))
 endef
 
+# Built only when POLL_INSERTION=true: a second copy of the stdlib compiled
+# without poll insertion, used solely for linking the final compiler so its
+# binary contains no poll points.
+define dune_runtime_stdlib_no_polls_context
+(lang dune 2.8)
+(context (default
+  (name runtime_stdlib_no_polls)
+  (profile main)
+  (paths
+    (PATH ("$(CURDIR)/_build/_bootinstall/bin" :standard))
+    (OCAMLLIB ("$(CURDIR)/_build/_bootinstall/lib/ocaml")))
+  (env (_
+    (flags (:standard -directory stdlib -warn-error +A -alert -unsafe_multidomain))
+    (ocamlopt_flags (:standard -no-poll-insertion))
+    $(ENV_VARS)))))
+endef
+
+# When POLL_INSERTION=true the main context's OCAMLLIB is switched to the
+# no-polls stdlib so that the final compiler links against it.
+ifeq ($(POLL_INSERTION),true)
+  main_ocamllib = $(CURDIR)/_build/runtime_stdlib_no_polls_install/lib/ocaml_runtime_stdlib
+else
+  main_ocamllib = $(CURDIR)/_build/runtime_stdlib_install/lib/ocaml_runtime_stdlib
+endif
+
 define dune_main_context
 (lang dune 2.8)
 (context (default
@@ -59,7 +86,7 @@ define dune_main_context
   (profile $(main_build_profile))
   (paths
     (PATH ("$(CURDIR)/_build/_bootinstall/bin" :standard))
-    (OCAMLLIB ("$(CURDIR)/_build/runtime_stdlib_install/lib/ocaml_runtime_stdlib")))
+    (OCAMLLIB ("$(main_ocamllib)")))
   (env (_
     (flags (:standard -directory compiler-distro -warn-error +A -alert -unsafe_multidomain))
     ; We never want to build the compiler itself with AddressSanitizer enabled.
@@ -67,9 +94,36 @@ define dune_main_context
     $(ENV_VARS)))))
 endef
 
+# Built only when POLL_INSERTION=true: a parallel main-profile context whose
+# OCAMLLIB is the original (poll-inserted) stdlib. Used to recompile just the
+# otherlibs (other than [eval]) against the polls stdlib, since those are what
+# users install and link against.
+define dune_main_polls_otherlibs_context
+(lang dune 2.8)
+(context (default
+  (name main_polls_otherlibs)
+  (profile $(main_build_profile))
+  (paths
+    (PATH ("$(CURDIR)/_build/_bootinstall/bin" :standard))
+    (OCAMLLIB ("$(CURDIR)/_build/runtime_stdlib_install/lib/ocaml_runtime_stdlib")))
+  (env (_
+    (flags (:standard -directory compiler-distro -warn-error +A -alert -unsafe_multidomain))
+    (ocamlopt_flags (:standard -fno-asan))
+    $(ENV_VARS)))))
+endef
+
 
 .DEFAULT_GOAL := compiler
-.PHONY: boot-compiler boot-runtest runtime-stdlib compiler runtest runtest-llvmize runtest-dwarf
+.PHONY: boot-compiler boot-runtest runtime-stdlib runtime-stdlib-no-polls main-polls-otherlibs compiler runtest runtest-llvmize runtest-dwarf
+
+# Extra prerequisites for `compiler` when POLL_INSERTION=true: a second stdlib
+# without polls (linked into the compiler) and a second build of the otherlibs
+# against the polls stdlib (overlaid on top of the install).
+ifeq ($(POLL_INSERTION),true)
+  compiler_extra_deps = runtime-stdlib-no-polls main-polls-otherlibs
+else
+  compiler_extra_deps =
+endif
 
 boot_targets = \
   $(boot_ocamlc) \
@@ -103,7 +157,62 @@ runtime-stdlib: boot-compiler
 runtime-stdlib-hacking: boot-compiler
 	RUNTIME_DIR=$(RUNTIME_DIR) $(dune) build -w $(ws_runstd) --only-package=ocaml_runtime_stdlib @install
 
-compiler: runtime-stdlib
+# A second copy of the stdlib, compiled without poll insertion. Built only
+# when POLL_INSERTION=true; used solely as the OCAMLLIB seen by the [main]
+# context when it links the final compiler. Not installed.
+.PHONY: runtime-stdlib-no-polls
+runtime-stdlib-no-polls: boot-compiler
+	RUNTIME_DIR=$(RUNTIME_DIR) $(dune) build $(ws_runstd_no_polls) --only-package=ocaml_runtime_stdlib @install
+	rm -rf _build/runtime_stdlib_no_polls_install
+	$(cpl) -R _build/install/runtime_stdlib_no_polls _build/runtime_stdlib_no_polls_install
+	@touch _build/runtime_stdlib_no_polls_install/lib/ocaml_runtime_stdlib/dynlink.cmxa
+	@mkdir -p _build/runtime_stdlib_no_polls_install/lib/ocaml_runtime_stdlib/dynlink/
+	@touch _build/runtime_stdlib_no_polls_install/lib/ocaml_runtime_stdlib/dynlink/dynlink.cmxa
+
+# Otherlibs (excluding [eval]) that need a second copy compiled against the
+# polls stdlib. The compiler links no-polls copies built in the [main] context;
+# these install-side copies replace the no-polls otherlibs in $(_install).
+#
+# [eval] is intentionally absent: it depends on [ocamlcommon], which would drag
+# the entire compiler-libs build into this secondary context. Eval is shipped
+# as built by [main] (against the no-polls stdlib).
+ifeq ($(RUNTIME_DIR),runtime4)
+  POLLS_OTHERLIBS_DIRS = \
+    unix str dynlink runtime_events \
+    stdlib_alpha stdlib_beta stdlib_stable stdlib_upstream_compatible \
+    systhreads4
+  POLLS_OTHERLIBS_INSTALL_DIRS = \
+    unix str dynlink runtime_events \
+    stdlib_alpha stdlib_beta stdlib_stable stdlib_upstream_compatible \
+    threads
+else
+  POLLS_OTHERLIBS_DIRS = \
+    unix str dynlink runtime_events \
+    stdlib_alpha stdlib_beta stdlib_stable stdlib_upstream_compatible \
+    systhreads
+  POLLS_OTHERLIBS_INSTALL_DIRS = \
+    unix str dynlink runtime_events \
+    stdlib_alpha stdlib_beta stdlib_stable stdlib_upstream_compatible \
+    threads
+endif
+
+# CR-someday: ideally we'd build only the listed otherlibs in this secondary
+# context, but driving dune's install machinery for a partial package
+# requires reproducing each (install ...) stanza by hand. For now we build
+# the whole [ocaml] package here; eval and compiler-libs are rebuilt
+# redundantly. If that's measurably slow we can revisit.
+#
+# Dune 3.11+ clears _build/install at the start of each build, so we copy
+# the install tree to a stable location before any later build wipes it.
+.PHONY: main-polls-otherlibs
+main-polls-otherlibs: runtime-stdlib boot-compiler
+	RUNTIME_DIR=$(RUNTIME_DIR) SYSTEM=$(SYSTEM) MODEL=$(MODEL) \
+	  ASPP="$(ASPP)" ASPPFLAGS="$(ASPPFLAGS)" \
+	  $(dune) build $(ws_main_polls_otlibs) --only-package=ocaml @install
+	rm -rf _build/main_polls_otherlibs_install
+	$(cpl) -R _build/install/main_polls_otherlibs _build/main_polls_otherlibs_install
+
+compiler: runtime-stdlib $(compiler_extra_deps)
 	RUNTIME_DIR=$(RUNTIME_DIR) SYSTEM=$(SYSTEM) MODEL=$(MODEL) \
           ASPP="$(ASPP)" ASPPFLAGS="$(ASPPFLAGS)" \
           $(dune) build $(ws_main) \
@@ -158,8 +267,12 @@ runtest-dwarf: compiler
 # environment var trickery to get a multiline string into a file
 duneconf/boot.ws: export contents = $(dune_boot_context)
 duneconf/runtime_stdlib.ws: export contents = $(dune_runtime_stdlib_context)
+duneconf/runtime_stdlib_no_polls.ws: export contents = $(dune_runtime_stdlib_no_polls_context)
 duneconf/main.ws: export contents = $(dune_main_context)
-duneconf/%.ws:
+duneconf/main_polls_otherlibs.ws: export contents = $(dune_main_polls_otherlibs_context)
+# Regenerate workspaces when Makefile.config changes (since POLL_INSERTION
+# can flip the main context's OCAMLLIB).
+duneconf/%.ws: Makefile.config
 	echo "$$contents" > $@
 
 # Extra ocamlopt flags applied only to the compiler libraries (ocamlcommon,
@@ -187,7 +300,9 @@ $(ocamldir)/duneconf/dirs-to-ignore.inc:
 dune_config_targets = \
   duneconf/boot.ws \
   duneconf/runtime_stdlib.ws \
+  duneconf/runtime_stdlib_no_polls.ws \
   duneconf/main.ws \
+  duneconf/main_polls_otherlibs.ws \
   $(ocamldir)/duneconf/dirs-to-ignore.inc \
   $(ocamldir)/duneconf/ox-extra.inc \
   dune-project \
@@ -257,6 +372,19 @@ _install: compiler
 	$(cpl) -R _build/runtime_stdlib_install/lib/ocaml_runtime_stdlib/* _install/lib/ocaml/
 	rm -f _install/lib/ocaml/{META,dune-package,Makefile.config,dynlink.cmxa,dynlink/dynlink.cmxa}
 	$(cpl) -R _build/install/main/lib/ocaml/* _install/lib/ocaml/
+# When POLL_INSERTION=true, the otherlibs we just copied from [main] were
+# compiled against the no-polls stdlib (because that's [main]'s OCAMLLIB so the
+# final compiler comes out poll-free). Users link against the polls stdlib, so
+# overwrite those otherlibs with the parallel build from [main_polls_otherlibs]
+# (which compiled them against the polls stdlib). [eval] is left as-is.
+ifeq ($(POLL_INSERTION),true)
+	for d in $(POLLS_OTHERLIBS_INSTALL_DIRS); do \
+	  if [ -d _build/main_polls_otherlibs_install/lib/ocaml/$$d ]; then \
+	    rm -rf _install/lib/ocaml/$$d; \
+	    $(cpl) -R _build/main_polls_otherlibs_install/lib/ocaml/$$d _install/lib/ocaml/$$d; \
+	  fi; \
+	done
+endif
 	if [ "x$(legacy_layout)" == "xyes" ] ; \
 	then \
           for libdir in unix str dynlink bigarray ; do \
