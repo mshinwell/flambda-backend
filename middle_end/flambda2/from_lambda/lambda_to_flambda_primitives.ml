@@ -1794,6 +1794,9 @@ let convert_lprim ~(machine_width : Target_system.Machine_width.t) ~big_endian
   | Pphys_equal eq, [[arg1]; [arg2]] ->
     let eq : P.equality_comparison = match eq with Eq -> Eq | Noteq -> Neq in
     [tag_int (Binary (Phys_equal eq, arg1, arg2))]
+  | Pannounce_module_block _, _ ->
+    (* Pure metadata for [Translmod]; no runtime effect. Return unit. *)
+    [Simple (Simple.const_zero machine_width)]
   | ( ( Pmakeblock (tag, mutability, shape, mode)
       | Pinit_module_block (tag, mutability, shape, mode, _) ),
       _ ) -> (

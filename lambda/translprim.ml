@@ -2516,6 +2516,7 @@ let lambda_primitive_needs_event_after = function
   | Parray_to_iarray | Parray_of_iarray
   | Pignore
   | Pgetglobal _ | Pgetpredef _ | Pmakeblock _ | Pinit_module_block _
+  | Pannounce_module_block _
   | Pmakefloatblock _
   | Pmakeufloatblock _ | Pmakelazyblock _
   | Pmake_unboxed_product _ | Punboxed_product_field _

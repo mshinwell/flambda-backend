@@ -423,6 +423,9 @@ let primitive ppf = function
   | Pinit_module_block(tag, Mutable, shape, mode, path) ->
       fprintf ppf "init_module_block_mutable[%s]%s %i%a"
         (Path.name path) (locality_mode_if_local mode) tag block_shape shape
+  | Pannounce_module_block (tag, shape, mode, path) ->
+      fprintf ppf "announce_module_block[%s]%s %i%a"
+        (Path.name path) (locality_mode_if_local mode) tag block_shape shape
   | Pmakefloatblock (Immutable, mode) ->
       fprintf ppf "make%sfloatblock Immutable"
         (locality_mode_if_local mode)
@@ -943,6 +946,7 @@ let name_of_primitive = function
   | Pgetpredef _ -> "Pgetpredef"
   | Pmakeblock _ -> "Pmakeblock"
   | Pinit_module_block _ -> "Pinit_module_block"
+  | Pannounce_module_block _ -> "Pannounce_module_block"
   | Pmakefloatblock _ -> "Pmakefloatblock"
   | Pmakeufloatblock _ -> "Pmakeufloatblock"
   | Pmakelazyblock _ -> "Pmakelazyblock"

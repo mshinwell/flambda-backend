@@ -137,6 +137,14 @@ type primitive =
         is the value of the module identified by the given [Path.t].
         Semantically identical to [Pmakeblock]; the path is metadata for
         downstream consumers. Emitted only by [Translmod]. *)
+  | Pannounce_module_block of int * block_shape * locality_mode * Path.t
+    (** Nullary primitive that announces "the module block at the given
+        [Path.t] is about to be initialized as a block with the given tag,
+        shape and locality".  Emitted by [Translmod] before the [Llet]
+        sequence and [Pinit_module_block] that build the block, so
+        downstream consumers can identify the start of a module's
+        construction and learn the shape of the eventual block.  Returns
+        unit and has no runtime effect. *)
   | Pmakefloatblock of mutable_flag * locality_mode
   | Pmakeufloatblock of mutable_flag * locality_mode
   | Pmakelazyblock of lazy_block_tag

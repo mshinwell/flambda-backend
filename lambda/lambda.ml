@@ -156,6 +156,7 @@ type primitive =
   | Pmakeblock of int * mutable_flag * block_shape * locality_mode
   | Pinit_module_block of
       int * mutable_flag * block_shape * locality_mode * Path.t
+  | Pannounce_module_block of int * block_shape * locality_mode * Path.t
   | Pmakefloatblock of mutable_flag * locality_mode
   | Pmakeufloatblock of mutable_flag * locality_mode
   | Pmakelazyblock of lazy_block_tag
@@ -2448,6 +2449,7 @@ let primitive_may_allocate : primitive -> locality_mode option = function
   | Pgetglobal _ | Pgetpredef _ -> None
   | Pmakeblock (_, _, _, m) -> Some m
   | Pinit_module_block (_, _, _, m, _) -> Some m
+  | Pannounce_module_block _ -> None
   | Pmakefloatblock (_, m) -> Some m
   | Pmakeufloatblock (_, m) -> Some m
   | Pmakelazyblock _ -> Some alloc_heap
@@ -2670,6 +2672,7 @@ let primitive_can_raise prim =
     true
   | Pbytes_to_string | Pbytes_of_string | Parray_of_iarray | Parray_to_iarray
   | Pignore | Pgetglobal _ | Pgetpredef _ | Pmakeblock _ | Pinit_module_block _
+  | Pannounce_module_block _
   | Pmakefloatblock _ | Pfield _ | Pfield_computed _ | Psetfield _
   | Psetfield_computed _ | Pfloatfield _ | Psetfloatfield _ | Pduprecord _
   | Pmakeufloatblock _ | Pufloatfield _ | Psetufloatfield _ | Psequand | Psequor
@@ -3043,6 +3046,7 @@ let primitive_result_layout (p : primitive) =
   | Punboxed_int32_array_set_vec _ | Punboxed_int64_array_set_vec _
   | Punboxed_nativeint_array_set_vec _
   | Parrayblit _
+  | Pannounce_module_block _
     -> layout_unit
   | Pgetglobal _ -> layout_module
     (* Note the assumption that predefs are always values *)

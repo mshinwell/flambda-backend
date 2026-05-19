@@ -524,6 +524,9 @@ let rec comp_expr (exp : Lambda.lambda) : Blambda.blambda =
         assert (kind = kind');
         comp_expr (Lambda.Lprim (Pmakearray (kind, mutability, m), args, loc))
       | _ -> unary (Ccall "caml_obj_dup"))
+    | Pannounce_module_block _ ->
+      (* Pure metadata: emit a unit value. *)
+      Const (Const_base (Const_int 0))
     | Pmakeblock (tag, _mut, shape, _)
     | Pinit_module_block (tag, _mut, shape, _, _) -> (
       match Lambda.mixed_block_of_block_shape shape with

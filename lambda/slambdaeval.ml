@@ -406,6 +406,7 @@ and eval_prim env prim =
     if new_shape == old_shape
     then prim
     else Pinit_module_block (n, mut, new_shape, mode, path)
+  | Pannounce_module_block _ -> prim
   | Pmixedfield (is, old_shape, sem) ->
     let new_shape = eval_mixed_block_shape env old_shape in
     if new_shape == old_shape then prim else Pmixedfield (is, new_shape, sem)

@@ -357,6 +357,8 @@ and fracture_prim lambda prim args loc =
   | Pgetglobal (cu, Static) ->
     check_arity ~arity:0;
     SLhalves { sval_comptime = SLglobal cu; sval_runtime = lambda }
+  | Pannounce_module_block _ ->
+    SLhalves { sval_comptime = SLmissing; sval_runtime = lambda }
   | Pmakeblock _ | Pinit_module_block _ ->
     let rec fracture_make_block unchanged i args_c args_r = function
       | [] ->

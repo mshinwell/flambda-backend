@@ -262,6 +262,9 @@ let compute_static_size lam =
         | Record_inlined (_, _, (Variant_unboxed | Variant_with_null)) ->
             Misc.fatal_error "size_of_primitive"
         end
+    | Pannounce_module_block _ ->
+        (* Returns unit; not a block. *)
+        Constant
     | Pmakeblock (_, _, shape, _)
     | Pinit_module_block (_, _, shape, _, _) ->
         (* The block shape is unfortunately an option, so we rely on the

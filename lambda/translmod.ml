@@ -704,6 +704,73 @@ let rec defined_idents = function
     | Tstr_attribute _ -> defined_idents rem
     | Tstr_jkind _ -> defined_idents rem
 
+(* As [defined_idents], but also returns the [Jkind.Sort.t] of each ident in
+   the order they would be appended to the [fields] accumulator of
+   [transl_structure].  Used to pre-compute the [block_shape] for the
+   [Pannounce_module_block] primitive at the start of a structure with no
+   coercion. *)
+let rec defined_idents_with_sorts = function
+  | [] -> []
+  | item :: rem ->
+    let here =
+      match item.str_desc with
+      | Tstr_eval _ | Tstr_primitive _ | Tstr_type _ | Tstr_modtype _
+      | Tstr_class_type _ | Tstr_attribute _ | Tstr_jkind _ -> []
+      | Tstr_value (_, pat_expr_list) ->
+        let_bound_idents_with_sorts pat_expr_list
+      | Tstr_typext tyext ->
+        List.map
+          (fun ext ->
+            ( ext.ext_id,
+              Jkind.Sort.(of_const Const.for_type_extension) ))
+          tyext.tyext_constructors
+      | Tstr_exception ext ->
+        [ ext.tyexn_constructor.ext_id,
+          Jkind.Sort.(of_const Const.for_exception) ]
+      | Tstr_module { mb_id = Some id; mb_presence = Mp_present; _ } ->
+        [ id, Jkind.Sort.(of_const Const.for_module) ]
+      | Tstr_module { mb_id = None; _ }
+      | Tstr_module { mb_presence = Mp_absent; _ } -> []
+      | Tstr_recmodule decls ->
+        List.filter_map
+          (fun mb ->
+            Option.map
+              (fun id -> id, Jkind.Sort.(of_const Const.for_module))
+              mb.mb_id)
+          decls
+      | Tstr_class cl_list ->
+        List.map
+          (fun (ci, _) ->
+            ci.ci_id_class, Jkind.Sort.(of_const Const.for_class))
+          cl_list
+      | Tstr_open od ->
+        bound_value_identifiers_and_sorts od.open_bound_items
+      | Tstr_include incl ->
+        bound_value_identifiers_and_sorts incl.incl_type
+    in
+    here @ defined_idents_with_sorts rem
+
+(* Compute the [module_representation] that the eventual
+   [Pinit_module_block] will use for this structure.  Used to provide
+   matching tag/shape/mode info for the leading [Pannounce_module_block]. *)
+let module_representation_for_structure cc str_items =
+  match cc with
+  | Tcoerce_none ->
+    let sorts =
+      List.map snd (defined_idents_with_sorts str_items)
+    in
+    Some (transl_module_representation (Array.of_list sorts))
+  | Tcoerce_structure { output_repr; _ } ->
+    Some (transl_module_representation output_repr)
+  | _ -> None
+
+(* Derive (tag, shape, locality_mode) for a [Pannounce_module_block] or
+   [Pinit_module_block] from the structure's module representation. *)
+let block_shape_for_announce repr =
+  match repr with
+  | Module_value_only _ -> 0, All_value, alloc_heap
+  | Module_mixed (shape, _) -> 0, Shape shape, alloc_heap
+
 (* For a structure being compiled with coercion [cc] and known module path
    [module_path], compute the map [Ident.t -> module_block_position] giving
    each defined identifier's position in the exposed module block (or
@@ -862,7 +929,21 @@ and transl_struct ~scopes loc fields cc rootpath module_path
      the result to retrofit [Initializing_module] for each defined ident in
      [indexing.positions].  Idents bound in nested submodules have distinct
      stamps and are protected from this rewrite by [Ident.Map.find_opt]. *)
-  annotate_module_field_lets indexing lam, repr
+  let lam = annotate_module_field_lets indexing lam in
+  (* When we know the module path, emit a [Pannounce_module_block] marker
+     immediately before the binding chain that will populate the block.
+     The tag/shape/mode match the eventual [Pinit_module_block] so that
+     consumers can identify the start of a module's construction and learn
+     the shape of the eventual block. *)
+  let lam =
+    match module_path, module_representation_for_structure cc str_items with
+    | Some module_path, Some announce_repr ->
+      let tag, shape, mode = block_shape_for_announce announce_repr in
+      let prim = Pannounce_module_block (tag, shape, mode, module_path) in
+      Lsequence (Lprim (prim, [], loc), lam)
+    | None, _ | _, None -> lam
+  in
+  lam, repr
 
 (* The function  transl_structure is called by  the bytecode compiler.
    Some effort is made to compile in top to bottom order, in order to display
