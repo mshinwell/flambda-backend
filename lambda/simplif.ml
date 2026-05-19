@@ -501,8 +501,14 @@ let simplify_lets lam ~restrict_to_upstream_dwarf ~gdwarf_may_alter_codegen =
       use_var bv w (count_var v)
   | Llet(str, _kind, v, _duid, l1, l2) ->
       count (bind_var bv v) l2;
-      (* If v is unused, l1 will be removed, so don't count its variables *)
-      if str = Strict || count_var v > 0 then count bv l1
+      (* If v is unused, l1 will be removed, so don't count its variables.
+         [Initializing_module] is preserved like [Strict] (see the catchall
+         case in the main [simplif] function below), so its [l1] is always
+         needed and must be counted. *)
+      let always_count =
+        match str with Strict | Initializing_module _ -> true | _ -> false
+      in
+      if always_count || count_var v > 0 then count bv l1
   | Lmutlet(_kind, _v, _duid, l1, l2) ->
      count bv l1;
      count bv l2

@@ -112,15 +112,40 @@ let annotate_module_field_lets indexing lam =
   match indexing with
   | None -> lam
   | Some { positions; module_path } ->
+    (* Idents bound by [Tstr_value] with tuple/record patterns get refreshed
+       by [Matching.assign_pat] so the original [Ident.t]s from the typedtree
+       don't appear in the resulting [Llet]s.  As a fallback, we also match by
+       name, but only across the structural nodes that compose the binding
+       chain (no descent into [Lfunction] bodies, [Lprim] arguments, etc.) so
+       we don't annotate an unrelated local binding that happens to share a
+       name with a defined ident. *)
+    let positions_by_name =
+      Ident.Map.fold
+        (fun id pos acc -> Misc.Stdlib.String.Map.add (Ident.name id) pos acc)
+        positions Misc.Stdlib.String.Map.empty
+    in
+    let lookup id =
+      match Ident.Map.find_opt id positions with
+      | Some pos -> Some pos
+      | None ->
+        Misc.Stdlib.String.Map.find_opt (Ident.name id) positions_by_name
+    in
     let rec walk lam =
       match lam with
       | Llet (kind, layout, id, duid, def, body) ->
         let kind =
-          match Ident.Map.find_opt id positions with
+          match lookup id with
           | None -> kind
           | Some position -> Initializing_module { module_path; position }
         in
         Llet (kind, layout, id, duid, def, walk body)
+      | Lsequence (a, b) -> Lsequence (a, walk b)
+      | Lstaticcatch (handler, sig_, body, r, l) ->
+        Lstaticcatch (walk handler, sig_, walk body, r, l)
+      | Lifthenelse (c, t, e, k) ->
+        Lifthenelse (c, walk t, walk e, k)
+      | Levent (l, ev) -> Levent (walk l, ev)
+      | Lletrec (b, body) -> Lletrec (b, walk body)
       | _ -> lam
     in
     walk lam
