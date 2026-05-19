@@ -1794,7 +1794,9 @@ let convert_lprim ~(machine_width : Target_system.Machine_width.t) ~big_endian
   | Pphys_equal eq, [[arg1]; [arg2]] ->
     let eq : P.equality_comparison = match eq with Eq -> Eq | Noteq -> Neq in
     [tag_int (Binary (Phys_equal eq, arg1, arg2))]
-  | Pmakeblock (tag, mutability, shape, mode), _ -> (
+  | ( ( Pmakeblock (tag, mutability, shape, mode)
+      | Pinit_module_block (tag, mutability, shape, mode, _) ),
+      _ ) -> (
     let args = List.flatten args in
     let mode = Alloc_mode.For_allocations.from_lambda mode ~current_region in
     let tag = Tag.Scannable.create_exn tag in

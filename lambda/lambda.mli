@@ -131,6 +131,12 @@ type primitive =
   | Pgetpredef of Ident.t
   (* Operations on heap blocks *)
   | Pmakeblock of int * mutable_flag * block_shape * locality_mode
+  | Pinit_module_block of
+      int * mutable_flag * block_shape * locality_mode * Path.t
+    (** Like [Pmakeblock], but additionally records that the resulting block
+        is the value of the module identified by the given [Path.t].
+        Semantically identical to [Pmakeblock]; the path is metadata for
+        downstream consumers. Emitted only by [Translmod]. *)
   | Pmakefloatblock of mutable_flag * locality_mode
   | Pmakeufloatblock of mutable_flag * locality_mode
   | Pmakelazyblock of lazy_block_tag
@@ -776,7 +782,20 @@ type curried_function_kind = { nlocal: int } [@@unboxed]
 
 type function_kind = Curried of curried_function_kind | Tupled
 
-type let_kind = Strict | Alias | StrictOpt
+type module_block_position =
+  | Field of int
+    (** Bound at this index in the module's exposed block. *)
+  | Off_block
+    (** Bound in the module's structure but not exposed by the signature. *)
+
+type let_kind =
+  | Strict
+  | Alias
+  | StrictOpt
+  | Initializing_module of {
+      module_path : Path.t;
+      position : module_block_position;
+    }
 (* Meaning of kinds for let x = e in e':
     Strict: e may have side-effects; always evaluate e first
       (If e is a simple expression, e.g. a variable or constant,
@@ -786,6 +805,10 @@ type let_kind = Strict | Alias | StrictOpt
       the binding (not inside a lambda nor an exclave)
     StrictOpt: e does not have side-effects, but depend on the store;
       we can discard e if x does not appear in e'
+    Initializing_module: emitted by [Translmod] to record that this binding
+      provides the value of the given field of the module identified by
+      [module_path]. Behaves semantically like [Strict] (consumers that do
+      not interpret the metadata should treat it as such).
  *)
 
 type unique_barrier =

@@ -1215,12 +1215,14 @@ let close_primitive acc env ~let_bound_ids_with_kinds named
       | Some exn_continuation -> exn_continuation
     in
     close_raise0 acc env ~raise_kind ~arg ~dbg exn_continuation
-  | (Pmakeblock _ | Pmakefloatblock _ | Pmakeufloatblock _ | Pmakearray _), []
-    ->
+  | ( ( Pmakeblock _ | Pinit_module_block _ | Pmakefloatblock _
+      | Pmakeufloatblock _ | Pmakearray _ ),
+      [] ) ->
     (* Special case for liftable empty block or array *)
     let acc, sym =
       match prim with
-      | Pmakeblock (tag, _, shape, _mode) ->
+      | Pmakeblock (tag, _, shape, _mode)
+      | Pinit_module_block (tag, _, shape, _mode, _) ->
         if tag <> 0
         then
           (* There should not be any way to reach this from Ocaml code. *)

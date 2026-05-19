@@ -71,9 +71,9 @@ let field_offset_for_label lbl =
 
 (* Forward declaration -- to be filled in by Translmod.transl_module *)
 let transl_module =
-  ref((fun ~scopes:_ _cc _rootpath _modl -> assert false) :
+  ref((fun ~scopes:_ _cc _rootpath _module_path _modl -> assert false) :
       scopes:scopes -> module_coercion -> Longident.t option ->
-      module_expr -> lambda)
+      Path.t option -> module_expr -> lambda)
 
 let transl_object =
   ref (fun ~scopes:_ _id _s _cl -> assert false :
@@ -1060,13 +1060,13 @@ and transl_exp0 ~in_new_scope ~scopes sort e =
              (Lvar cpy))
   | Texp_letmodule(None, loc, Mp_present, modl, body) ->
       let mod_scopes = enter_anonymous_module ~scopes ~loc:loc.loc in
-      let lam = !transl_module ~scopes:mod_scopes Tcoerce_none None modl in
+      let lam = !transl_module ~scopes:mod_scopes Tcoerce_none None None modl in
       Lsequence(Lprim(Pignore, [lam], of_location ~scopes loc.loc),
                 transl_exp ~scopes sort body)
   | Texp_letmodule(Some id, _loc, Mp_present, modl, body) ->
       let defining_expr =
         let mod_scopes = enter_module_definition ~scopes id in
-        !transl_module ~scopes:mod_scopes Tcoerce_none None modl
+        !transl_module ~scopes:mod_scopes Tcoerce_none None None modl
       in
       (* CR sspies: Add a debug uid to [Texp_letmodule] for the binder. *)
       Llet(Strict, Lambda.layout_module, id, Lambda.debug_uid_none,
@@ -1079,7 +1079,7 @@ and transl_exp0 ~in_new_scope ~scopes sort e =
            transl_extension_constructor ~scopes e.exp_env None cd,
            transl_exp ~scopes sort body)
   | Texp_pack modl ->
-      !transl_module ~scopes Tcoerce_none None modl
+      !transl_module ~scopes Tcoerce_none None None modl
   | Texp_assert ({exp_desc=Texp_construct(_, {cstr_name="false"}, _, _)}, loc) ->
       assert_failed loc ~scopes e
   | Texp_assert (cond, loc) ->
@@ -1187,7 +1187,7 @@ and transl_exp0 ~in_new_scope ~scopes sort e =
               (bound_value_identifiers od.open_bound_items)
           in
           Llet(pure, Lambda.layout_module, oid, oid_duid,
-               !transl_module ~scopes Tcoerce_none None od.open_expr, body)
+               !transl_module ~scopes Tcoerce_none None None od.open_expr, body)
       end
   | Texp_probe {name; handler=exp; enabled_at_init} ->
     if !Clflags.native_code && !Clflags.probes then begin

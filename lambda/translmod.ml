@@ -77,9 +77,57 @@ let field_path path field =
     None -> None
   | Some p -> Some(Longident.Ldot(p, Ident.name field))
 
+(* Path.t variants of the same naming helpers, used to annotate Llets and
+   Pmakeblocks with the module path they are initializing. *)
+
+let global_path_as_path cu =
+  Some (Path.Pident
+          (Ident.create_persistent (Compilation_unit.name_as_string cu)))
+let field_path_as_path path field =
+  match path with
+  | None -> None
+  | Some p -> Some (Path.Pdot (p, Ident.name field))
+
+(* Pre-pass data: each defined ident of a structure can be assigned the
+   position in the eventual module block where its value will reside. *)
+
+type module_block_indexing = {
+  module_path : Path.t;
+  positions : module_block_position Ident.Map.t;
+}
+
+let let_kind_for_module_field indexing id ~default =
+  match indexing with
+  | None -> default
+  | Some { positions; module_path } ->
+    match Ident.Map.find_opt id positions with
+    | None -> default
+    | Some position -> Initializing_module { module_path; position }
+
+(* Rewrite [Llet] bindings whose ident is in [indexing.positions] to carry an
+   [Initializing_module] annotation.  This catches sites where the binding is
+   produced by code we don't control directly, in particular the [Llet]s
+   emitted by [transl_let]/[Matching.for_let] for [Tstr_value]. *)
+let annotate_module_field_lets indexing lam =
+  match indexing with
+  | None -> lam
+  | Some { positions; module_path } ->
+    let rec walk lam =
+      match lam with
+      | Llet (kind, layout, id, duid, def, body) ->
+        let kind =
+          match Ident.Map.find_opt id positions with
+          | None -> kind
+          | Some position -> Initializing_module { module_path; position }
+        in
+        Llet (kind, layout, id, duid, def, walk body)
+      | _ -> lam
+    in
+    walk lam
+
 (* Compile type extensions *)
 
-let transl_type_extension ~scopes env rootpath tyext body =
+let transl_type_extension ~scopes env rootpath indexing tyext body =
   List.fold_right
     (fun ext body ->
       let lam =
@@ -87,7 +135,10 @@ let transl_type_extension ~scopes env rootpath tyext body =
           (field_path rootpath ext.ext_id) ext
       in
       (* CR sspies: Can we find a better [debug_uid] here? *)
-      Llet(Strict, Lambda.layout_block, ext.ext_id,
+      let let_kind =
+        let_kind_for_module_field indexing ext.ext_id ~default:Strict
+      in
+      Llet(let_kind, Lambda.layout_block, ext.ext_id,
            Lambda.debug_uid_none, lam, body))
     tyext.tyext_constructors
     body
@@ -103,6 +154,28 @@ let block_of_module_representation ~loc = function
       Typedecl.assert_mixed_product_support loc Module
         ~value_prefix_len:(Mixed_product_bytes.value_prefix_len mpb);
     Pmakeblock(0, Immutable, Shape shape, alloc_heap)
+
+(* Variant of [block_of_module_representation] that builds the
+   [Pinit_module_block] primitive carrying the module's [Path.t].  Used for
+   the module block whose path is known statically. *)
+let init_module_block_of_module_representation ~loc ~module_path = function
+  | Module_value_only _ ->
+    Pinit_module_block (0, Immutable, All_value, alloc_heap, module_path)
+  | Module_mixed (shape, _) ->
+    let mpb = Mixed_product_bytes.count (Product shape) in
+    if not (Mixed_product_bytes.all_value mpb)
+    then
+      Typedecl.assert_mixed_product_support loc Module
+        ~value_prefix_len:(Mixed_product_bytes.value_prefix_len mpb);
+    Pinit_module_block (0, Immutable, Shape shape, alloc_heap, module_path)
+
+(* Pick [Pinit_module_block] when [module_path] is [Some], otherwise the plain
+   [Pmakeblock] variant. *)
+let module_block_primitive ~loc ~module_path repr =
+  match module_path with
+  | None -> block_of_module_representation ~loc repr
+  | Some module_path ->
+    init_module_block_of_module_representation ~loc ~module_path repr
 
 (* Compile a coercion *)
 
@@ -566,6 +639,92 @@ let merge_functors ~scopes mexp coercion root_path =
   in
   merge ~scopes mexp coercion root_path [] Default_inline
 
+(* Collect, in source order, the value identifiers defined at the toplevel of
+   a structure.  These are the identifiers that get bound by [Llet]s emitted
+   in [transl_structure], and that may appear as fields of the module's block.
+
+   This recreates the pre-a0b7728 [defined_idents] walker, used here to
+   pre-compute an [Ident.t -> module_block_position] map before the
+   [transl_structure] recursion (which is bottom-up and so doesn't know each
+   ident's final block position at the point the corresponding [Llet] is
+   emitted). *)
+let rec defined_idents = function
+  | [] -> []
+  | item :: rem ->
+    match item.str_desc with
+    | Tstr_eval _ -> defined_idents rem
+    | Tstr_value(_rec_flag, pat_expr_list) ->
+      let_bound_idents pat_expr_list @ defined_idents rem
+    | Tstr_primitive _ -> defined_idents rem
+    | Tstr_type _ -> defined_idents rem
+    | Tstr_typext tyext ->
+      List.map (fun ext -> ext.ext_id) tyext.tyext_constructors
+      @ defined_idents rem
+    | Tstr_exception ext ->
+      ext.tyexn_constructor.ext_id :: defined_idents rem
+    | Tstr_module {mb_id = Some id; mb_presence = Mp_present; _} ->
+      id :: defined_idents rem
+    | Tstr_module ({mb_id = None}
+                  |{mb_presence = Mp_absent}) -> defined_idents rem
+    | Tstr_recmodule decls ->
+      List.filter_map (fun mb -> mb.mb_id) decls @ defined_idents rem
+    | Tstr_modtype _ -> defined_idents rem
+    | Tstr_open od ->
+      bound_value_identifiers od.open_bound_items @ defined_idents rem
+    | Tstr_class cl_list ->
+      List.map (fun (ci, _) -> ci.ci_id_class) cl_list @ defined_idents rem
+    | Tstr_class_type _ -> defined_idents rem
+    | Tstr_include incl ->
+      bound_value_identifiers incl.incl_type @ defined_idents rem
+    | Tstr_attribute _ -> defined_idents rem
+    | Tstr_jkind _ -> defined_idents rem
+
+(* For a structure being compiled with coercion [cc] and known module path
+   [module_path], compute the map [Ident.t -> module_block_position] giving
+   each defined identifier's position in the exposed module block (or
+   [Off_block] if the identifier is bound in the structure but not exposed).
+
+   For [Tcoerce_none], idents take positions 0, 1, ... in source order.
+   For [Tcoerce_structure { pos_cc_list; _ }], each entry of [pos_cc_list] gives
+   an output position (its index in the list); the source position selects
+   which defined ident goes there.  Entries that don't correspond to a defined
+   ident ([Tcoerce_primitive], [Tcoerce_alias]) are skipped.
+
+   Returns [None] when no useful indexing can be computed (no [module_path],
+   or unhandled coercion form). *)
+let build_block_indexing module_path cc str_items =
+  match module_path with
+  | None -> None
+  | Some module_path ->
+    let idents = defined_idents str_items in
+    let idarray = Array.of_list idents in
+    let positions = ref Ident.Map.empty in
+    let add_in_block id pos =
+      positions := Ident.Map.add id (Field pos) !positions
+    in
+    let add_off_block id =
+      if not (Ident.Map.mem id !positions)
+      then positions := Ident.Map.add id Off_block !positions
+    in
+    (match cc with
+     | Tcoerce_none ->
+       List.iteri (fun i id -> add_in_block id i) idents
+     | Tcoerce_structure { pos_cc_list; _ } ->
+       List.iteri
+         (fun out_pos (source_pos, cc) ->
+           match cc with
+           | Tcoerce_primitive _ | Tcoerce_alias _ -> ()
+           | _ ->
+             if source_pos >= 0 && source_pos < Array.length idarray
+             then add_in_block idarray.(source_pos) out_pos)
+         pos_cc_list
+     | _ ->
+       (* Other coercion forms ([Tcoerce_functor], [Tcoerce_alias]) don't
+          appear as the coercion of a [transl_structure]; nothing to do. *)
+       ());
+    List.iter add_off_block idents;
+    Some { module_path; positions = !positions }
+
 let rec compile_functor ~scopes mexp coercion root_path loc =
   let functor_params_rev, body, body_path, res_coercion, inline_attribute =
     merge_functors ~scopes mexp coercion root_path
@@ -590,7 +749,9 @@ let rec compile_functor ~scopes mexp coercion root_path loc =
                          body)
         in
         params, body)
-      ([], transl_module ~scopes res_coercion body_path body)
+      (* The body of a functor builds a fresh module block per application;
+         no static module path is meaningful here. *)
+      ([], transl_module ~scopes res_coercion body_path None body)
       functor_params_rev
   in
   lfunction
@@ -621,25 +782,27 @@ let rec compile_functor ~scopes mexp coercion root_path loc =
 
 (* Compile a module expression *)
 
-and transl_module ~scopes cc rootpath mexp =
+and transl_module ~scopes cc rootpath module_path mexp =
   let loc = of_location ~scopes mexp.mod_loc in
   match mexp.mod_desc with
   | Tmod_ident (path,_) ->
       apply_coercion loc Strict cc
         (transl_module_path loc mexp.mod_env path)
   | Tmod_structure str ->
-      let lam, _repr = transl_struct ~scopes loc [] cc rootpath str in
+      let lam, _repr = transl_struct ~scopes loc [] cc rootpath module_path str
+      in
       lam
   | Tmod_functor _ ->
       oo_wrap mexp.mod_env true (fun () ->
         compile_functor ~scopes mexp cc rootpath loc) ()
   | Tmod_apply(funct, arg, ccarg) ->
-      let translated_arg = transl_module ~scopes ccarg None arg in
+      let translated_arg = transl_module ~scopes ccarg None None arg in
       transl_apply ~scopes ~loc ~cc mexp.mod_env funct translated_arg
   | Tmod_apply_unit funct ->
       transl_apply ~scopes ~loc ~cc mexp.mod_env funct lambda_unit
   | Tmod_constraint(arg, _, _, ccarg) ->
-      transl_module ~scopes (compose_coercions cc ccarg) rootpath arg
+      transl_module ~scopes (compose_coercions cc ccarg) rootpath module_path
+        arg
   | Tmod_unpack(arg, _) ->
       apply_coercion loc Strict cc
         (Translcore.transl_exp ~scopes Jkind.Sort.Const.for_module arg)
@@ -652,7 +815,7 @@ and transl_apply ~scopes ~loc ~cc mod_env funct translated_arg =
     (apply_coercion loc Strict cc)
     (Lapply{
        ap_loc=loc;
-       ap_func=transl_module ~scopes Tcoerce_none None funct;
+       ap_func=transl_module ~scopes Tcoerce_none None None funct;
        ap_args=[translated_arg];
        ap_result_layout = Lambda.layout_module;
        ap_region_close=Rc_normal;
@@ -662,15 +825,26 @@ and transl_apply ~scopes ~loc ~cc mod_env funct translated_arg =
        ap_specialised=Default_specialise;
        ap_probe=None;})
 
-and transl_struct ~scopes loc fields cc rootpath
+and transl_struct ~scopes loc fields cc rootpath module_path
       {str_final_env; str_items; _} =
-  transl_structure ~scopes loc fields cc rootpath str_final_env str_items
+  let indexing = build_block_indexing module_path cc str_items in
+  let lam, repr =
+    transl_structure ~scopes loc fields cc rootpath module_path indexing
+      str_final_env str_items
+  in
+  (* [transl_let] (called from [Tstr_value]) emits its [Llet]s via
+     [Matching.for_let], where we don't get a hook to set [let_kind].  Walk
+     the result to retrofit [Initializing_module] for each defined ident in
+     [indexing.positions].  Idents bound in nested submodules have distinct
+     stamps and are protected from this rewrite by [Ident.Map.find_opt]. *)
+  annotate_module_field_lets indexing lam, repr
 
 (* The function  transl_structure is called by  the bytecode compiler.
    Some effort is made to compile in top to bottom order, in order to display
    warning by increasing locations. *)
 and transl_structure ~scopes loc
-  (fields : (Ident.t * Jkind.Sort.t) list) cc rootpath final_env =
+  (fields : (Ident.t * Jkind.Sort.t) list) cc rootpath module_path indexing
+  final_env =
   function
     [] ->
       let body, repr =
@@ -678,7 +852,8 @@ and transl_structure ~scopes loc
           Tcoerce_none ->
             let ids, sorts = List.split (List.rev fields) in
             let repr = transl_module_representation (Array.of_list sorts) in
-            Lprim(block_of_module_representation ~loc:(to_location loc) repr,
+            Lprim(module_block_primitive ~loc:(to_location loc) ~module_path
+                    repr,
                   List.map (fun id -> Lvar id) ids, loc),
               repr
         | Tcoerce_structure
@@ -706,8 +881,8 @@ and transl_structure ~scopes loc
             in
             let output_repr = transl_module_representation output_repr in
             let lam =
-              Lprim(block_of_module_representation
-                      ~loc:(to_location loc) output_repr,
+              Lprim(module_block_primitive
+                      ~loc:(to_location loc) ~module_path output_repr,
                   List.map
                     (fun (pos, cc) ->
                       match cc with
@@ -745,7 +920,8 @@ and transl_structure ~scopes loc
       match item.str_desc with
       | Tstr_eval (expr, sort, _) ->
           let body, repr =
-            transl_structure ~scopes loc fields cc rootpath final_env rem
+            transl_structure ~scopes loc fields cc rootpath module_path
+              indexing final_env rem
           in
           let sort = Jkind.Sort.default_for_transl_and_get sort in
           Lsequence(transl_exp ~scopes sort expr, body), repr
@@ -762,14 +938,17 @@ and transl_structure ~scopes loc
           in
           (* Then, translate remainder of struct *)
           let body, repr =
-            transl_structure ~scopes loc ext_fields cc rootpath final_env rem
+            transl_structure ~scopes loc ext_fields cc rootpath module_path
+              indexing final_env rem
           in
           mk_lam_let body, repr
       | Tstr_primitive descr ->
           record_primitive descr.val_val;
-          transl_structure ~scopes loc fields cc rootpath final_env rem
+          transl_structure ~scopes loc fields cc rootpath module_path
+              indexing final_env rem
       | Tstr_type _ ->
-          transl_structure ~scopes loc fields cc rootpath final_env rem
+          transl_structure ~scopes loc fields cc rootpath module_path
+              indexing final_env rem
       | Tstr_typext(tyext) ->
           let newfields =
             List.map
@@ -779,9 +958,11 @@ and transl_structure ~scopes loc
           in
           let body, repr =
             transl_structure ~scopes loc (List.rev_append newfields fields)
-              cc rootpath final_env rem
+              cc rootpath module_path
+              indexing final_env rem
           in
-          transl_type_extension ~scopes item.str_env rootpath tyext body, repr
+          transl_type_extension ~scopes item.str_env rootpath indexing tyext
+            body, repr
       | Tstr_exception ext ->
           let id = ext.tyexn_constructor.ext_id in
           let id_duid = Lambda.debug_uid_none in
@@ -790,9 +971,13 @@ and transl_structure ~scopes loc
           let body, repr =
             transl_structure ~scopes loc
               ((id, Jkind.Sort.(of_const Const.for_exception)) :: fields)
-              cc rootpath final_env rem
+              cc rootpath module_path
+              indexing final_env rem
           in
-          Llet(Strict, Lambda.layout_block, id, id_duid,
+          let let_kind =
+            let_kind_for_module_field indexing id ~default:Strict
+          in
+          Llet(let_kind, Lambda.layout_block, id, id_duid,
                transl_extension_constructor ~scopes
                                             item.str_env
                                             path
@@ -810,7 +995,8 @@ and transl_structure ~scopes loc
             | Some id -> enter_module_definition ~scopes id in
           let module_body =
             transl_module ~scopes:subscopes Tcoerce_none
-              (Option.bind id (field_path rootpath)) mb.mb_expr
+              (Option.bind id (field_path rootpath))
+              (Option.bind id (field_path_as_path module_path)) mb.mb_expr
           in
           let module_body =
             Translattribute.add_inline_attribute module_body mb.mb_loc
@@ -819,7 +1005,8 @@ and transl_structure ~scopes loc
           (* Translate remainder second *)
           let body, repr =
             transl_structure ~scopes loc (cons_opt field fields)
-              cc rootpath final_env rem
+              cc rootpath module_path
+              indexing final_env rem
           in
           begin match id with
           | None ->
@@ -827,11 +1014,16 @@ and transl_structure ~scopes loc
                                of_location ~scopes mb.mb_name.loc), body),
               repr
           | Some id ->
-              Llet(pure_module mb.mb_expr, Lambda.layout_module, id,
+              let let_kind =
+                let_kind_for_module_field indexing id
+                  ~default:(pure_module mb.mb_expr)
+              in
+              Llet(let_kind, Lambda.layout_module, id,
               id_duid, module_body, body), repr
           end
       | Tstr_module ({mb_presence=Mp_absent}) ->
-          transl_structure ~scopes loc fields cc rootpath final_env rem
+          transl_structure ~scopes loc fields cc rootpath module_path
+              indexing final_env rem
       | Tstr_recmodule bindings ->
           let newfields =
             List.filter_map
@@ -841,16 +1033,18 @@ and transl_structure ~scopes loc
           in
           let body, repr =
             transl_structure ~scopes loc (List.rev_append newfields fields)
-              cc rootpath final_env rem
+              cc rootpath module_path
+              indexing final_env rem
           in
           let lam =
             compile_recmodule ~scopes (fun id modl ->
               match id with
-              | None -> transl_module ~scopes Tcoerce_none None modl
+              | None -> transl_module ~scopes Tcoerce_none None None modl
               | Some id ->
                   transl_module
                     ~scopes:(enter_module_definition ~scopes id)
-                    Tcoerce_none (field_path rootpath id) modl
+                    Tcoerce_none (field_path rootpath id)
+                    (field_path_as_path module_path id) modl
             ) bindings body
           in
           lam, repr
@@ -861,7 +1055,8 @@ and transl_structure ~scopes loc
           in
           let body, repr =
             transl_structure ~scopes loc (List.rev_append newfields fields)
-              cc rootpath final_env rem
+              cc rootpath module_path
+              indexing final_env rem
           in
           Value_rec_compiler.compile_letrec class_bindings body, repr
       | Tstr_include incl ->
@@ -874,7 +1069,8 @@ and transl_structure ~scopes loc
           let incl_repr = transl_module_representation incl.incl_repr in
           let rec rebind_idents pos newfields = function
               [] ->
-                transl_structure ~scopes loc newfields cc rootpath final_env rem
+                transl_structure ~scopes loc newfields cc rootpath module_path
+              indexing final_env rem
             | (id, sort) :: ids_with_sorts ->
                 let const_sort = Jkind.Sort.default_for_transl_and_get sort in
                 let lambda_layout =
@@ -886,7 +1082,10 @@ and transl_structure ~scopes loc
                 in
                 let id_duid = Lambda.debug_uid_none in
                 (* CR sspies: Can we find a better [debug_uid] here? *)
-                Llet(Alias, lambda_layout, id, id_duid,
+                let let_kind =
+                  let_kind_for_module_field indexing id ~default:Alias
+                in
+                Llet(let_kind, lambda_layout, id, id_duid,
                      Lprim(mod_field pos incl_repr,
                            [Lvar mid],
                            of_location ~scopes incl.incl_loc), body),
@@ -899,7 +1098,8 @@ and transl_structure ~scopes loc
           let let_kind, modl =
             match incl.incl_kind with
             | Tincl_structure ->
-                pure_module modl, transl_module ~scopes Tcoerce_none None modl
+                pure_module modl,
+                transl_module ~scopes Tcoerce_none None None modl
             | Tincl_functor { input_coercion; input_repr } ->
                 Strict, transl_include_functor ~generative:false modl
                           input_coercion scopes loc ~input_repr
@@ -918,7 +1118,8 @@ and transl_structure ~scopes loc
              it. *)
           begin match od.open_bound_items with
           | [] when pure = Alias ->
-              transl_structure ~scopes loc fields cc rootpath final_env rem
+              transl_structure ~scopes loc fields cc rootpath module_path
+              indexing final_env rem
           | _ ->
               let ids_with_sorts =
                 bound_value_identifiers_and_sorts od.open_bound_items
@@ -928,7 +1129,8 @@ and transl_structure ~scopes loc
               let open_repr = transl_module_representation od.open_items_repr in
               let rec rebind_idents pos newfields = function
                   [] -> transl_structure
-                          ~scopes loc newfields cc rootpath final_env rem
+                          ~scopes loc newfields cc rootpath module_path
+              indexing final_env rem
                 | (id, sort) :: ids_with_sorts ->
                   let const_sort = Jkind.Sort.default_for_transl_and_get sort in
                   let lambda_layout =
@@ -940,7 +1142,10 @@ and transl_structure ~scopes loc
                   in
                   let id_duid = Lambda.debug_uid_none in
                   (* CR sspies: Can we find a better [debug_uid] here? *)
-                  Llet(Alias, lambda_layout, id, id_duid,
+                  let let_kind =
+                    let_kind_for_module_field indexing id ~default:Alias
+                  in
+                  Llet(let_kind, lambda_layout, id, id_duid,
                       Lprim(mod_field pos open_repr, [Lvar mid],
                             of_location ~scopes od.open_loc), body),
                   repr
@@ -949,14 +1154,16 @@ and transl_structure ~scopes loc
                 rebind_idents 0 fields ids_with_sorts
               in
               Llet(pure, Lambda.layout_module, mid, mid_duid,
-                   transl_module ~scopes Tcoerce_none None od.open_expr, body),
+                   transl_module ~scopes Tcoerce_none None None od.open_expr,
+                   body),
               repr
           end
       | Tstr_modtype _
       | Tstr_class_type _
       | Tstr_attribute _
       | Tstr_jkind _->
-          transl_structure ~scopes loc fields cc rootpath final_env rem
+          transl_structure ~scopes loc fields cc rootpath module_path
+              indexing final_env rem
 
 (* construct functor application in "include functor" case *)
 and transl_include_functor ~generative ~input_repr modl params scopes loc =
@@ -964,7 +1171,7 @@ and transl_include_functor ~generative ~input_repr modl params scopes loc =
   let inlined_attribute =
     Translattribute.get_inlined_attribute_on_module modl
   in
-  let modl = transl_module ~scopes Tcoerce_none None modl in
+  let modl = transl_module ~scopes Tcoerce_none None None modl in
   let params = if generative then [params;[]] else [params] in
   let params = List.map (fun coercion ->
     Lprim(block_of_module_representation ~loc:(to_location loc) input_repr,
@@ -1088,8 +1295,9 @@ let add_runtime_parameters lam params =
 
 let transl_implementation_module ~loc ~scopes module_id (str, cc, cc2) =
   let path = global_path module_id in
+  let module_path = global_path_as_path module_id in
   let lam, repr =
-    transl_struct ~scopes (of_location ~scopes loc) [] cc path str
+    transl_struct ~scopes (of_location ~scopes loc) [] cc path module_path str
   in
   match cc2 with
   | None -> lam, repr, None
@@ -1253,7 +1461,7 @@ let transl_toplevel_item ~scopes item =
       (* we need to use unique name in case of multiple
          definitions of the same extension constructor in the toplevel *)
       List.iter set_toplevel_unique_name idents;
-        transl_type_extension ~scopes item.str_env None tyext
+        transl_type_extension ~scopes item.str_env None None tyext
           (make_sequence toploop_setvalue_id idents)
   | Tstr_exception ext ->
       set_toplevel_unique_name ext.tyexn_constructor.ext_id;
@@ -1261,14 +1469,15 @@ let transl_toplevel_item ~scopes item =
         (transl_extension_constructor ~scopes
            item.str_env None ext.tyexn_constructor)
   | Tstr_module {mb_id=None; mb_presence=Mp_present; mb_expr=modl} ->
-      transl_module ~scopes Tcoerce_none None modl
+      transl_module ~scopes Tcoerce_none None None modl
   | Tstr_module {mb_id=Some id; mb_presence=Mp_present; mb_expr=modl} ->
       (* we need to use the unique name for the module because of issues
          with "open" (PR#8133) *)
       set_toplevel_unique_name id;
       let lam = transl_module
                   ~scopes:(enter_module_definition ~scopes id)
-                  Tcoerce_none (Some(Lident (Ident.name id))) modl in
+                  Tcoerce_none (Some(Lident (Ident.name id)))
+                  (Some (Path.Pident id)) modl in
       toploop_setvalue id lam
   | Tstr_recmodule bindings ->
       let idents = List.filter_map (fun mb -> mb.mb_id) bindings in
@@ -1276,11 +1485,12 @@ let transl_toplevel_item ~scopes item =
         (fun id modl ->
            match id with
            | None ->
-             transl_module ~scopes Tcoerce_none None modl
+             transl_module ~scopes Tcoerce_none None None modl
            | Some id ->
              transl_module
                ~scopes:(enter_module_definition ~scopes id)
-               Tcoerce_none (Some (Lident (Ident.name id))) modl)
+               Tcoerce_none (Some (Lident (Ident.name id)))
+               (Some (Path.Pident id)) modl)
         bindings
         (make_sequence toploop_setvalue_id idents)
   | Tstr_class cl_list ->
@@ -1297,7 +1507,7 @@ let transl_toplevel_item ~scopes item =
       let modl =
         match incl.incl_kind with
         | Tincl_structure ->
-            transl_module ~scopes Tcoerce_none None modl
+            transl_module ~scopes Tcoerce_none None None modl
         | Tincl_functor { input_coercion; input_repr } ->
             transl_include_functor ~generative:false modl input_coercion scopes
               loc ~input_repr
@@ -1343,7 +1553,7 @@ let transl_toplevel_item ~scopes item =
                           set_idents (pos + 1) ids)
           in
           Llet(pure, Lambda.layout_module, mid, mid_duid,
-               transl_module ~scopes Tcoerce_none None od.open_expr,
+               transl_module ~scopes Tcoerce_none None None od.open_expr,
                set_idents 0 ids)
       end
   | Tstr_module ({mb_presence=Mp_absent}) ->

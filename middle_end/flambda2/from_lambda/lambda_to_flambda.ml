@@ -566,8 +566,13 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
             CC.close_let acc ccenv [new_id_with_kind] User_visible
               (Simple (Var temp_id)) ~body)
           body new_ids_with_kinds temp_id_unarized acc ccenv)
-  | Llet ((Strict | Alias | StrictOpt), _, fun_id, duid, Lfunction func, body)
-    ->
+  | Llet
+      ( (Strict | Alias | StrictOpt | Initializing_module _),
+        _,
+        fun_id,
+        duid,
+        Lfunction func,
+        body ) ->
     (* This case is here to get function names right. *)
     let bindings =
       cps_function_bindings env [L.{ id = fun_id; debug_uid = duid; def = func }]
@@ -583,7 +588,13 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
         body bindings
     in
     let_expr acc ccenv
-  | Llet ((Strict | Alias | StrictOpt), layout, id, duid, Lconst const, body) ->
+  | Llet
+      ( (Strict | Alias | StrictOpt | Initializing_module _),
+        layout,
+        id,
+        duid,
+        Lconst const,
+        body ) ->
     (* This case avoids extraneous continuations. *)
     let body acc ccenv = cps acc env ccenv body k k_exn in
     let kind =
@@ -594,7 +605,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
       [id, Flambda_debug_uid.of_lambda_debug_uid duid, kind]
       (is_user_visible env id) (Simple (Const const)) ~body
   | Llet
-      ( ((Strict | Alias | StrictOpt) as let_kind),
+      ( ((Strict | Alias | StrictOpt | Initializing_module _) as let_kind),
         layout,
         id,
         duid,
@@ -666,7 +677,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
       cps acc env ccenv (L.Llet (let_kind, layout, id, duid, lam, body)) k k_exn
     )
   | Llet
-      ( (Strict | Alias | StrictOpt),
+      ( (Strict | Alias | StrictOpt | Initializing_module _),
         _,
         id,
         duid,
@@ -699,7 +710,12 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
           body new_ids_with_kinds new_values acc ccenv)
       k_exn
   | Llet
-      ((Strict | Alias | StrictOpt), _layout, id, _duid, defining_expr, Lvar id')
+      ( (Strict | Alias | StrictOpt | Initializing_module _),
+        _layout,
+        id,
+        _duid,
+        defining_expr,
+        Lvar id' )
     when Ident.same id id' ->
     (* CR sspies: To propagate the debug UID here correctly, insert a phantom
        let here once they are available in the compiler. *)
@@ -707,8 +723,13 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
        when translating primitives (see the Lprim case below). *)
     (* This case must not be moved above the case for let-bound primitives. *)
     cps acc env ccenv defining_expr k k_exn
-  | Llet ((Strict | Alias | StrictOpt), layout, id, duid, defining_expr, body)
-    ->
+  | Llet
+      ( (Strict | Alias | StrictOpt | Initializing_module _),
+        layout,
+        id,
+        duid,
+        defining_expr,
+        body ) ->
     let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler:false
       ~params:[id, duid, is_user_visible env id, layout]
       ~body:(fun acc env ccenv after_defining_expr ->
