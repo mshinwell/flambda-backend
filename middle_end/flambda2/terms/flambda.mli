@@ -101,7 +101,14 @@ and let_cont_expr = private
 and static_const_or_code = private
   | Code of function_params_and_body Code0.t
   | Deleted_code
-  | Static_const of Static_const.t
+  | Static_const of
+      { forward_decl : bool;
+        const : Static_const.t
+      }
+      (** [forward_decl = true] indicates that this binding is a forward
+          declaration: the symbol is announced (e.g. by
+          [Pannounce_module_block]) before the actual definition is provided.
+          [forward_decl = false] is the normal case. *)
 
 module Invalid : sig
   (* Note: not all of these indicate that code was unreachable. For example
@@ -589,7 +596,7 @@ module Static_const_or_code : sig
 
   val deleted_code : t
 
-  val create_static_const : Static_const.t -> t
+  val create_static_const : ?forward_decl:bool -> Static_const.t -> t
 
   val to_code : t -> Function_params_and_body.t Code0.t option
 end

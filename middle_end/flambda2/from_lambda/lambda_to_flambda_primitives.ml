@@ -21,6 +21,26 @@ module I_or_f = K.Standard_int_or_float
 module L = Lambda
 module P = Flambda_primitive
 
+(* Symbol identifying the module block at [path] within the current compilation
+   unit.  For the toplevel module (a [Pident] whose name matches the current
+   compilation unit) we return the same symbol that [Closure_conversion] uses
+   for the actual module block, so that the forward-declaration
+   [let symbol = ...] emitted by [Pannounce_module_block] and the eventual
+   definition emitted by [close_program] share a single linkage name.  For
+   submodules and other paths we synthesize a unique linkage name with the
+   path mangled in. *)
+let module_block_symbol_for_path path =
+  let cu = Compilation_unit.get_current_exn () in
+  let current_unit_name =
+    Compilation_unit.Name.to_string (Compilation_unit.name cu)
+  in
+  match[@warning "-fragile-match"] path with
+  | Path.Pident id when String.equal (Ident.name id) current_unit_name ->
+    Symbol.create_wrapped (Flambda2_import.Symbol.for_compilation_unit cu)
+  | _ ->
+    let mangled = String.map (function '.' -> '_' | c -> c) (Path.name path) in
+    Symbol.create cu (Linkage_name.of_string ("caml_module_block_" ^ mangled))
+
 let needs_64_bit_target prim dbg =
   if not (Target_system.is_64_bit ())
   then
@@ -3354,11 +3374,33 @@ let convert_lprim ~(machine_width : Target_system.Machine_width.t) ~big_endian
 module Acc = Closure_conversion_aux.Acc
 module Expr_with_acc = Closure_conversion_aux.Expr_with_acc
 
+(* For [Pannounce_module_block (tag, shape, mode, path)]: declare the symbol for
+   the module block (with a placeholder static const) so that later
+   [Module_block_init] primitive uses (emitted for each [Initializing_module]
+   [Llet]) have a defined target. The static const is a minimal placeholder; it
+   is not the final module block (which is constructed by [Pinit_module_block],
+   currently translated like [Pmakeblock]). *)
+let declare_module_block_announce_symbol acc (path : Path.t) (tag : int) =
+  let symbol = module_block_symbol_for_path path in
+  let static_const =
+    (* Empty placeholder block; the real fields are tracked by
+       [Module_block_init] primitive uses, which are currently ignored in
+       [To_cmm]. *)
+    Static_const.block (Tag.Scannable.create_exn tag) Immutable Value_only []
+  in
+  Acc.add_declared_symbol ~forward_decl:true ~symbol ~constant:static_const acc
+
 let convert_and_bind acc ~big_endian exn_cont ~register_const0
     (prim : L.primitive) ~(args : Simple.t list list) (dbg : Debuginfo.t)
     ~current_region ~current_ghost_region
     (cont : Acc.t -> Flambda.Named.t list -> Expr_with_acc.t) : Expr_with_acc.t
     =
+  let acc =
+    match[@warning "-fragile-match"] prim with
+    | Pannounce_module_block (tag, _shape, _mode, path) ->
+      declare_module_block_announce_symbol acc path tag
+    | _ -> acc
+  in
   let machine_width = Acc.machine_width acc in
   let exprs =
     convert_lprim ~machine_width ~big_endian prim args dbg ~current_region

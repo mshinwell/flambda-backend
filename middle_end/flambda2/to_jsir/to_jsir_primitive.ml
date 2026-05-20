@@ -337,6 +337,9 @@ let binary_exn ~env ~res (f : Flambda_primitive.binary_primitive) x y =
       To_jsir_result.add_instr_exn res
         (Set_field
            (x, Target_ocaml_int.to_int field, block_access_kind_exn kind, y)) )
+  | Module_block_init _ ->
+    (* Metadata-only primitive: ignored in the JavaScript IR translation. *)
+    no_op ~env ~res
   | Array_load (kind, load_kind, _mut) -> (
     match kind, load_kind with
     | ( ( Immediates | Gc_ignorable_values | Values | Naked_floats

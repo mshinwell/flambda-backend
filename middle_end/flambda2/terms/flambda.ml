@@ -138,7 +138,10 @@ and function_params_and_body =
 and static_const_or_code =
   | Code of function_params_and_body Code0.t
   | Deleted_code
-  | Static_const of Static_const.t
+  | Static_const of
+      { forward_decl : bool;
+        const : Static_const.t
+      }
 
 and static_const_group = static_const_or_code list
 
@@ -330,9 +333,11 @@ and apply_renaming_static_const_or_code
       in
       if code == code' then static_const_or_code else Code code'
     | Deleted_code -> Deleted_code
-    | Static_const const ->
+    | Static_const { forward_decl; const } ->
       let const' = Static_const.apply_renaming const renaming in
-      if const == const' then static_const_or_code else Static_const const'
+      if const == const'
+      then static_const_or_code
+      else Static_const { forward_decl; const = const' }
 
 and apply_renaming_static_const_group t renaming =
   List.map
@@ -439,7 +444,7 @@ and ids_for_export_static_const_or_code t =
   | Code code ->
     Code0.ids_for_export ~ids_for_export_function_params_and_body code
   | Deleted_code -> Ids_for_export.empty
-  | Static_const const -> Static_const.ids_for_export const
+  | Static_const { const; _ } -> Static_const.ids_for_export const
 
 and ids_for_export_static_const_group t =
   List.map ids_for_export_static_const_or_code t |> Ids_for_export.union_list
@@ -448,7 +453,11 @@ type flattened_for_printing_descr =
   | Flat_code of Code_id.t * function_params_and_body Code0.t
   | Flat_deleted_code of Code_id.t
   | Flat_set_of_closures of Symbol.t Function_slot.Lmap.t * Set_of_closures.t
-  | Flat_block_like of Symbol.t * Static_const.t
+  | Flat_block_like of
+      { forward_decl : bool;
+        symbol : Symbol.t;
+        static_const : Static_const.t
+      }
 
 type flattened_for_printing =
   { second_or_later_binding_within_one_set : bool;
@@ -489,7 +498,7 @@ and match_against_bound_static_pattern_static_const_or_code :
         static_const_or_code;
     code_callback code_id code
   | Deleted_code, Code code_id -> deleted_code_callback code_id
-  | Static_const const, (Set_of_closures _ | Block_like _) ->
+  | Static_const { const; _ }, (Set_of_closures _ | Block_like _) ->
     Static_const.match_against_bound_static_pattern const pat ~set_of_closures
       ~block_like
   | Static_const _, Code _
@@ -696,6 +705,21 @@ and print_let_cont_expr ppf t =
   fprintf ppf ")@]"
 
 and flatten_for_printing0 bound_static defining_exprs =
+  (* Walk the static_const_or_code list in parallel with the patterns to build a
+     Symbol -> forward_decl map. The shape mirrors
+     [match_against_bound_static__static_const_group] in
+     [Static_const_group]. *)
+  let forward_decls =
+    List.fold_left2
+      (fun acc (pat : Bound_static.Pattern.t) sc_or_code ->
+        match[@warning "-fragile-match"] pat, sc_or_code with
+        | Block_like sym, Static_const { forward_decl; _ } ->
+          Symbol.Map.add sym forward_decl acc
+        | _, _ -> acc)
+      Symbol.Map.empty
+      (Bound_static.to_list bound_static)
+      defining_exprs
+  in
   match_against_bound_static__static_const_group defining_exprs bound_static
     ~init:([], false)
     ~code:(fun (flattened_acc, second_or_later_rec_binding) code_id code ->
@@ -732,10 +756,15 @@ and flatten_for_printing0 bound_static defining_exprs =
       flattened_acc @ flattened, true)
     ~block_like:(fun
         (flattened_acc, second_or_later_rec_binding) symbol defining_expr ->
+      let forward_decl =
+        Option.value (Symbol.Map.find_opt symbol forward_decls) ~default:false
+      in
       let flattened =
         { second_or_later_binding_within_one_set = false;
           second_or_later_rec_binding;
-          descr = Flat_block_like (symbol, defining_expr)
+          descr =
+            Flat_block_like
+              { forward_decl; symbol; static_const = defining_expr }
         }
       in
       flattened_acc @ [flattened], true)
@@ -772,14 +801,18 @@ and print_flattened_descr_lhs ppf descr =
              Flambda_colours.pop)
          print_closure_binding)
       (Function_slot.Lmap.bindings closure_symbols)
-  | Flat_block_like (symbol, _) -> Symbol.print ppf symbol
+  | Flat_block_like { symbol; _ } -> Symbol.print ppf symbol
 
 and print_flattened_descr_rhs ppf descr =
   match descr with
   | Flat_code (_, code) -> Code0.print ~print_function_params_and_body ppf code
   | Flat_deleted_code _ -> Format.fprintf ppf "(Deleted)"
   | Flat_set_of_closures (_, set) -> Set_of_closures.print ppf set
-  | Flat_block_like (_, static_const) -> Static_const.print ppf static_const
+  | Flat_block_like { forward_decl = true; static_const; _ } ->
+    fprintf ppf "@[<hov 1>(%tforward_decl%t@ %a)@]" Flambda_colours.static_part
+      Flambda_colours.pop Static_const.print static_const
+  | Flat_block_like { forward_decl = false; static_const; _ } ->
+    Static_const.print ppf static_const
 
 and print_flattened ppf
     { second_or_later_binding_within_one_set = _;
@@ -907,7 +940,12 @@ and print_static_const_or_code ppf static_const_or_code =
   | Deleted_code ->
     fprintf ppf "@[<hov 1>(%tDeleted_code%t)@]" Flambda_colours.static_part
       Flambda_colours.pop
-  | Static_const const -> Static_const.print ppf const
+  | Static_const { forward_decl; const } ->
+    if forward_decl
+    then
+      fprintf ppf "@[<hov 1>(%tforward_decl%t@ %a)@]"
+        Flambda_colours.static_part Flambda_colours.pop Static_const.print const
+    else Static_const.print ppf const
 
 module Continuation_handler = struct
   module T0 = struct
@@ -1279,8 +1317,10 @@ module Static_const_or_code = struct
       match t1, t2 with
       | Code code1, Code code2 -> Code0.compare code1 code2
       | Deleted_code, Deleted_code -> 0
-      | Static_const const1, Static_const const2 ->
-        Static_const.compare const1 const2
+      | ( Static_const { forward_decl = fd1; const = const1 },
+          Static_const { forward_decl = fd2; const = const2 } ) ->
+        let c = Bool.compare fd1 fd2 in
+        if c <> 0 then c else Static_const.compare const1 const2
       | Code _, (Deleted_code | Static_const _) -> -1
       | Deleted_code, Static_const _ -> -1
       | Deleted_code, Code _ -> 1
@@ -1295,7 +1335,7 @@ module Static_const_or_code = struct
     match t with
     | Code code -> Code0.free_names code
     | Deleted_code -> Name_occurrences.empty
-    | Static_const const -> Static_const.free_names const
+    | Static_const { const; _ } -> Static_const.free_names const
 
   let apply_renaming = apply_renaming_static_const_or_code
 
@@ -1305,7 +1345,8 @@ module Static_const_or_code = struct
 
   let deleted_code = Deleted_code
 
-  let create_static_const const = Static_const const
+  let create_static_const ?(forward_decl = false) const =
+    Static_const { forward_decl; const }
 
   let is_code t =
     match t with Code _ | Deleted_code -> true | Static_const _ -> false
@@ -1313,17 +1354,17 @@ module Static_const_or_code = struct
   let is_fully_static t =
     match t with
     | Code _ | Deleted_code -> true
-    | Static_const const -> Static_const.is_fully_static const
+    | Static_const { const; _ } -> Static_const.is_fully_static const
 
   let is_block t =
     match t with
     | Code _ | Deleted_code -> false
-    | Static_const const -> Static_const.is_block const
+    | Static_const { const; _ } -> Static_const.is_block const
 
   let is_set_of_closures t =
     match t with
     | Code _ | Deleted_code -> false
-    | Static_const const -> Static_const.is_set_of_closures const
+    | Static_const { const; _ } -> Static_const.is_set_of_closures const
 
   let to_code t =
     match t with
@@ -1473,20 +1514,24 @@ module Named = struct
       |> List.fold_left
            (fun acc static_const_or_code ->
              match (static_const_or_code : Static_const_or_code.t) with
-             | Static_const (Set_of_closures s) -> f_set acc s
+             | Static_const { const = Set_of_closures s; _ } -> f_set acc s
              | Code code -> f_code acc code
              | Deleted_code
              | Static_const
-                 ( Block _ | Boxed_float _ | Boxed_float32 _ | Boxed_int32 _
-                 | Boxed_int64 _ | Boxed_vec128 _ | Boxed_vec256 _
-                 | Boxed_vec512 _ | Boxed_nativeint _ | Immutable_float_block _
-                 | Immutable_float_array _ | Immutable_float32_array _
-                 | Mutable_string _ | Immutable_string _ | Empty_array _
-                 | Immutable_value_array _ | Immutable_int_array _
-                 | Immutable_int8_array _ | Immutable_int16_array _
-                 | Immutable_int32_array _ | Immutable_int64_array _
-                 | Immutable_nativeint_array _ | Immutable_vec128_array _
-                 | Immutable_vec256_array _ | Immutable_vec512_array _ ) ->
+                 { const =
+                     ( Block _ | Boxed_float _ | Boxed_float32 _ | Boxed_int32 _
+                     | Boxed_int64 _ | Boxed_vec128 _ | Boxed_vec256 _
+                     | Boxed_vec512 _ | Boxed_nativeint _
+                     | Immutable_float_block _ | Immutable_float_array _
+                     | Immutable_float32_array _ | Mutable_string _
+                     | Immutable_string _ | Empty_array _
+                     | Immutable_value_array _ | Immutable_int_array _
+                     | Immutable_int8_array _ | Immutable_int16_array _
+                     | Immutable_int32_array _ | Immutable_int64_array _
+                     | Immutable_nativeint_array _ | Immutable_vec128_array _
+                     | Immutable_vec256_array _ | Immutable_vec512_array _ );
+                   _
+                 } ->
                acc)
            init
 end

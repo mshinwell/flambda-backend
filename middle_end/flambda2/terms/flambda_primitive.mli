@@ -537,6 +537,14 @@ type binary_primitive =
         init : Init_or_assign.t;
         field : Target_ocaml_int.t
       }
+  | Module_block_init of
+      { kind : Block_access_kind.t;
+        field : Target_ocaml_int.t
+      }
+      (** Marks the initialization of [field] of the module block identified by
+          the first argument (a symbol) with the value given as the second
+          argument. Emitted by [Lambda_to_flambda] for [Llet] bindings whose
+          [let_kind] is [Initializing_module]. Currently ignored by [To_cmm]. *)
   | Array_load of Array_kind.t * Array_load_kind.t * Mutability.t
       (** Unarized or SIMD array load.
 

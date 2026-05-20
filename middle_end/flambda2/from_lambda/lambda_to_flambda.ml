@@ -24,9 +24,50 @@ module IR = Closure_conversion.IR
 module Expr_with_acc = Closure_conversion_aux.Expr_with_acc
 module Function_decl = Closure_conversion_aux.Function_decls.Function_decl
 module CCenv = Closure_conversion_aux.Env
+module Let_with_acc = Closure_conversion_aux.Let_with_acc
+module P = Flambda_primitive
 
 (* CR pchambart: Replace uses by CC.Acc.t *)
 module Acc = Closure_conversion_aux.Acc
+
+(* When the [Llet] being translated has [let_kind = Initializing_module { path;
+   position = Field n }], we wrap the body with an extra Flambda Let binding the
+   result of [Module_block_init] applied to the path-derived symbol and the
+   just-bound identifier. This records that field [n] of the module block at
+   [path] is being initialized with the value just bound. For [position =
+   Off_block] (an identifier defined but not exposed) no [Module_block_init] is
+   emitted. *)
+let maybe_emit_module_block_init (let_kind : L.let_kind) id ccenv acc body_expr
+    =
+  match let_kind with
+  | Strict | Alias | StrictOpt | Initializing_module { position = Off_block; _ }
+    ->
+    acc, body_expr
+  | Initializing_module { module_path; position = Field field_index } ->
+    let machine_width = Acc.machine_width acc in
+    let symbol =
+      Lambda_to_flambda_primitives.module_block_symbol_for_path module_path
+    in
+    let field = Target_ocaml_int.of_int machine_width field_index in
+    let kind : P.Block_access_kind.t =
+      Values { tag = Unknown; size = Unknown; field_kind = Any_value }
+    in
+    let var_for_id, _kind = CCenv.find_var ccenv id in
+    let prim : P.t =
+      Binary
+        ( Module_block_init { kind; field },
+          Simple.symbol symbol,
+          Simple.var var_for_id )
+    in
+    let named = Flambda.Named.create_prim prim Debuginfo.none in
+    let fresh_var =
+      Variable.create "module_block_init_unit" Flambda_kind.value
+    in
+    let bp =
+      Bound_pattern.singleton
+        (Bound_var.create fresh_var Flambda_debug_uid.none Name_mode.normal)
+    in
+    Let_with_acc.create acc bp named ~body:body_expr
 
 let must_be_singleton_simple simples =
   match simples with
@@ -567,7 +608,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
               (Simple (Var temp_id)) ~body)
           body new_ids_with_kinds temp_id_unarized acc ccenv)
   | Llet
-      ( (Strict | Alias | StrictOpt | Initializing_module _),
+      ( ((Strict | Alias | StrictOpt | Initializing_module _) as let_kind),
         _,
         fun_id,
         duid,
@@ -577,7 +618,10 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
     let bindings =
       cps_function_bindings env [L.{ id = fun_id; debug_uid = duid; def = func }]
     in
-    let body acc ccenv = cps acc env ccenv body k k_exn in
+    let body acc ccenv =
+      let acc, body_expr = cps acc env ccenv body k k_exn in
+      maybe_emit_module_block_init let_kind fun_id ccenv acc body_expr
+    in
     let let_expr =
       List.fold_left
         (fun body func acc ccenv ->
@@ -589,14 +633,17 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
     in
     let_expr acc ccenv
   | Llet
-      ( (Strict | Alias | StrictOpt | Initializing_module _),
+      ( ((Strict | Alias | StrictOpt | Initializing_module _) as let_kind),
         layout,
         id,
         duid,
         Lconst const,
         body ) ->
     (* This case avoids extraneous continuations. *)
-    let body acc ccenv = cps acc env ccenv body k k_exn in
+    let body acc ccenv =
+      let acc, body_expr = cps acc env ccenv body k k_exn in
+      maybe_emit_module_block_init let_kind id ccenv acc body_expr
+    in
     let kind =
       Flambda_kind.With_subkind.from_lambda_values_and_unboxed_numbers_only
         layout ~machine_width:(Acc.machine_width acc)
@@ -661,7 +708,10 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
               in
               env, fields
           in
-          let body acc ccenv = cps acc env ccenv body k k_exn in
+          let body acc ccenv =
+            let acc, body_expr = cps acc env ccenv body k k_exn in
+            maybe_emit_module_block_init let_kind id ccenv acc body_expr
+          in
           let current_region = Env.current_region env in
           let region =
             Option.map Env.Region_stack_element.region current_region
@@ -677,7 +727,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
       cps acc env ccenv (L.Llet (let_kind, layout, id, duid, lam, body)) k k_exn
     )
   | Llet
-      ( (Strict | Alias | StrictOpt | Initializing_module _),
+      ( ((Strict | Alias | StrictOpt | Initializing_module _) as let_kind),
         _,
         id,
         duid,
@@ -693,7 +743,10 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
       (fun acc env ccenv new_values _arity ->
         let env = Env.update_mutable_variable env being_assigned in
         let body acc ccenv =
-          let body acc ccenv = cps acc env ccenv body k k_exn in
+          let body acc ccenv =
+            let acc, body_expr = cps acc env ccenv body k k_exn in
+            maybe_emit_module_block_init let_kind id ccenv acc body_expr
+          in
           CC.close_let acc ccenv
             [ ( id,
                 Flambda_debug_uid.of_lambda_debug_uid duid,
@@ -724,7 +777,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
     (* This case must not be moved above the case for let-bound primitives. *)
     cps acc env ccenv defining_expr k k_exn
   | Llet
-      ( (Strict | Alias | StrictOpt | Initializing_module _),
+      ( ((Strict | Alias | StrictOpt | Initializing_module _) as let_kind),
         layout,
         id,
         duid,
@@ -734,7 +787,9 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
       ~params:[id, duid, is_user_visible env id, layout]
       ~body:(fun acc env ccenv after_defining_expr ->
         cps_tail acc env ccenv defining_expr after_defining_expr k_exn)
-      ~handler:(fun acc env ccenv -> cps acc env ccenv body k k_exn)
+      ~handler:(fun acc env ccenv ->
+        let acc, body_expr = cps acc env ccenv body k k_exn in
+        maybe_emit_module_block_init let_kind id ccenv acc body_expr)
   (* CR pchambart: This version would avoid one let cont, but would miss the
      value kind. It should be used when CC.close_let can propagate the
      value_kind. *)

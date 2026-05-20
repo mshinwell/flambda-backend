@@ -94,7 +94,8 @@ let lift dacc ty ~bound_to static_const : _ Or_invalid.t * DA.t =
       match RSC.to_const static_const with
       | None -> None
       | Some (Code _ | Deleted_code) -> None
-      | Some (Static_const const) -> DA.find_shareable_constant dacc const
+      | Some (Static_const { const; _ }) ->
+        DA.find_shareable_constant dacc const
     in
     match existing_symbol with
     | Some symbol ->
@@ -133,7 +134,7 @@ let lift dacc ty ~bound_to static_const : _ Or_invalid.t * DA.t =
       let dacc =
         match RSC.to_const static_const with
         | None | Some (Code _ | Deleted_code) -> dacc
-        | Some (Static_const static_const) ->
+        | Some (Static_const { const = static_const; _ }) ->
           DA.consider_constant_for_sharing dacc symbol static_const
       in
       dacc, symbol

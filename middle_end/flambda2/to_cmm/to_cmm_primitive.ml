@@ -1254,6 +1254,11 @@ let binary_primitive env dbg f x y =
   match (f : P.binary_primitive) with
   | Block_set { kind; init; field } ->
     block_set ~dbg kind init ~field ~block:x ~new_value:y
+  | Module_block_init _ ->
+    (* Metadata-only primitive: emit unit and discard arguments. Arguments are
+       already-evaluated Cmm expressions; for safety we sequence them in case
+       they have side effects. *)
+    C.return_unit dbg (C.sequence x (C.sequence y (Cmm.Cconst_int (1, dbg))))
   | Array_load (array_kind, load_kind, _mut) ->
     array_load ~dbg array_kind load_kind ~arr:x ~index:y
   | String_or_bigstring_load (kind, width) ->

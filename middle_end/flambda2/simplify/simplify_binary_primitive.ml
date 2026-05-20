@@ -1097,6 +1097,10 @@ let simplify_block_set _block_access_kind _init_or_assign ~field:_ dacc
     ~original_term _dbg ~arg1:_ ~arg1_ty:_ ~arg2:_ ~arg2_ty:_ ~result_var =
   SPR.create_unit dacc ~result_var ~original_term
 
+let simplify_module_block_init _block_access_kind ~field:_ dacc ~original_term
+    _dbg ~arg1:_ ~arg1_ty:_ ~arg2:_ ~arg2_ty:_ ~result_var =
+  SPR.create_unit dacc ~result_var ~original_term
+
 let simplify_poke dacc ~original_term _dbg ~arg1:_ ~arg1_ty:_ ~arg2:_ ~arg2_ty:_
     ~result_var =
   SPR.create_unit dacc ~result_var ~original_term
@@ -1113,6 +1117,8 @@ let simplify_binary_primitive0 dacc original_prim (prim : P.binary_primitive)
   let simplifier =
     match prim with
     | Block_set { kind; init; field } -> simplify_block_set kind init ~field
+    | Module_block_init { kind; field } ->
+      simplify_module_block_init kind ~field
     | Array_load (array_kind, width, mutability) ->
       simplify_array_load array_kind width mutability
     | Int_arith (kind, op) -> (
@@ -1167,7 +1173,7 @@ let simplify_binary_primitive0 dacc original_prim (prim : P.binary_primitive)
 
 let recover_comparison_primitive dacc (prim : P.binary_primitive) ~arg1 ~arg2 =
   match prim with
-  | Block_set _ | Array_load _ | Int_arith _ | Int_shift _
+  | Block_set _ | Module_block_init _ | Array_load _ | Int_arith _ | Int_shift _
   | Int_comp (_, Yielding_int_like_compare_functions _)
   | Float_arith _ | Float_comp _ | Phys_equal _ | String_or_bigstring_load _
   | Bigarray_load _ | Bigarray_get_alignment _ | Atomic_load_field _ | Poke _

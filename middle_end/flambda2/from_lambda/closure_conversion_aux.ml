@@ -361,7 +361,8 @@ module Acc = struct
 
   type t =
     { machine_width : Target_system.Machine_width.t;
-      declared_symbols : (Symbol.t * Static_const.t) list;
+      declared_symbols :
+        (Symbol.t * [`Forward_decl | `Normal] * Static_const.t) list;
       lifted_sets_of_closures :
         (Symbol.t Function_slot.Lmap.t * Flambda.Set_of_closures.t) list;
       shareable_constants : Symbol.t Static_const.Map.t;
@@ -497,8 +498,9 @@ module Acc = struct
 
   let code_slot_offsets t = t.code_slot_offsets
 
-  let add_declared_symbol ~symbol ~constant t =
-    let declared_symbols = (symbol, constant) :: t.declared_symbols in
+  let add_declared_symbol ?(forward_decl = false) ~symbol ~constant t =
+    let kind = if forward_decl then `Forward_decl else `Normal in
+    let declared_symbols = (symbol, kind, constant) :: t.declared_symbols in
     let approx : _ Value_approximation.t =
       match (constant : Static_const.t) with
       | Block (tag, mut, shape, fields) ->

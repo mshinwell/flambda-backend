@@ -35,7 +35,7 @@ let create_lifted_constant (dacc, lifted_constants)
     let dacc =
       match Rebuilt_static_const.to_const static_const with
       | None | Some (Code _ | Deleted_code) -> dacc
-      | Some (Static_const static_const) ->
+      | Some (Static_const { const = static_const; _ }) ->
         DA.consider_constant_for_sharing dacc symbol static_const
     in
     dacc, lifted_constant :: lifted_constants

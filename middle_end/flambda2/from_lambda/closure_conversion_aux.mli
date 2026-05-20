@@ -236,7 +236,8 @@ module Acc : sig
 
   val manufacture_symbol_short_name : t -> t * Linkage_name.t
 
-  val declared_symbols : t -> (Symbol.t * Static_const.t) list
+  val declared_symbols :
+    t -> (Symbol.t * [`Forward_decl | `Normal] * Static_const.t) list
 
   val lifted_sets_of_closures :
     t -> (Symbol.t Function_slot.Lmap.t * Flambda.Set_of_closures.t) list
@@ -255,7 +256,8 @@ module Acc : sig
 
   val with_seen_a_function : t -> bool -> t
 
-  val add_declared_symbol : symbol:Symbol.t -> constant:Static_const.t -> t -> t
+  val add_declared_symbol :
+    ?forward_decl:bool -> symbol:Symbol.t -> constant:Static_const.t -> t -> t
 
   val add_lifted_set_of_closures :
     symbols:Symbol.t Function_slot.Lmap.t ->

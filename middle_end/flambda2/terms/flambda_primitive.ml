@@ -1816,6 +1816,10 @@ type binary_primitive =
         init : Init_or_assign.t;
         field : Target_ocaml_int.t
       }
+  | Module_block_init of
+      { kind : Block_access_kind.t;
+        field : Target_ocaml_int.t
+      }
   | Array_load of Array_kind.t * Array_load_kind.t * Mutability.t
   | String_or_bigstring_load of string_like_value * string_accessor_width
   | Bigarray_load of num_dimensions * Bigarray_kind.t * Bigarray_layout.t
@@ -1833,7 +1837,7 @@ type binary_primitive =
 
 let binary_primitive_eligible_for_cse p =
   match p with
-  | Array_load _ | Block_set _ -> false
+  | Array_load _ | Block_set _ | Module_block_init _ -> false
   | String_or_bigstring_load _ -> false (* CR mshinwell: review *)
   | Bigarray_load _ -> false
   | Bigarray_get_alignment _ -> true
@@ -1866,6 +1870,7 @@ let compare_binary_primitive p1 p2 =
     | Atomic_load_field _ -> 11
     | Poke _ -> 12
     | Read_offset _ -> 13
+    | Module_block_init _ -> 14
   in
   match p1, p2 with
   | ( Block_set { kind = kind1; init = init1; field = field1 },
@@ -1923,10 +1928,14 @@ let compare_binary_primitive p1 p2 =
   | Read_offset (kind1, mut1), Read_offset (kind2, mut2) ->
     let c = Array_load_kind.compare kind1 kind2 in
     if c <> 0 then c else Stdlib.compare mut1 mut2
+  | ( Module_block_init { kind = kind1; field = field1 },
+      Module_block_init { kind = kind2; field = field2 } ) ->
+    let c = Block_access_kind.compare kind1 kind2 in
+    if c <> 0 then c else Target_ocaml_int.compare field1 field2
   | ( ( Block_set _ | Array_load _ | String_or_bigstring_load _
       | Bigarray_load _ | Phys_equal _ | Int_arith _ | Int_shift _ | Int_comp _
       | Float_arith _ | Float_comp _ | Bigarray_get_alignment _
-      | Atomic_load_field _ | Poke _ | Read_offset _ ),
+      | Atomic_load_field _ | Poke _ | Read_offset _ | Module_block_init _ ),
       _ ) ->
     Stdlib.compare
       (binary_primitive_numbering p1)
@@ -1940,6 +1949,9 @@ let print_binary_primitive ppf p =
   | Block_set { kind; init; field } ->
     fprintf ppf "@[(Block_set@ %a@ %a@ %a)@]" Block_access_kind.print kind
       Init_or_assign.print init Target_ocaml_int.print field
+  | Module_block_init { kind; field } ->
+    fprintf ppf "@[(Module_block_init@ %a@ %a)@]" Block_access_kind.print kind
+      Target_ocaml_int.print field
   | Array_load (kind, load_kind, mut) ->
     fprintf ppf "@[(Array_load@ %a@ %a@ %a)@]" Array_kind.print kind
       Array_load_kind.print load_kind Mutability.print mut
@@ -1979,6 +1991,8 @@ let args_kind_of_binary_primitive p =
   match p with
   | Block_set { kind; _ } ->
     block_kind, Block_access_kind.element_kind_for_set kind
+  | Module_block_init { kind; _ } ->
+    block_kind, Block_access_kind.element_kind_for_set kind
   | Array_load _ -> array_kind, array_index_kind
   | String_or_bigstring_load ((String | Bytes), _) ->
     string_or_bytes_kind, string_or_bigstring_index_kind
@@ -2004,7 +2018,7 @@ let args_kind_of_binary_primitive p =
 
 let result_kind_of_binary_primitive p : result_kind =
   match p with
-  | Block_set _ -> Unit
+  | Block_set _ | Module_block_init _ -> Unit
   | Array_load (_array_kind, array_load_kind, _mut) ->
     Singleton
       (Array_load_kind.kind_of_loaded_value array_load_kind
@@ -2032,7 +2046,7 @@ let result_kind_of_binary_primitive p : result_kind =
 
 let effects_and_coeffects_of_binary_primitive p : Effects_and_coeffects.t =
   match p with
-  | Block_set _ -> writing_to_a_block
+  | Block_set _ | Module_block_init _ -> writing_to_a_block
   | Array_load (array_kind, _load_kind, mut) ->
     reading_from_an_array array_kind mut
   | Bigarray_load (_, kind, _) -> reading_from_a_bigarray kind
@@ -2072,34 +2086,38 @@ let effects_and_coeffects_of_binary_primitive p : Effects_and_coeffects.t =
 let binary_classify_for_printing p =
   match p with
   | Array_load _ -> Destructive
-  | Block_set _ | Phys_equal _ | Int_arith _ | Int_shift _ | Int_comp _
-  | Float_arith _ | Float_comp _ | Bigarray_load _ | String_or_bigstring_load _
-  | Bigarray_get_alignment _ | Atomic_load_field _ | Poke _ | Read_offset _ ->
+  | Block_set _ | Module_block_init _ | Phys_equal _ | Int_arith _ | Int_shift _
+  | Int_comp _ | Float_arith _ | Float_comp _ | Bigarray_load _
+  | String_or_bigstring_load _ | Bigarray_get_alignment _ | Atomic_load_field _
+  | Poke _ | Read_offset _ ->
     Neither
 
 let free_names_binary_primitive p =
   match p with
-  | Block_set _ | Array_load _ | String_or_bigstring_load _ | Bigarray_load _
-  | Phys_equal _ | Int_arith _ | Int_shift _ | Int_comp _ | Float_arith _
-  | Float_comp _ | Bigarray_get_alignment _ | Atomic_load_field _
+  | Block_set _ | Module_block_init _ | Array_load _
+  | String_or_bigstring_load _ | Bigarray_load _ | Phys_equal _ | Int_arith _
+  | Int_shift _ | Int_comp _ | Float_arith _ | Float_comp _
+  | Bigarray_get_alignment _ | Atomic_load_field _
   | Poke (_ : Flambda_kind.Standard_int_or_float.t)
   | Read_offset _ ->
     Name_occurrences.empty
 
 let apply_renaming_binary_primitive p _renaming =
   match p with
-  | Block_set _ | Array_load _ | String_or_bigstring_load _ | Bigarray_load _
-  | Phys_equal _ | Int_arith _ | Int_shift _ | Int_comp _ | Float_arith _
-  | Float_comp _ | Bigarray_get_alignment _ | Atomic_load_field _
+  | Block_set _ | Module_block_init _ | Array_load _
+  | String_or_bigstring_load _ | Bigarray_load _ | Phys_equal _ | Int_arith _
+  | Int_shift _ | Int_comp _ | Float_arith _ | Float_comp _
+  | Bigarray_get_alignment _ | Atomic_load_field _
   | Poke (_ : Flambda_kind.Standard_int_or_float.t)
   | Read_offset _ ->
     p
 
 let ids_for_export_binary_primitive p =
   match p with
-  | Block_set _ | Array_load _ | String_or_bigstring_load _ | Bigarray_load _
-  | Phys_equal _ | Int_arith _ | Int_shift _ | Int_comp _ | Float_arith _
-  | Float_comp _ | Bigarray_get_alignment _ | Atomic_load_field _
+  | Block_set _ | Module_block_init _ | Array_load _
+  | String_or_bigstring_load _ | Bigarray_load _ | Phys_equal _ | Int_arith _
+  | Int_shift _ | Int_comp _ | Float_arith _ | Float_comp _
+  | Bigarray_get_alignment _ | Atomic_load_field _
   | Poke (_ : Flambda_kind.Standard_int_or_float.t)
   | Read_offset _ ->
     Ids_for_export.empty

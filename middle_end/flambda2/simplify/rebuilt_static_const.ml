@@ -328,7 +328,7 @@ let map_set_of_closures t ~find_code_metadata ~f =
   | Normal { const; _ } -> (
     match const with
     | Code _ | Deleted_code -> t
-    | Static_const const -> (
+    | Static_const { forward_decl; const } -> (
       match const with
       | Set_of_closures set_of_closures ->
         let set_of_closures = f set_of_closures in
@@ -344,7 +344,7 @@ let map_set_of_closures t ~find_code_metadata ~f =
         in
         Normal
           { const =
-              Static_const_or_code.create_static_const
+              Static_const_or_code.create_static_const ~forward_decl
                 (SC.set_of_closures set_of_closures);
             free_names = Set_of_closures.free_names set_of_closures;
             cost_metrics

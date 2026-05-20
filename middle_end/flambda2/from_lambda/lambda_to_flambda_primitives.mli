@@ -17,6 +17,13 @@
 module Acc = Closure_conversion_aux.Acc
 module Expr_with_acc = Closure_conversion_aux.Expr_with_acc
 
+(** Symbol identifying the module block at the given [Path.t] within the current
+    compilation unit, with the path mangled into the linkage name. Used by both
+    [Pannounce_module_block] (which binds the symbol) and the
+    [Module_block_init] primitive that is emitted for each [Llet] whose
+    [let_kind] is [Initializing_module]. *)
+val module_block_symbol_for_path : Path.t -> Symbol.t
+
 val check_float_array_optimisation_enabled : Debuginfo.t -> string -> unit
 
 val convert_and_bind :

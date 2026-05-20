@@ -454,6 +454,7 @@ let unary_prim_size ~machine_width prim =
 let binary_prim_size ~machine_width prim =
   match (prim : Flambda_primitive.binary_primitive) with
   | Block_set { kind; init; _ } -> block_set kind init
+  | Module_block_init _ -> 0
   | Array_load (_kind, load_kind, _mut) -> array_load load_kind
   | String_or_bigstring_load (kind, width) ->
     string_or_bigstring_load ~machine_width kind width

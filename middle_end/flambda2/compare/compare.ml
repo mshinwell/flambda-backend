@@ -360,12 +360,12 @@ and subst_static_const env (static_const : Static_const_or_code.t) :
     Static_const_or_code.t =
   match static_const with
   | Code code -> Static_const_or_code.create_code (subst_code env code)
-  | Static_const (Block (tag, mut, shape, fields)) ->
+  | Static_const { forward_decl; const = Block (tag, mut, shape, fields) } ->
     let fields = List.map (subst_field env) fields in
-    Static_const_or_code.create_static_const
+    Static_const_or_code.create_static_const ~forward_decl
       (Static_const.block tag mut shape fields)
-  | Static_const (Set_of_closures set_of_closures) ->
-    Static_const_or_code.create_static_const
+  | Static_const { forward_decl; const = Set_of_closures set_of_closures } ->
+    Static_const_or_code.create_static_const ~forward_decl
       (Static_const.set_of_closures (subst_set_of_closures env set_of_closures))
   | _ -> static_const
 
@@ -1201,18 +1201,23 @@ and static_consts env (const1 : Static_const_or_code.t)
   match const1, const2 with
   | Code code1, Code code2 ->
     codes env code1 code2 |> Comparison.map ~f:Static_const_or_code.create_code
-  | ( Static_const (Block (tag1, mut1, shape1, fields1)),
-      Static_const (Block (tag2, mut2, _shape2, fields2)) ) ->
+  | ( Static_const
+        { forward_decl = fd1; const = Block (tag1, mut1, shape1, fields1) },
+      Static_const
+        { forward_decl = fd2; const = Block (tag2, mut2, _shape2, fields2) } )
+    when Bool.equal fd1 fd2 ->
     (* XXX compare the shapes *)
     blocks env (tag1, mut1, fields1) (tag2, mut2, fields2)
     |> Comparison.map
          ~f:(fun (tag1', mut1', fields1') : Static_const_or_code.t ->
-           Static_const_or_code.create_static_const
+           Static_const_or_code.create_static_const ~forward_decl:fd1
              (Static_const.block tag1' mut1' shape1 fields1'))
-  | Static_const (Set_of_closures set1), Static_const (Set_of_closures set2) ->
+  | ( Static_const { forward_decl = fd1; const = Set_of_closures set1 },
+      Static_const { forward_decl = fd2; const = Set_of_closures set2 } )
+    when Bool.equal fd1 fd2 ->
     sets_of_closures env set1 set2
     |> Comparison.map ~f:(fun set1' : Static_const_or_code.t ->
-        Static_const_or_code.create_static_const
+        Static_const_or_code.create_static_const ~forward_decl:fd1
           (Static_const.set_of_closures set1'))
   | _, _ ->
     if Static_const_or_code.equal const1 const2

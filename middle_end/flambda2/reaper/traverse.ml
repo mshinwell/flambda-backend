@@ -214,10 +214,11 @@ let traverse_prim denv acc ~bound_pattern (prim : Flambda_primitive.t) ~default
         | Make_lazy _ ),
         _ )
   | Binary
-      ( ( Block_set _ | Array_load _ | String_or_bigstring_load _
-        | Bigarray_load _ | Phys_equal _ | Int_arith _ | Int_shift _
-        | Int_comp _ | Float_arith _ | Float_comp _ | Bigarray_get_alignment _
-        | Atomic_load_field _ | Poke _ | Read_offset _ ),
+      ( ( Block_set _ | Module_block_init _ | Array_load _
+        | String_or_bigstring_load _ | Bigarray_load _ | Phys_equal _
+        | Int_arith _ | Int_shift _ | Int_comp _ | Float_arith _ | Float_comp _
+        | Bigarray_get_alignment _ | Atomic_load_field _ | Poke _
+        | Read_offset _ ),
         _,
         _ )
   | Ternary

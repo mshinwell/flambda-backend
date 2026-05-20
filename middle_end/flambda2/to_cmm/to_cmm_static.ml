@@ -660,7 +660,14 @@ let static_const_or_code env r ~updates (bound_static : Bound_static.Pattern.t)
     (static_const_or_code : Static_const_or_code.t) =
   let env, r, updates =
     match bound_static, static_const_or_code with
-    | (Block_like _ | Set_of_closures _), Static_const static_const ->
+    | ( (Block_like _ | Set_of_closures _),
+        Static_const { const = _; forward_decl = true } ) ->
+      (* Forward declaration: emit no Cmm.  The real definition (with
+         [forward_decl = false]) will follow elsewhere in the same group of
+         static consts (or somewhere later in the program). *)
+      env, r, updates
+    | ( (Block_like _ | Set_of_closures _),
+        Static_const { const = static_const; forward_decl = false } ) ->
       static_const0 env r ~updates bound_static static_const
     | Code code_id, Code code ->
       if not (Code_id.equal code_id (Code.code_id code))
@@ -671,7 +678,7 @@ let static_const_or_code env r ~updates (bound_static : Bound_static.Pattern.t)
          environment. *)
       env, r, updates
     | Code _, Deleted_code -> env, r, updates
-    | Code _, Static_const static_const ->
+    | Code _, Static_const { const = static_const; _ } ->
       Misc.fatal_errorf "Only code can be bound by [Code] bindings:@ %a@ =@ %a"
         Bound_static.Pattern.print bound_static SC.print static_const
     | (Set_of_closures _ | Block_like _), Code code ->

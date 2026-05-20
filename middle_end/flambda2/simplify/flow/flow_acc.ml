@@ -431,7 +431,7 @@ let record_lifted_constant_definition_aux ~being_defined elt definition =
   | Set_of_closures { closure_symbols_with_types; _ } -> (
     let expr = D.defining_expr definition in
     match Rebuilt_static_const.to_const expr with
-    | Some (Static_const const) ->
+    | Some (Static_const { const; _ }) ->
       let set_of_closures = Static_const.must_be_set_of_closures const in
       let free_names =
         Name_occurrences.union being_defined

@@ -368,13 +368,13 @@ and static_let_expr env bound_static defining_expr body : Fexpr.expr =
   let translate_const (pat : Bound_static.Pattern.t)
       (const : Static_const_or_code.t) : Fexpr.symbol_binding =
     match pat, const with
-    | Block_like symbol, Static_const const ->
+    | Block_like symbol, Static_const { const; _ } ->
       (* This is a binding occurrence, but it should have been added
        * already during the first pass *)
       let symbol = Env.find_symbol_exn env symbol in
       let defining_expr = static_const env const in
       Data { symbol; defining_expr }
-    | Set_of_closures closure_symbols, Static_const const ->
+    | Set_of_closures closure_symbols, Static_const { const; _ } ->
       let set = Static_const.must_be_set_of_closures const in
       let fun_decls, elements = set_of_closures env set in
       let symbols_by_function_slot =

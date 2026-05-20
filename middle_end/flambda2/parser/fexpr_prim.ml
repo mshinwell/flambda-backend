@@ -754,6 +754,12 @@ let block_set =
         (param3 block_access_kind init_or_assign (positional target_ocaml_int))
       (fun _ (kind, init, field) -> P.Block_set { kind; init; field }))
 
+let module_block_init =
+  D.(
+    binary "%module_block_init"
+      ~params:(param2 block_access_kind (positional target_ocaml_int))
+      (fun _ (kind, field) -> P.Module_block_init { kind; field }))
+
 let array_load =
   D.(
     binary "%array_load"
@@ -1093,6 +1099,7 @@ module OfFlambda = struct
     match op with
     | Atomic_load_field ak -> atomic_load_field env ak
     | Block_set { kind; init; field } -> block_set env (kind, init, field)
+    | Module_block_init { kind; field } -> module_block_init env (kind, field)
     | Array_load (ak, width, mut) -> array_load env (ak, width, mut)
     | Bigarray_load (d, k, l) -> bigarray_load env (d, k, l)
     | Phys_equal Eq -> phys_eq env ()

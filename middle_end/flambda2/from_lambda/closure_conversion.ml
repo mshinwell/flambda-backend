@@ -3786,10 +3786,17 @@ let bind_static_consts_and_code acc body =
   let acc, group_to_bound_consts, symbol_to_groups =
     (* Record defining expressions for all symbols, except sets of closures *)
     List.fold_left
-      (fun (acc, g2c, s2g) (symbol, const) ->
+      (fun (acc, g2c, s2g) (symbol, kind, const) ->
         let id = fresh_group_id () in
         let bound = Bound_static.Pattern.block_like symbol in
-        let const = Static_const_or_code.create_static_const const in
+        let forward_decl =
+          match (kind : [`Forward_decl | `Normal]) with
+          | `Forward_decl -> true
+          | `Normal -> false
+        in
+        let const =
+          Static_const_or_code.create_static_const ~forward_decl const
+        in
         ( acc,
           GroupMap.add id (bound, const) g2c,
           CIS.Map.add (CIS.create_symbol symbol) id s2g ))
