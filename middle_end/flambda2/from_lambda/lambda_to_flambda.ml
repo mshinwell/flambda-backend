@@ -44,19 +44,11 @@ let maybe_emit_module_block_init (let_kind : L.let_kind) id ccenv acc body_expr
     ->
     acc, body_expr
   | Initializing_module { module_path; position = Field field_index } ->
-    let machine_width = Acc.machine_width acc in
-    let symbol =
-      Lambda_to_flambda_primitives.module_block_symbol_for_path module_path
-    in
-    let field = Target_ocaml_int.of_int machine_width field_index in
-    let kind : P.Block_access_kind.t =
-      Values { tag = Unknown; size = Unknown; field_kind = Any_value }
-    in
     (* The bound identifier may have been registered as a variable
        ([Env.add_var_like]) or as a substitution to a [Simple.t]
        ([Env.add_simple_to_substitute], used by [close_let] when the defining
-       expression is itself a [Simple], e.g. a constant).  Resolve both
-       cases here. *)
+       expression is itself a [Simple], e.g. a constant). Resolve both cases
+       here. *)
     let simple_for_id =
       match CCenv.find_simple_to_substitute_exn ccenv id with
       | simple, _kind -> simple
@@ -64,17 +56,41 @@ let maybe_emit_module_block_init (let_kind : L.let_kind) id ccenv acc body_expr
         let var, _kind = CCenv.find_var_exn ccenv id in
         Simple.var var
     in
-    let prim : P.t =
-      Binary
-        (Module_block_init { kind; field }, Simple.symbol symbol, simple_for_id)
+    (* When the bound value is itself a constant integer or constant symbol
+       there is nothing for [Module_block_init] to do at runtime: the field has
+       already been pre-initialized in the static data emitted for the module
+       block (see [To_cmm_static.static_field]). Skip emitting the primitive use
+       entirely in that case. *)
+    let value_is_constant =
+      Simple.pattern_match' simple_for_id
+        ~var:(fun _ ~coercion:_ -> false)
+        ~symbol:(fun _ ~coercion:_ -> true)
+        ~const:(fun _ -> true)
     in
-    let named = Flambda.Named.create_prim prim Debuginfo.none in
-    let fresh_var = Variable.create "unit" Flambda_kind.value in
-    let bp =
-      Bound_pattern.singleton
-        (Bound_var.create fresh_var Flambda_debug_uid.none Name_mode.normal)
-    in
-    Let_with_acc.create acc bp named ~body:body_expr
+    if value_is_constant
+    then acc, body_expr
+    else
+      let machine_width = Acc.machine_width acc in
+      let symbol =
+        Lambda_to_flambda_primitives.module_block_symbol_for_path module_path
+      in
+      let field = Target_ocaml_int.of_int machine_width field_index in
+      let kind : P.Block_access_kind.t =
+        Values { tag = Unknown; size = Unknown; field_kind = Any_value }
+      in
+      let prim : P.t =
+        Binary
+          ( Module_block_init { kind; field },
+            Simple.symbol symbol,
+            simple_for_id )
+      in
+      let named = Flambda.Named.create_prim prim Debuginfo.none in
+      let fresh_var = Variable.create "unit" Flambda_kind.value in
+      let bp =
+        Bound_pattern.singleton
+          (Bound_var.create fresh_var Flambda_debug_uid.none Name_mode.normal)
+      in
+      Let_with_acc.create acc bp named ~body:body_expr
 
 let must_be_singleton_simple simples =
   match simples with

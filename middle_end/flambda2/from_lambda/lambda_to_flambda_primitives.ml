@@ -3429,13 +3429,12 @@ let emit_init_module_block_let_symbol acc (path : Path.t) (tag : int)
         Alloc_mode.For_allocations.as_type Alloc_mode.For_allocations.heap )
   in
   let acc = Acc.add_symbol_approximation acc symbol approx in
-  (* The block's field arguments are local variables, so this binding has to
-     be emitted at a position where they are in scope -- i.e. as a local
-     [let_symbol] rather than via [Acc.add_declared_symbol] which would lift
-     the binding outside the variables' scope.  Earlier [Module_block_init]
-     primitive uses in the body see this symbol via the
-     forward-declaration [let_symbol] emitted by
-     [declare_module_block_announce_symbol]. *)
+  (* The block's field arguments are local variables, so this binding has to be
+     emitted at a position where they are in scope -- i.e. as a local
+     [let_symbol] rather than via [Acc.add_declared_symbol] which would lift the
+     binding outside the variables' scope. Earlier [Module_block_init] primitive
+     uses in the body see this symbol via the forward-declaration [let_symbol]
+     emitted by [declare_module_block_announce_symbol]. *)
   let bound_static =
     Bound_static.singleton (Bound_static.Pattern.block_like symbol)
   in

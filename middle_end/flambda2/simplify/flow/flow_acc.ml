@@ -184,9 +184,9 @@ let record_symbol_binding_aux symbol name_occurrences (elt : cont_info) =
         | Some prev ->
           (* The symbol may have been bound by an earlier [Static_const] with
              [forward_decl = true] (emitted from [Pannounce_module_block])
-             alongside its real definition (emitted from
-             [Pinit_module_block]).  We merge the free-name occurrences
-             instead of treating this as an error. *)
+             alongside its real definition (emitted from [Pinit_module_block]).
+             We merge the free-name occurrences instead of treating this as an
+             error. *)
           Some (Name_occurrences.union prev name_occurrences))
       elt.bindings
   in
@@ -436,10 +436,10 @@ let record_lifted_constant_definition_aux ~being_defined elt definition =
     if is_forward_decl
     then
       (* A forward-declaration [let_symbol] (emitted for
-         [Pannounce_module_block]) coexists with a separate real definition
-         of the same symbol elsewhere in the program.  The real definition
-         is responsible for recording the symbol; skipping here avoids the
-         "bound twice" check. *)
+         [Pannounce_module_block]) coexists with a separate real definition of
+         the same symbol elsewhere in the program. The real definition is
+         responsible for recording the symbol; skipping here avoids the "bound
+         twice" check. *)
       elt
     else
       let free_names =
