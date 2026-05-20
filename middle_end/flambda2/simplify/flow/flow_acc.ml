@@ -181,9 +181,13 @@ let record_symbol_binding_aux symbol name_occurrences (elt : cont_info) =
     Name.Map.update (Name.symbol symbol)
       (function
         | None -> Some name_occurrences
-        | Some _ ->
-          Misc.fatal_errorf "The following symbol has been bound twice: %a"
-            Symbol.print symbol)
+        | Some prev ->
+          (* The symbol may have been bound by an earlier [Static_const] with
+             [forward_decl = true] (emitted from [Pannounce_module_block])
+             alongside its real definition (emitted from
+             [Pinit_module_block]).  We merge the free-name occurrences
+             instead of treating this as an error. *)
+          Some (Name_occurrences.union prev name_occurrences))
       elt.bindings
   in
   { elt with bindings }
@@ -424,10 +428,24 @@ let record_lifted_constant_definition_aux ~being_defined elt definition =
       (Name_occurrences.union being_defined (D.free_names definition))
       elt
   | Block_like { symbol; _ } ->
-    let free_names =
-      Name_occurrences.union being_defined (D.free_names definition)
+    let is_forward_decl =
+      match Rebuilt_static_const.to_const (D.defining_expr definition) with
+      | Some (Static_const { forward_decl; _ }) -> forward_decl
+      | None | Some (Code _ | Deleted_code) -> false
     in
-    record_symbol_binding_aux symbol free_names elt
+    if is_forward_decl
+    then
+      (* A forward-declaration [let_symbol] (emitted for
+         [Pannounce_module_block]) coexists with a separate real definition
+         of the same symbol elsewhere in the program.  The real definition
+         is responsible for recording the symbol; skipping here avoids the
+         "bound twice" check. *)
+      elt
+    else
+      let free_names =
+        Name_occurrences.union being_defined (D.free_names definition)
+      in
+      record_symbol_binding_aux symbol free_names elt
   | Set_of_closures { closure_symbols_with_types; _ } -> (
     let expr = D.defining_expr definition in
     match Rebuilt_static_const.to_const expr with

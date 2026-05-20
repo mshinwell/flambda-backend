@@ -52,12 +52,21 @@ let maybe_emit_module_block_init (let_kind : L.let_kind) id ccenv acc body_expr
     let kind : P.Block_access_kind.t =
       Values { tag = Unknown; size = Unknown; field_kind = Any_value }
     in
-    let var_for_id, _kind = CCenv.find_var ccenv id in
+    (* The bound identifier may have been registered as a variable
+       ([Env.add_var_like]) or as a substitution to a [Simple.t]
+       ([Env.add_simple_to_substitute], used by [close_let] when the defining
+       expression is itself a [Simple], e.g. a constant).  Resolve both
+       cases here. *)
+    let simple_for_id =
+      match CCenv.find_simple_to_substitute_exn ccenv id with
+      | simple, _kind -> simple
+      | exception Not_found ->
+        let var, _kind = CCenv.find_var_exn ccenv id in
+        Simple.var var
+    in
     let prim : P.t =
       Binary
-        ( Module_block_init { kind; field },
-          Simple.symbol symbol,
-          Simple.var var_for_id )
+        (Module_block_init { kind; field }, Simple.symbol symbol, simple_for_id)
     in
     let named = Flambda.Named.create_prim prim Debuginfo.none in
     let fresh_var = Variable.create "unit" Flambda_kind.value in
