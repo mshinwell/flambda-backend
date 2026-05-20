@@ -809,7 +809,7 @@ and print_flattened_descr_rhs ppf descr =
   | Flat_deleted_code _ -> Format.fprintf ppf "(Deleted)"
   | Flat_set_of_closures (_, set) -> Set_of_closures.print ppf set
   | Flat_block_like { forward_decl = true; static_const; _ } ->
-    fprintf ppf "@[<hov 1>(%tforward_decl%t@ %a)@]" Flambda_colours.static_part
+    fprintf ppf "@[<hov 1>(%tForward_decl%t@ %a)@]" Flambda_colours.static_part
       Flambda_colours.pop Static_const.print static_const
   | Flat_block_like { forward_decl = false; static_const; _ } ->
     Static_const.print ppf static_const

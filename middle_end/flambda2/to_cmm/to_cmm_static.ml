@@ -662,7 +662,7 @@ let static_const_or_code env r ~updates (bound_static : Bound_static.Pattern.t)
     match bound_static, static_const_or_code with
     | ( (Block_like _ | Set_of_closures _),
         Static_const { const = _; forward_decl = true } ) ->
-      (* Forward declaration: emit no Cmm.  The real definition (with
+      (* Forward declaration: emit no Cmm. The real definition (with
          [forward_decl = false]) will follow elsewhere in the same group of
          static consts (or somewhere later in the program). *)
       env, r, updates

@@ -60,9 +60,7 @@ let maybe_emit_module_block_init (let_kind : L.let_kind) id ccenv acc body_expr
           Simple.var var_for_id )
     in
     let named = Flambda.Named.create_prim prim Debuginfo.none in
-    let fresh_var =
-      Variable.create "module_block_init_unit" Flambda_kind.value
-    in
+    let fresh_var = Variable.create "unit" Flambda_kind.value in
     let bp =
       Bound_pattern.singleton
         (Bound_var.create fresh_var Flambda_debug_uid.none Name_mode.normal)
