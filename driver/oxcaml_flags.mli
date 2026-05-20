@@ -18,6 +18,15 @@
 
 val dump_cfg : bool ref
 val cfg_invariants : bool ref
+
+(** When enabled, [Translmod] annotates the Lambda IR with the
+    [Pannounce_module_block]/[Pinit_module_block] primitives and the
+    [Initializing_module] [let_kind], and the Flambda 2 [Lambda_to_flambda]
+    pass turns these into a static [let_symbol] for the module block plus
+    per-field [Module_block_init] primitive uses.  When disabled (the
+    default), the module block is constructed at runtime via the legacy
+    [Pmakeblock] / [wrap_final_module_block] pipeline. *)
+val incremental_module_blocks : bool ref
 val regalloc : Clflags.Register_allocator.t ref
 val default_regalloc_linscan_threshold : int
 val regalloc_linscan_threshold : int ref

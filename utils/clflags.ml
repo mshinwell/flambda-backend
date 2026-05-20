@@ -70,6 +70,16 @@ type visible_include =
     cmx_guaranteed : bool;
   }
 
+(* When enabled, [Translmod] annotates the Lambda IR with the new
+   [Pannounce_module_block]/[Pinit_module_block] primitives and the
+   [Initializing_module] [let_kind], and the Flambda 2 [Lambda_to_flambda]
+   pass turns these into a static [let_symbol] for the module block plus
+   per-field [Module_block_init] primitive uses.  When disabled (the
+   default), the module block is constructed at runtime via the legacy
+   [Pmakeblock] / [wrap_final_module_block] pipeline. *)
+let incremental_module_blocks = ref false
+(* -incremental-module-blocks *)
+
 let compile_only = ref false            (* -c *)
 and output_name = ref (None : string option) (* -o *)
 and include_dirs = ref ([] : visible_include list)  (* -I, -Ix *)

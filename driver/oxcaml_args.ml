@@ -49,6 +49,13 @@ let mk_dcfg f = ("-dcfg", Arg.Unit f, " (undocumented)")
 let mk_dcfg_invariants f =
   ("-dcfg-invariants", Arg.Unit f, " Extra sanity checks on Cfg")
 
+let mk_incremental_module_blocks f =
+  ( "-incremental-module-blocks",
+    Arg.Unit f,
+    " Emit module blocks as a static [let_symbol] with per-field \
+     [Module_block_init] primitives (default: off; legacy [Pmakeblock] is \
+     used)" )
+
 let mk_regalloc f =
   ( "-regalloc",
     Arg.Symbol
@@ -1246,6 +1253,7 @@ module type Oxcaml_options = sig
   val ddwarf_metrics_output_file : string -> unit
   val dcfg : unit -> unit
   val dcfg_invariants : unit -> unit
+  val incremental_module_blocks : unit -> unit
   val regalloc : Clflags.Register_allocator.t -> unit
   val regalloc_linscan_threshold : int -> unit
   val regalloc_param : string -> unit
@@ -1425,6 +1433,7 @@ module Make_oxcaml_options (F : Oxcaml_options) = struct
       mk_no_ocamlcfg F.no_ocamlcfg;
       mk_dcfg F.dcfg;
       mk_dcfg_invariants F.dcfg_invariants;
+      mk_incremental_module_blocks F.incremental_module_blocks;
       mk_regalloc F.regalloc;
       mk_regalloc_linscan_threshold F.regalloc_linscan_threshold;
       mk_regalloc_param F.regalloc_param;
@@ -1734,6 +1743,7 @@ module Oxcaml_options_impl = struct
   let no_ocamlcfg () = ()
   let dcfg = set' Oxcaml_flags.dump_cfg
   let dcfg_invariants = set' Oxcaml_flags.cfg_invariants
+  let incremental_module_blocks = set' Oxcaml_flags.incremental_module_blocks
   let regalloc x = Oxcaml_flags.regalloc := x
 
   let regalloc_linscan_threshold x =

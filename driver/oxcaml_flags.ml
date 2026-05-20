@@ -15,6 +15,11 @@
 (**************************************************************************)
 let dump_cfg = ref false                (* -dcfg *)
 let cfg_invariants = ref false          (* -dcfg-invariants *)
+
+(* Stored in [Clflags] so it can also be read from [lambda/], which doesn't
+   depend on [driver/].  See [Clflags.incremental_module_blocks]. *)
+let incremental_module_blocks = Clflags.incremental_module_blocks
+                       (* -incremental-module-blocks *)
 let regalloc = ref Clflags.Register_allocator.Cfg (* -regalloc *)
 let default_regalloc_linscan_threshold = 100_000
 let regalloc_linscan_threshold = ref max_int (* -regalloc-linscan-threshold *)

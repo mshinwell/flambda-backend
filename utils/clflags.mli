@@ -79,6 +79,12 @@ val objfiles : string list ref
 val ccobjs : string list ref
 val dllibs : string list ref
 val cmi_file : string option ref
+val incremental_module_blocks : bool ref
+(* When [true], [Translmod] emits the new module-block annotations
+   (Pannounce_module_block / Pinit_module_block / Initializing_module) and
+   the Flambda 2 pipeline lifts the module block to a static symbol with
+   per-field Module_block_init primitives.  Default [false]. *)
+
 val compile_only : bool ref
 val output_name : string option ref
 val include_dirs : visible_include list ref

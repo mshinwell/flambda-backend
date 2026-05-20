@@ -1401,7 +1401,21 @@ let add_runtime_parameters lam params =
 
 let transl_implementation_module ~loc ~scopes module_id (str, cc, cc2) =
   let path = global_path module_id in
-  let module_path = global_path_as_path module_id in
+  let module_path =
+    (* The [Path.t] for the module being compiled drives the new
+       [Pannounce_module_block]/[Pinit_module_block]/[Initializing_module]
+       annotations that [transl_struct] threads through nested
+       sub-structures.  When the [-incremental-module-blocks] flag is off
+       we suppress those annotations entirely by passing [None] here, which
+       cascades through [build_block_indexing] (returns [None]),
+       [annotate_module_field_lets] (becomes a no-op),
+       [let_kind_for_module_field] (returns the default kind),
+       [module_block_primitive] (falls back to [Pmakeblock]) and the
+       [Pannounce_module_block] emission below (skipped). *)
+    if !Clflags.incremental_module_blocks
+    then global_path_as_path module_id
+    else None
+  in
   let lam, repr =
     transl_struct ~scopes (of_location ~scopes loc) [] cc path module_path str
   in
