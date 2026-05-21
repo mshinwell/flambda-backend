@@ -1255,22 +1255,15 @@ let binary_primitive env dbg f x y =
   | Block_set { kind; init; field } ->
     block_set ~dbg kind init ~field ~block:x ~new_value:y
   | Module_block_init _ ->
-    (* Metadata-only primitive. The static [let_symbol] for the module block
-       already pre-initializes constant fields (constant integers and symbols
-       are emitted directly in the static data by [To_cmm_static.static_field]).
-       For such fields the [Module_block_init] primitive use has no runtime work
-       to do, so we compile it to a bare unit constant -- nothing at all. For
-       non-constant fields we keep a sequence to preserve any side effects in
-       the arguments. *)
-    let value_is_constant =
-      match[@warning "-fragile-match"] (y : Cmm.expression) with
-      | Cconst_int _ | Cconst_natint _ | Cconst_symbol _ -> true
-      | _ -> false
-    in
-    if value_is_constant
-    then Cmm.Cconst_int (1, dbg)
-    else
-      C.return_unit dbg (C.sequence x (C.sequence y (Cmm.Cconst_int (1, dbg))))
+    (* Metadata-only primitive that semantically returns its value argument [y].
+       The static [let_symbol] for the module block already pre-initializes
+       constant fields (see [To_cmm_static.static_field]), so there's no runtime
+       work to do -- we simply forward [y] as the result. [x] is the
+       module-block symbol address (a pure value), so no sequencing of [x] is
+       needed. *)
+    let _ = x in
+    let _ = dbg in
+    y
   | Array_load (array_kind, load_kind, _mut) ->
     array_load ~dbg array_kind load_kind ~arr:x ~index:y
   | String_or_bigstring_load (kind, width) ->

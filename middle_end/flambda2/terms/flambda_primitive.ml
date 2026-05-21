@@ -2018,7 +2018,9 @@ let args_kind_of_binary_primitive p =
 
 let result_kind_of_binary_primitive p : result_kind =
   match p with
-  | Block_set _ | Module_block_init _ -> Unit
+  | Block_set _ -> Unit
+  | Module_block_init { kind; _ } ->
+    Singleton (Block_access_kind.element_kind_for_set kind)
   | Array_load (_array_kind, array_load_kind, _mut) ->
     Singleton
       (Array_load_kind.kind_of_loaded_value array_load_kind

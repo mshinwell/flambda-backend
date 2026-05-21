@@ -31,45 +31,58 @@ module P = Flambda_primitive
 module Acc = Closure_conversion_aux.Acc
 
 (* When the [Llet] being translated has [let_kind = Initializing_module { path;
-   position = Field n }], we wrap the body with an extra Flambda Let binding the
-   result of [Module_block_init] applied to the path-derived symbol and the
-   just-bound identifier. This records that field [n] of the module block at
-   [path] is being initialized with the value just bound. For [position =
-   Off_block] (an identifier defined but not exposed) no [Module_block_init] is
-   emitted. *)
-let maybe_emit_module_block_init (let_kind : L.let_kind) id ccenv acc body_expr
-    =
+   position = Field n }], we split the binding in two at the Flambda level: the
+   defining expression is bound to a "renamed" variable (whatever [close_let]
+   originally created for [id]) and the [id] mapping in the env is replaced by a
+   fresh "non-renamed" variable bound to [Module_block_init (path-derived
+   symbol, renamed-var-as-simple)]. The [Module_block_init] primitive returns
+   its value argument (semantically an identity), so the non-renamed variable
+   holds the same value as the renamed one at runtime; the structural
+   distinction makes the initialization explicit in the IR.
+
+   For [position = Off_block] (an identifier defined but not exposed), or when
+   the bound value resolves to a constant integer or constant symbol (already
+   pre-initialized in the module block's static data), no [Module_block_init] is
+   emitted and the body is processed in the original env. *)
+let maybe_emit_module_block_init (let_kind : L.let_kind) id duid ccenv
+    user_visible acc cps_body =
   match let_kind with
   | Strict | Alias | StrictOpt | Initializing_module { position = Off_block; _ }
     ->
-    acc, body_expr
-  | Initializing_module { module_path; position = Field field_index } ->
-    (* The bound identifier may have been registered as a variable
-       ([Env.add_var_like]) or as a substitution to a [Simple.t]
-       ([Env.add_simple_to_substitute], used by [close_let] when the defining
-       expression is itself a [Simple], e.g. a constant). Resolve both cases
-       here. *)
-    let simple_for_id =
+    cps_body acc ccenv
+  | Initializing_module { module_path; position = Field field_index } -> (
+    (* Resolve [id] to a [Simple.t]. [close_let] either registers [id] via
+       [Env.add_var_like] (creating a fresh [Variable.t]) or via
+       [Env.add_simple_to_substitute] when the defining expression itself is a
+       [Simple] (e.g. a constant). *)
+    let renamed_simple_and_kind =
       match CCenv.find_simple_to_substitute_exn ccenv id with
-      | simple, _kind -> simple
+      | simple, var_kind ->
+        let is_const_or_symbol =
+          Simple.pattern_match' simple
+            ~var:(fun _ ~coercion:_ -> false)
+            ~symbol:(fun _ ~coercion:_ -> true)
+            ~const:(fun _ -> true)
+        in
+        if is_const_or_symbol then None else Some (simple, var_kind)
       | exception Not_found ->
-        let var, _kind = CCenv.find_var_exn ccenv id in
-        Simple.var var
+        let var, var_kind = CCenv.find_var_exn ccenv id in
+        Some (Simple.var var, var_kind)
     in
-    (* When the bound value is itself a constant integer or constant symbol
-       there is nothing for [Module_block_init] to do at runtime: the field has
-       already been pre-initialized in the static data emitted for the module
-       block (see [To_cmm_static.static_field]). Skip emitting the primitive use
-       entirely in that case. *)
-    let value_is_constant =
-      Simple.pattern_match' simple_for_id
-        ~var:(fun _ ~coercion:_ -> false)
-        ~symbol:(fun _ ~coercion:_ -> true)
-        ~const:(fun _ -> true)
-    in
-    if value_is_constant
-    then acc, body_expr
-    else
+    match renamed_simple_and_kind with
+    | None ->
+      (* Constant or symbol value -- the field is pre-initialized; no
+         [Module_block_init] needed. Process the body in the original env. *)
+      cps_body acc ccenv
+    | Some (renamed_simple, var_kind) ->
+      (* Allocate a fresh "non-renamed" variable for [id] and remap [id] in the
+         body's env to that variable. The body uses the non-renamed variable;
+         the original "renamed" simple flows into [Module_block_init] as its
+         value argument and its result is bound to the non-renamed variable. *)
+      let body_ccenv, non_renamed_var =
+        CCenv.add_var_like ccenv id user_visible var_kind
+      in
+      let acc, body_expr = cps_body acc body_ccenv in
       let machine_width = Acc.machine_width acc in
       let symbol =
         Lambda_to_flambda_primitives.module_block_symbol_for_path module_path
@@ -82,15 +95,16 @@ let maybe_emit_module_block_init (let_kind : L.let_kind) id ccenv acc body_expr
         Binary
           ( Module_block_init { kind; field },
             Simple.symbol symbol,
-            simple_for_id )
+            renamed_simple )
       in
       let named = Flambda.Named.create_prim prim Debuginfo.none in
-      let fresh_var = Variable.create "unit" Flambda_kind.value in
       let bp =
         Bound_pattern.singleton
-          (Bound_var.create fresh_var Flambda_debug_uid.none Name_mode.normal)
+          (Bound_var.create non_renamed_var
+             (Flambda_debug_uid.of_lambda_debug_uid duid)
+             Name_mode.normal)
       in
-      Let_with_acc.create acc bp named ~body:body_expr
+      Let_with_acc.create acc bp named ~body:body_expr)
 
 let must_be_singleton_simple simples =
   match simples with
@@ -257,6 +271,23 @@ let is_user_visible env id : IR.user_visible =
       if len > 0 && Char.equal name.[0] '*'
       then Not_user_visible
       else User_visible
+
+(* For [Initializing_module { position = Field _ }] bindings, the [Llet]'s
+   id is, in [maybe_emit_module_block_init], bound to two Flambda variables:
+   a "renamed" variable that holds the defining expression (and feeds into
+   [Module_block_init]) and a fresh "non-renamed" variable that becomes the
+   actual binding the body sees.  The renamed variable is an intermediate
+   that's invisible to the user, so we use [Not_user_visible] when
+   [close_let] / the let-cont creates it.  In all other cases (including
+   [Off_block] where no [Module_block_init] is emitted), we keep the normal
+   user-visibility. *)
+let user_visible_for_let_binding env id (let_kind : L.let_kind) :
+    IR.user_visible =
+  match let_kind with
+  | Initializing_module { position = Field _; _ } -> Not_user_visible
+  | Strict | Alias | StrictOpt | Initializing_module { position = Off_block; _ }
+    ->
+    is_user_visible env id
 
 let let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler
     ~params
@@ -642,8 +673,9 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
       cps_function_bindings env [L.{ id = fun_id; debug_uid = duid; def = func }]
     in
     let body acc ccenv =
-      let acc, body_expr = cps acc env ccenv body k k_exn in
-      maybe_emit_module_block_init let_kind fun_id ccenv acc body_expr
+      maybe_emit_module_block_init let_kind fun_id duid ccenv
+        (is_user_visible env fun_id) acc (fun acc body_ccenv ->
+          cps acc env body_ccenv body k k_exn)
     in
     let let_expr =
       List.fold_left
@@ -664,8 +696,9 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
         body ) ->
     (* This case avoids extraneous continuations. *)
     let body acc ccenv =
-      let acc, body_expr = cps acc env ccenv body k k_exn in
-      maybe_emit_module_block_init let_kind id ccenv acc body_expr
+      maybe_emit_module_block_init let_kind id duid ccenv
+        (is_user_visible env id) acc (fun acc body_ccenv ->
+          cps acc env body_ccenv body k k_exn)
     in
     let kind =
       Flambda_kind.With_subkind.from_lambda_values_and_unboxed_numbers_only
@@ -673,7 +706,8 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
     in
     CC.close_let acc ccenv
       [id, Flambda_debug_uid.of_lambda_debug_uid duid, kind]
-      (is_user_visible env id) (Simple (Const const)) ~body
+      (user_visible_for_let_binding env id let_kind)
+      (Simple (Const const)) ~body
   | Llet
       ( ((Strict | Alias | StrictOpt | Initializing_module _) as let_kind),
         layout,
@@ -732,8 +766,9 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
               env, fields
           in
           let body acc ccenv =
-            let acc, body_expr = cps acc env ccenv body k k_exn in
-            maybe_emit_module_block_init let_kind id ccenv acc body_expr
+            maybe_emit_module_block_init let_kind id duid ccenv
+              (is_user_visible env id) acc (fun acc body_ccenv ->
+                cps acc env body_ccenv body k k_exn)
           in
           let current_region = Env.current_region env in
           let region =
@@ -742,7 +777,8 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
           let ghost_region =
             Option.map Env.Region_stack_element.ghost_region current_region
           in
-          CC.close_let acc ccenv ids_with_kinds (is_user_visible env id)
+          CC.close_let acc ccenv ids_with_kinds
+            (user_visible_for_let_binding env id let_kind)
             (Prim { prim; args; loc; exn_continuation; region; ghost_region })
             ~body)
         k_exn
@@ -767,8 +803,9 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
         let env = Env.update_mutable_variable env being_assigned in
         let body acc ccenv =
           let body acc ccenv =
-            let acc, body_expr = cps acc env ccenv body k k_exn in
-            maybe_emit_module_block_init let_kind id ccenv acc body_expr
+            maybe_emit_module_block_init let_kind id duid ccenv
+              (is_user_visible env id) acc (fun acc body_ccenv ->
+                cps acc env body_ccenv body k k_exn)
           in
           CC.close_let acc ccenv
             [ ( id,
@@ -807,12 +844,14 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
         defining_expr,
         body ) ->
     let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler:false
-      ~params:[id, duid, is_user_visible env id, layout]
+      ~params:
+        [ id, duid, user_visible_for_let_binding env id let_kind, layout ]
       ~body:(fun acc env ccenv after_defining_expr ->
         cps_tail acc env ccenv defining_expr after_defining_expr k_exn)
       ~handler:(fun acc env ccenv ->
-        let acc, body_expr = cps acc env ccenv body k k_exn in
-        maybe_emit_module_block_init let_kind id ccenv acc body_expr)
+        maybe_emit_module_block_init let_kind id duid ccenv
+          (is_user_visible env id) acc (fun acc body_ccenv ->
+            cps acc env body_ccenv body k k_exn))
   (* CR pchambart: This version would avoid one let cont, but would miss the
      value kind. It should be used when CC.close_let can propagate the
      value_kind. *)
