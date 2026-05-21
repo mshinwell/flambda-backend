@@ -12,9 +12,29 @@
 ;*                                                                        *
 ;**************************************************************************
 
+; Stage selection for the [Config] module:
+;   - the boot stage (profile=dev) is compiled by the host opam OCaml, which
+;     does not know the new [%standard_library_default] primitive.  It uses
+;     [config.common.boot.ml], which only contains static fall-backs.
+;   - the main stage (profile=main) is compiled by the bootstrapped OxCaml
+;     compiler (which does know the primitive). It uses [config.common.ml],
+;     which supports runtime override of [Config.standard_library_default] for
+;     relocatable installs.
+
 (rule
  (targets config.ml)
  (mode fallback)
+ (enabled_if (= %{profile} dev))
+ (deps config.generated.ml config.common.boot.ml)
+ (action
+  (with-stdout-to
+   %{targets}
+   (system "cat %{deps}"))))
+
+(rule
+ (targets config.ml)
+ (mode fallback)
+ (enabled_if (<> %{profile} dev))
  (deps config.generated.ml config.common.ml)
  (action
   (with-stdout-to

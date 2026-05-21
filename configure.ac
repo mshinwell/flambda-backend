@@ -480,6 +480,7 @@ AC_CONFIG_FILES([manual/src/version.tex])
 AC_CONFIG_FILES([manual/src/html_processing/src/common.ml])
 AC_CONFIG_FILES([ocamltest/ocamltest_config.ml])
 AC_CONFIG_FILES([utils/config.common.ml])
+AC_CONFIG_FILES([utils/config.common.boot.ml])
 AC_CONFIG_FILES([utils/config.generated.ml])
 AC_CONFIG_FILES([tools/eventlog_metadata])
 AS_IF([test "x$enable_runtime5" = "xyes"],
