@@ -92,6 +92,12 @@ let from_lambda (attr : Lambda.inlined_attribute) =
   | Always_inlined -> Always_inlined Expected_to_be_used
   | Never_inlined -> Never_inlined
   | Hint_inlined -> Hint_inlined
+  | Opt_inlined ->
+    (* [@inlined opt] is [@inlined hint] in classic mode, otherwise
+       [@inlined]. *)
+    if Flambda_features.classic_mode ()
+    then Hint_inlined
+    else Always_inlined Expected_to_be_used
   | Unroll i -> Unroll (i, Expected_to_be_used)
   | Default_inlined -> Default_inlined
 

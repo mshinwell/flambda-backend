@@ -3719,6 +3719,15 @@ let close_apply acc env (apply : IR.apply) : Expr_with_acc.t =
           (Warnings.Inlining_impossible
              Inlining_helpers.(
                inlined_attribute_on_partial_application_msg Inlined))
+      | Opt_inlined ->
+        (* [@inlined opt] behaves like [@inlined] when not in classic mode. *)
+        if not (Flambda_features.classic_mode ())
+        then
+          Location.prerr_warning
+            (Debuginfo.Scoped_location.to_location apply.loc)
+            (Warnings.Inlining_impossible
+               Inlining_helpers.(
+                 inlined_attribute_on_partial_application_msg Inlined))
       | Never_inlined | Hint_inlined | Default_inlined -> ());
       wrap_partial_application acc env apply.continuation apply approx ~provided
         ~provided_arity ~missing_arity ~missing_param_modes ~result_arity

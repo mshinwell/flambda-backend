@@ -775,6 +775,7 @@ type inlined_attribute =
   | Always_inlined (* [@inlined] or [@inlined always] *)
   | Never_inlined (* [@inlined never] *)
   | Hint_inlined (* [@inlined hint] *)
+  | Opt_inlined (* [@inlined opt] *)
   | Unroll of int (* [@unroll x] *)
   | Default_inlined (* no [@inlined] attribute *)
 
@@ -797,13 +798,14 @@ let equal_inlined_attribute (x : inlined_attribute) (y : inlined_attribute) =
   | Always_inlined, Always_inlined
   | Never_inlined, Never_inlined
   | Hint_inlined, Hint_inlined
+  | Opt_inlined, Opt_inlined
   | Default_inlined, Default_inlined
     ->
     true
   | Unroll u, Unroll v ->
     u = v
   | (Always_inlined | Never_inlined
-    | Hint_inlined | Unroll _ | Default_inlined), _ ->
+    | Hint_inlined | Opt_inlined | Unroll _ | Default_inlined), _ ->
     false
 
 type probe_desc = { name: string; enabled_at_init: bool; }
