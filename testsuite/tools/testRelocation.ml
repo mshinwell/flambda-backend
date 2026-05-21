@@ -27,12 +27,17 @@ module LocationMap = Map.Make(Location)
 (* Augment toolchain properties with information from the configuration (this
    essentially goes from "is foo capable of doing bar" to "foo does bar in this
    context". *)
-let effective_toolchain _config =
+let effective_toolchain config =
   let c_compiler_debug_paths_are_absolute =
     Toolchain.c_compiler_debug_paths_can_be_absolute
+    && (not Config.c_has_debug_prefix_map || config.has_relative_libdir = None)
   in
   let assembler_embeds_build_path =
     Toolchain.assembler_embeds_build_path
+    && (not Config.as_has_debug_prefix_map
+        || Config.architecture = "riscv"
+        || Config.as_is_cc
+        || config.has_relative_libdir = None)
   in
   c_compiler_debug_paths_are_absolute, assembler_embeds_build_path
 
@@ -62,18 +67,20 @@ let bindir_rules config file =
     (* Determine if the installation prefix should be found in this file *)
     let prefix =
       let code_embeds_stdlib_location =
-        (* The runtime binaries all contain OCAML_STDLIB_DIR and everything
-           except flexlink and ocamllex link with the Config module, either
-           directly or via ocamlcommon *)
-        not (List.mem basename ["flexlink.byte"; "flexlink.opt"; "flexlink";
-                                "ocamllex.byte"; "ocamllex.opt"; "ocamllex";
-                                "ocamlyacc"])
+        (* If the compiler is configured with an absolute libdir, the runtime
+           binaries all contain OCAML_STDLIB_DIR and everything except flexlink
+           and ocamllex link with the Config module, either directly or via
+           ocamlcommon *)
+        config.has_relative_libdir = None
+        && not (List.mem basename ["flexlink.byte"; "flexlink.opt"; "flexlink";
+                                   "ocamllex.byte"; "ocamllex.opt"; "ocamllex";
+                                   "ocamlyacc"])
       in
       let linker_embeds_stdlib_location =
         (* If the launcher doesn't search for ocamlrun, then either the #! stub
            will include the absolute path or the RNTM section will *)
         match classification with
-        | Tendered _ when not config.launcher_searches_for_ocamlrun -> true
+        | Tendered _ when config.has_runtime_search <> Config.Search -> true
         | _ -> false
       in
       if code_embeds_stdlib_location || linker_embeds_stdlib_location then
@@ -114,7 +121,7 @@ let bindir_rules config file =
       else
         (* Bytecode runtimes and ocamlyacc of which only ocamlrund is linked
            with -g *)
-        `Other, (basename = "ocamlrund")
+        `Other, (List.mem "ocamlrund" (String.split_on_char '-' basename))
     in
     (* Combine this with the properties of the platform to determine whether the
        executable will contain the build path. *)
@@ -134,7 +141,7 @@ let bindir_rules config file =
              stripped. However, since the C objects in libcamlrun are compiled
              with -g, this will still result in debug information for -custom
              runtime executables. *)
-          linked_with_debug
+          linked_with_debug && config.has_relative_libdir = None
           || (classification = Custom
               && Toolchain.linker_propagates_debug_information
               && c_compiler_debug_paths_are_absolute)
@@ -168,23 +175,27 @@ let libdir_rules config file =
        - contains objects which have been created by the assembler *)
     let (embeds_stdlib_location, has_ocaml_debug_info, has_c_debug_info,
          contains_assembled_objects) =
-      if basename = "Makefile.config" || basename = "ld.conf" then
-        (* These files all embed the Standard Library location *)
+      if basename = "Makefile.config" then
+        (* Embeds the Standard Library location *)
         (true, false, false, false)
       else if basename = "config.cmx"
               || basename = "dynlink_compilerlibs.cmx" then
         (* config.cmx contains Config.standard_library for inlining *)
-        (true, false, false, false)
+        let stdlib =
+          config.has_relative_libdir = None && not Config.flambda in
+        (stdlib, false, false, false)
       else if List.mem ext [".cma"; ".cmo"; ".cmt"; ".cmti"] then
         let stdlib = (* via Config.standard_library *)
-          List.mem basename ["config.cmt"; "config_main.cmt"; "dynlink.cma";
-                             "ocamlcommon.cma"] in
+          config.has_relative_libdir = None
+          && List.mem basename ["config.cmt"; "config_main.cmt"; "dynlink.cma";
+                                "ocamlcommon.cma"] in
+        (* The compiler's artefacts are all compiled with -g *)
         (stdlib, true, false, false)
       else if basename = "runtime-launch-info" then
         let has_c_debug_info =
           (* The mingw-w64 port doesn't strip stdlib/header.o *)
           String.starts_with ~prefix:"mingw" Config.system in
-        (true, false, has_c_debug_info, false)
+        (false, false, has_c_debug_info, false)
       else if ext = ".cmxs" then
         (* All the .cmxs files built by the distribution at present include C
            objects and obviously contain assembled objects. *)
@@ -203,12 +214,6 @@ let libdir_rules config file =
            (libcamlrun.a, libcamlrund.a, libcamlrun_shared.so, etc.
            Note that these properties are _not_ used for libasmrun* (see
            below) *)
-        let is_camlrun =
-          let dir = Filename.basename (Filename.dirname file) in
-          dir <> "stublibs"
-            && String.starts_with ~prefix:"libcamlrun" basename
-            && not (String.starts_with ~prefix:"libcamlruntime" basename)
-        in
         if ext = Config.ext_lib then
           (* Any archive produced by ocamlopt will have a .cmxa file with it *)
           let is_ocaml =
@@ -216,15 +221,15 @@ let libdir_rules config file =
           (* Config.standard_library is in ocamlcommon and the bytecode runtime
              embeds the Standard Library location *)
           let stdlib =
-            is_camlrun
-            || Filename.remove_extension basename = "dynlink"
-            || Filename.remove_extension basename = "ocamlcommon"
+            config.has_relative_libdir = None
+            && (Filename.remove_extension basename = "dynlink"
+                || Filename.remove_extension basename = "ocamlcommon")
           in
           (stdlib, false, (not is_ocaml), is_ocaml)
         else
           (* DLLs are either the shared versions of the runtime libraries or
              C stubs. All of these are compiled with -g *)
-          (is_camlrun, false, true, false)
+          (false, false, true, false)
       else
         (false, false, false, false)
     in
@@ -242,7 +247,7 @@ let libdir_rules config file =
              || Toolchain.linker_embeds_build_path) then
         Toolchain.linker_embeds_build_path
       else
-        has_ocaml_debug_info
+        has_ocaml_debug_info && config.has_relative_libdir = None
         || has_c_debug_info && c_compiler_debug_paths_are_absolute
         || contains_assembled_objects && assembler_embeds_build_path
         || ext = Config.ext_obj
@@ -254,8 +259,29 @@ let libdir_rules config file =
       else
         LocationMap.empty
     in
+    let prefix =
+      if config.has_relative_libdir <> None
+         && basename = "Makefile.config" then
+        LocationMap.add Relative false prefix
+      else
+        prefix
+    in
     if contains_build_path then
       LocationMap.add Build false prefix
+    (* Prior to #13828 (OCaml 5.4.0), .cmt and .cmti embed the absolute location
+       of the compiler without using BUILD_PATH_PREFIX_MAP. However, this
+       embedding is not entirely predictable, because it only happens when
+       ocamlc.opt or ocamlopt.opt is used for compilation, rather than when the
+       bytecode version of the tool is passed is explicitly to ocamlrun (in this
+       case, Sys.argv.(0) always retains the relative path used in the build
+       system). For this reason, when configured relatively, on Windows, with
+       native compilation available, accept that the Build directory may appear
+       in .cmt/.cmti files. *)
+    else if config.has_relative_libdir <> None
+            && Sys.win32
+            && config.has_ocamlopt
+            && (ext = ".cmt" || ext = ".cmti") then
+      LocationMap.add Build true prefix
     else
       prefix
 
@@ -515,17 +541,6 @@ let run ~reproducible config env =
     |> scan Environment.libdir "$libdir" libdir_rules
   in
   flush stderr;
-  (* Abort the harness if there are files which didn't match a ruleset *)
-  let () =
-    if results_are_reproducible && not consistent then
-      Harness.fail_because
-        "Internal error: bindir_rules and libdir_rules disagree with \
-         reproducible_rules"
-    else if results_are_reproducible <> reproducible then
-      Harness.fail_because
-        "The build is %sexpected to be reproducible"
-        (if not reproducible then "not " else "")
-  in
   (* Summarise the results, using wildcards to bring them to a readable
      length *)
   let sections =
@@ -644,7 +659,15 @@ let run ~reproducible config env =
     let pp_results = Format.(pp_print_list ~pp_sep pp_print_string) in
     Format.printf "@[<hov 4>  %a@]@." pp_results results
   in
+  (* Abort the harness if there are files which didn't match a ruleset *)
   if failed then
-    Harness.fail_because "Installed files don't match expectation"
-  else
-  List.iter display sections
+    Harness.fail_because "Installed files don't match expectation";
+  List.iter display sections;
+  if results_are_reproducible && not consistent then
+    Harness.fail_because
+      "Internal error: bindir_rules and libdir_rules disagree with \
+       reproducible_rules"
+  else if results_are_reproducible <> reproducible then
+    Harness.fail_because
+      "The build is %sexpected to be reproducible"
+      (if not reproducible then "not " else "")

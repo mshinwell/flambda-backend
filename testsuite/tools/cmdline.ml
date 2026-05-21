@@ -104,10 +104,10 @@ let parse argv =
   in
   let config =
     ref {has_ocamlnat = false; has_ocamlopt = false; has_relative_libdir = None;
-         has_runtime_search = None; launcher_searches_for_ocamlrun = false;
+         has_runtime_search = Absolute; launcher_searches_for_ocamlrun = false;
          target_launcher_searches_for_ocamlrun = false;
          bytecode_shebangs_by_default = false; shebangscripts = false;
-         libraries = []}
+         filename_mangling = false; libraries = []}
   in
   let error fmt = Printf.ksprintf (fun s -> raise (Arg.Bad s)) fmt in
   let check_tree () =
@@ -163,23 +163,22 @@ let parse argv =
     config := {!config with shebangscripts}
   in
   let parse_search = function
-  | "enable" -> true
-  | "always" -> false
+  | Some "enable" -> Config.Absolute_then_search
+  | Some "always" -> Config.Search
+  | None -> Config.Absolute
   | _ ->
       raise (Arg.Bad
         "--with-runtime-search: argument should be either enable or always")
   in
   let has_runtime_search arg =
-    let has_runtime_search = Option.map parse_search arg in
-    if has_runtime_search <> None then
-      error "--with-runtime-search is not implemented!";
+    let has_runtime_search = parse_search arg in
     config := {!config with has_runtime_search}
   in
   let args = Arg.align [
     "--pwd", Arg.Set_string pwd, "<pwd>\tCurrent working directory to use";
     "--bindir", Arg.String (check_exists ~absolute:true bindir), "\
 <bindir>\tDirectory containing programs (must share a prefix with --libdir)";
-    "--libdir", Arg.String (check_exists ~absolute:true libdir), "\
+    "--libdir", Arg.String (check_exists ~absolute:false libdir), "\
 <libdir>\tDirectory containing stdlib.cma (must share a prefix with --bindir)";
     "--summary", Arg.Set summary, "";
     "--verbose", Arg.Set verbose, "";

@@ -1945,6 +1945,44 @@ expect_LIBRARIES = $(addprefix compilerlibs/,\
 
 testsuite/tools/expect$(EXE): OC_BYTECODE_LINKFLAGS += -linkall
 
+# Relocatable-OCaml test harness: builds the in-prefix tester from
+# testsuite/tools/*. Mirrors dra27's setup from the upstream port.
+test_in_prefix_SOURCES = $(addprefix testsuite/tools/,\
+  stubs.c \
+  toolchain.mli toolchain.ml \
+  harness.mli harness.ml \
+  environment.mli environment.ml \
+  cmdline.mli cmdline.ml \
+  testBytecodeBinaries.mli testBytecodeBinaries.ml \
+  testDynlink.mli testDynlink.ml \
+  testLinkModes.mli testLinkModes.ml \
+  testRelocation.mli testRelocation.ml \
+  testToplevel.mli testToplevel.ml \
+  test_ld_conf.mli test_ld_conf.ml \
+  test_in_prefix.mli test_in_prefix.ml)
+test_in_prefix_LIBRARIES = \
+  otherlibs/unix/unix compilerlibs/ocamlcommon compilerlibs/ocamlbytecomp
+
+$(eval $(call COMPILE_C_FILE,testsuite/tools/%.b,testsuite/tools/%))
+$(eval $(call COMPILE_C_FILE,testsuite/tools/%.n,testsuite/tools/%))
+
+testsuite/tools/test_in_prefi%: CAMLC = $(BEST_OCAMLC) $(STDLIBFLAGS)
+testsuite/tools/test_in_prefi%: CAMLOPT = $(BEST_OCAMLOPT) $(STDLIBFLAGS)
+
+testsuite/tools/test_in_prefix$(EXE): OC_BYTECODE_LINKFLAGS += -custom
+
+ifeq "$(TARGET_LIBDIR_IS_RELATIVE)" "true"
+# test_in_prefix is run from testsuite/tools, not from the installation tree,
+# so it cannot use a relative stdlib path.
+testsuite/tools/test_in_prefix$(EXE): OC_COMMON_LINKFLAGS += \
+  -set-runtime-default 'standard_library_default=$(LIBDIR)'
+testsuite/tools/test_in_prefix.opt$(EXE): OC_COMMON_LINKFLAGS += \
+  -set-runtime-default 'standard_library_default=$(LIBDIR)'
+endif
+
+testsuite/tools/dummy$(EXE): testsuite/tools/dummy.$(O)
+	$(V_MKEXE)$(call MKEXE_VIA_CC,$@,$^)
+
 codegen_SOURCES = $(addprefix testsuite/tools/,\
   parsecmmaux.mli parsecmmaux.ml \
   parsecmm.mly \
