@@ -934,13 +934,23 @@ and transl_struct ~scopes loc fields cc rootpath module_path
      immediately before the binding chain that will populate the block.
      The tag/shape/mode match the eventual [Pinit_module_block] so that
      consumers can identify the start of a module's construction and learn
-     the shape of the eventual block. *)
+     the shape of the eventual block.  We use [Llet] (the primitive returns
+     unit) rather than [Lsequence] so the scope of the announce is explicit
+     in the IR. *)
   let lam =
     match module_path, module_representation_for_structure cc str_items with
     | Some module_path, Some announce_repr ->
       let tag, shape, mode = block_shape_for_announce announce_repr in
       let prim = Pannounce_module_block (tag, shape, mode, module_path) in
-      Lsequence (Lprim (prim, [], loc), lam)
+      let unit_id = Ident.create_local "unit" in
+      let unit_duid = Lambda.debug_uid_none in
+      Llet
+        ( Strict,
+          Lambda.layout_unit,
+          unit_id,
+          unit_duid,
+          Lprim (prim, [], loc),
+          lam )
     | None, _ | _, None -> lam
   in
   lam, repr
