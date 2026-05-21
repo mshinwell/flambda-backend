@@ -777,6 +777,14 @@ CAMLprim value caml_sys_const_arch_arm64(value unit)
    from native code (see [lambda_to_lambda_transforms.ml]). */
 char_os *caml_standard_library_default = NULL;
 
+#ifdef NATIVE_CODE
+/* The bytecode runtime defines [caml_runtime_standard_library_default] in the
+   generated prims.c (see gen_primsc.sh). The native runtime does not include
+   prims.c, so provide the same value here. */
+#include "build_config.h"
+const char_os *caml_runtime_standard_library_default = OCAML_STDLIB_DIR;
+#endif
+
 CAMLprim value caml_sys_const_standard_library_default(value unit)
 {
   return caml_copy_string_of_os(
