@@ -241,6 +241,8 @@ module Block_access_kind : sig
 
   val element_kind_for_load : t -> Flambda_kind.t
 
+  val element_kind_for_set : t -> Flambda_kind.t
+
   val element_subkind_for_load : t -> Flambda_kind.With_subkind.t
 
   val to_block_shape : t -> Flambda_kind.Block_shape.t

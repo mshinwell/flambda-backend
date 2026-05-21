@@ -1097,9 +1097,12 @@ let simplify_block_set _block_access_kind _init_or_assign ~field:_ dacc
     ~original_term _dbg ~arg1:_ ~arg1_ty:_ ~arg2:_ ~arg2_ty:_ ~result_var =
   SPR.create_unit dacc ~result_var ~original_term
 
-let simplify_module_block_init _block_access_kind ~field:_ dacc ~original_term
-    _dbg ~arg1:_ ~arg1_ty:_ ~arg2:_ ~arg2_ty:_ ~result_var =
-  SPR.create_unit dacc ~result_var ~original_term
+let simplify_module_block_init block_access_kind ~field:_ dacc ~original_term
+    _dbg ~arg1:_ ~arg1_ty:_ ~arg2 ~arg2_ty:_ ~result_var =
+  let kind = P.Block_access_kind.element_kind_for_set block_access_kind in
+  let ty = T.alias_type_of kind arg2 in
+  let dacc = DA.add_variable dacc result_var ty in
+  SPR.create original_term ~try_reify:false dacc
 
 let simplify_poke dacc ~original_term _dbg ~arg1:_ ~arg1_ty:_ ~arg2:_ ~arg2_ty:_
     ~result_var =
