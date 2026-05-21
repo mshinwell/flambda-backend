@@ -162,6 +162,8 @@ module Env = struct
       current_unit : Compilation_unit.t;
       current_depth : Variable.t option;
       value_approximations : value_approximation Variable.Map.t;
+      module_block_projections :
+        (Symbol.t * int * Flambda_kind.With_subkind.t) Variable.Map.t;
       big_endian : bool;
       path_to_root : Debuginfo.Scoped_location.t;
       inlining_history_tracker : Inlining_history.Tracker.t;
@@ -182,6 +184,7 @@ module Env = struct
       current_unit;
       current_depth = None;
       value_approximations = Variable.Map.empty;
+      module_block_projections = Variable.Map.empty;
       big_endian;
       path_to_root = Debuginfo.Scoped_location.Loc_unknown;
       inlining_history_tracker = Inlining_history.Tracker.empty current_unit;
@@ -199,6 +202,7 @@ module Env = struct
         current_unit;
         current_depth;
         value_approximations;
+        module_block_projections;
         big_endian;
         path_to_root;
         inlining_history_tracker;
@@ -215,6 +219,7 @@ module Env = struct
       current_unit;
       current_depth;
       value_approximations;
+      module_block_projections;
       big_endian;
       path_to_root;
       inlining_history_tracker;
@@ -322,6 +327,17 @@ module Env = struct
   let find_var_approximation t var =
     try Variable.Map.find var t.value_approximations
     with Not_found -> Value_approximation.Unknown (Variable.kind var)
+
+  let add_module_block_projection t var ~symbol ~field_index ~kind =
+    { t with
+      module_block_projections =
+        Variable.Map.add var
+          (symbol, field_index, kind)
+          t.module_block_projections
+    }
+
+  let find_module_block_projection_opt t var =
+    Variable.Map.find_opt var t.module_block_projections
 
   let set_path_to_root t (path_to_root : Debuginfo.Scoped_location.t) =
     match path_to_root with

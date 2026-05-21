@@ -82,11 +82,15 @@ let maybe_emit_module_block_init (let_kind : L.let_kind) id duid ccenv
       let body_ccenv, non_renamed_var =
         CCenv.add_var_like ccenv id user_visible var_kind
       in
-      let acc, body_expr = cps_body acc body_ccenv in
-      let machine_width = Acc.machine_width acc in
       let symbol =
         Lambda_to_flambda_primitives.module_block_symbol_for_path module_path
       in
+      let body_ccenv =
+        CCenv.add_module_block_projection body_ccenv non_renamed_var ~symbol
+          ~field_index ~kind:var_kind
+      in
+      let acc, body_expr = cps_body acc body_ccenv in
+      let machine_width = Acc.machine_width acc in
       let field = Target_ocaml_int.of_int machine_width field_index in
       let kind : P.Block_access_kind.t =
         Values { tag = Unknown; size = Unknown; field_kind = Any_value }

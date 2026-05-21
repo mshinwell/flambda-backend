@@ -2514,7 +2514,8 @@ let make_unboxed_function_wrapper acc function_slot ~unarized_params:params
 
 let close_one_function acc ~code_id ~external_env ~by_function_slot
     ~function_code_ids decl ~has_lifted_closure ~value_slots_from_idents
-    ~function_slots_from_idents ~approx_map function_declarations =
+    ~module_block_projections_from_idents ~function_slots_from_idents
+    ~approx_map function_declarations =
   let acc = Acc.with_free_names Name_occurrences.empty acc in
   let body = Function_decl.body decl in
   let loc = Function_decl.loc decl in
@@ -2586,6 +2587,23 @@ let close_one_function acc ~code_id ~external_env ~by_function_slot
           Ident.Map.add id var vars_for_idents ))
       value_slots_from_idents
       (Variable.Map.empty, Ident.Map.empty)
+  in
+  let ( (module_block_projections_to_bind :
+          (Symbol.t * int * Flambda_kind.With_subkind.t) Variable.Map.t),
+        vars_for_idents ) =
+    Ident.Map.fold
+      (fun id (symbol, field_index, kind)
+           (module_block_projections_to_bind, vars_for_idents) ->
+        let var =
+          Variable.create_with_same_name_as_ident id
+            (Flambda_kind.With_subkind.kind kind)
+        in
+        ( Variable.Map.add var
+            (symbol, field_index, kind)
+            module_block_projections_to_bind,
+          Ident.Map.add id var vars_for_idents ))
+      module_block_projections_from_idents
+      (Variable.Map.empty, vars_for_idents)
   in
   let coerce_to_deeper =
     Coercion.change_depth
@@ -2756,6 +2774,29 @@ let close_one_function acc ~code_id ~external_env ~by_function_slot
           in
           Let_with_acc.create acc (Bound_pattern.singleton var) named ~body)
         value_slots_to_bind (acc, body)
+    in
+    let acc, body =
+      Variable.Map.fold
+        (fun var (symbol, field_index, _kind) (acc, body) ->
+          let var = VB.create var Flambda_debug_uid.none Name_mode.normal in
+          let machine_width = Acc.machine_width acc in
+          let index = Target_ocaml_int.of_int machine_width field_index in
+          let block_access_kind : Flambda_primitive.Block_access_kind.t =
+            Values { tag = Unknown; size = Unknown; field_kind = Any_value }
+          in
+          let named =
+            Named.create_prim
+              (Unary
+                 ( Block_load
+                     { kind = block_access_kind;
+                       mut = Immutable;
+                       field = index
+                     },
+                   Simple.symbol symbol ))
+              Debuginfo.none
+          in
+          Let_with_acc.create acc (Bound_pattern.singleton var) named ~body)
+        module_block_projections_to_bind (acc, body)
     in
     let next_depth_expr = Rec_info_expr.succ (Rec_info_expr.var my_depth) in
     let bound =
@@ -2937,9 +2978,9 @@ let close_one_function acc ~code_id ~external_env ~by_function_slot
 
 let close_functions acc external_env ~current_region function_declarations =
   let compilation_unit = Compilation_unit.get_current_exn () in
-  let value_slots_from_idents =
+  let value_slots_from_idents, module_block_projections_from_idents =
     Ident.Set.fold
-      (fun id map ->
+      (fun id (value_slots, mb_projs) ->
         (* Filter out predefined exception identifiers and simple substitutions.
            The former will be turned into symbols, and the latter substituted
            when we closure-convert the body *)
@@ -2957,26 +2998,49 @@ let close_functions acc external_env ~current_region function_declarations =
                   ~symbol:(fun _ -> true, None, kind))
         in
         if has_non_var_subst || Ident.is_predef id
-        then map
+        then value_slots, mb_projs
         else
-          let name =
+          (* If the underlying variable is known to be available as a projection
+             from a module block (recorded by [maybe_emit_module_block_init]),
+             we will recover it in the function body via [Block_load] rather
+             than capturing it in a value slot. *)
+          let var_for_lookup =
             match subst_var with
-            | None -> Ident.name id
-            | Some var -> Variable.name var
+            | Some _ as v -> v
+            | None -> (
+              match Env.find_var_exn external_env id with
+              | exception Not_found -> None
+              | var, _ -> Some var)
           in
-          let is_always_immediate =
-            match[@ocaml.warning "-4"]
-              Flambda_kind.With_subkind.non_null_value_subkind kind
-            with
-            | Tagged_immediate -> true
-            | _ -> false
+          let module_block_projection =
+            match var_for_lookup with
+            | None -> None
+            | Some var -> Env.find_module_block_projection_opt external_env var
           in
-          Ident.Map.add id
-            (Value_slot.create compilation_unit ~name ~is_always_immediate
-               (Flambda_kind.With_subkind.kind kind))
-            map)
+          match module_block_projection with
+          | Some (symbol, field_index, proj_kind) ->
+            ( value_slots,
+              Ident.Map.add id (symbol, field_index, proj_kind) mb_projs )
+          | None ->
+            let name =
+              match subst_var with
+              | None -> Ident.name id
+              | Some var -> Variable.name var
+            in
+            let is_always_immediate =
+              match[@ocaml.warning "-4"]
+                Flambda_kind.With_subkind.non_null_value_subkind kind
+              with
+              | Tagged_immediate -> true
+              | _ -> false
+            in
+            ( Ident.Map.add id
+                (Value_slot.create compilation_unit ~name ~is_always_immediate
+                   (Flambda_kind.With_subkind.kind kind))
+                value_slots,
+              mb_projs ))
       (Function_decls.all_free_idents function_declarations)
-      Ident.Map.empty
+      (Ident.Map.empty, Ident.Map.empty)
   in
   let can_be_lifted =
     Ident.Map.is_empty value_slots_from_idents
@@ -3110,6 +3174,7 @@ let close_functions acc external_env ~current_region function_declarations =
               close_one_function acc ~code_id ~external_env ~by_function_slot
                 ~function_code_ids:function_code_ids_in_order function_decl
                 ~has_lifted_closure:can_be_lifted ~value_slots_from_idents
+                ~module_block_projections_from_idents
                 ~function_slots_from_idents ~approx_map function_declarations)
         in
         acc, approxs_and_code_ids)

@@ -189,6 +189,21 @@ module Env : sig
 
   val find_var_approximation : t -> Variable.t -> value_approximation
 
+  (** Record that a variable holds a value that is also available by loading
+      field [field_index] from the module block symbol. Used to recover module
+      block projections in closure conversion, replacing what would otherwise
+      become a [Project_value_slot] for the captured variable. *)
+  val add_module_block_projection :
+    t ->
+    Variable.t ->
+    symbol:Symbol.t ->
+    field_index:int ->
+    kind:Flambda_kind.With_subkind.t ->
+    t
+
+  val find_module_block_projection_opt :
+    t -> Variable.t -> (Symbol.t * int * Flambda_kind.With_subkind.t) option
+
   val current_depth : t -> Variable.t option
 
   val with_depth : t -> Variable.t -> t
