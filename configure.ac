@@ -3561,10 +3561,15 @@ AC_CONFIG_COMMANDS_PRE([
     [AS_IF([test "x$bindir_to_libdir" = 'x'],
       [TARGET_BINDIR="$HOST_BINDIR"],
       [TARGET_BINDIR='.'])])
-  eval "ocaml_libdir=\"$libdir\""
+  # When --with-relative-libdir is used we want ocaml_libdir to be the
+  # bindir-relative path (e.g. "../lib/ocaml") so the value embedded in the
+  # OSLD section of standalone bytecode binaries is also relative, and
+  # resolves correctly when the install tree is moved.
   AS_IF([test "x$bindir_to_libdir" = 'x'],
-    [TARGET_LIBDIR="$ocaml_libdir"],
-    [TARGET_LIBDIR="$bindir_to_libdir"])
+    [eval "ocaml_libdir=\"$libdir\""
+    TARGET_LIBDIR="$ocaml_libdir"],
+    [ocaml_libdir="$bindir_to_libdir"
+    TARGET_LIBDIR="$bindir_to_libdir"])
   AS_IF([test x"$target_launch_method" = 'x'],
     [target_launch_method="$launch_method"])
   prefix="$saved_prefix"
