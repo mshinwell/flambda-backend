@@ -598,6 +598,8 @@ module Static_const_or_code : sig
 
   val create_static_const : ?forward_decl:bool -> Static_const.t -> t
 
+  val is_forward_decl : t -> bool
+
   val to_code : t -> Function_params_and_body.t Code0.t option
 end
 

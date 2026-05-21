@@ -97,6 +97,7 @@ let dacc_inside_function context ~outer_dacc ~params ~my_closure ~my_alloc_mode
   let code_ids_to_remember = DA.code_ids_to_remember outer_dacc in
   let code_ids_to_never_delete = DA.code_ids_to_never_delete outer_dacc in
   let code_ids_never_simplified = DA.code_ids_never_simplified outer_dacc in
+  let forward_declared_symbols = DA.forward_declared_symbols outer_dacc in
   let used_value_slots = DA.used_value_slots outer_dacc in
   let shareable_constants = DA.shareable_constants outer_dacc in
   let slot_offsets = DA.slot_offsets outer_dacc in
@@ -107,6 +108,7 @@ let dacc_inside_function context ~outer_dacc ~params ~my_closure ~my_alloc_mode
   |> DA.with_code_ids_to_remember ~code_ids_to_remember
   |> DA.with_code_ids_to_never_delete ~code_ids_to_never_delete
   |> DA.with_code_ids_never_simplified ~code_ids_never_simplified
+  |> DA.with_forward_declared_symbols ~forward_declared_symbols
   |> DA.with_used_value_slots ~used_value_slots
   |> DA.with_shareable_constants ~shareable_constants
   |> DA.with_slot_offsets ~slot_offsets
@@ -131,6 +133,7 @@ let extract_accumulators_from_function outer_dacc ~dacc_after_body
   let code_ids_never_simplified =
     DA.code_ids_never_simplified dacc_after_body
   in
+  let forward_declared_symbols = DA.forward_declared_symbols dacc_after_body in
   let used_value_slots = UA.used_value_slots uacc_after_upwards_traversal in
   let shareable_constants =
     UA.shareable_constants uacc_after_upwards_traversal
@@ -145,6 +148,7 @@ let extract_accumulators_from_function outer_dacc ~dacc_after_body
     |> DA.with_code_ids_to_remember ~code_ids_to_remember
     |> DA.with_code_ids_to_never_delete ~code_ids_to_never_delete
     |> DA.with_code_ids_never_simplified ~code_ids_never_simplified
+    |> DA.with_forward_declared_symbols ~forward_declared_symbols
     |> DA.with_used_value_slots ~used_value_slots
     |> DA.with_shareable_constants ~shareable_constants
     |> DA.with_slot_offsets ~slot_offsets

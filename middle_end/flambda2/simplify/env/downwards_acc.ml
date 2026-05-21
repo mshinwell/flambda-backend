@@ -30,6 +30,7 @@ type t =
     code_ids_to_remember : Code_id.Set.t;
     code_ids_to_never_delete : Code_id.Set.t;
     code_ids_never_simplified : Code_id.Set.t;
+    forward_declared_symbols : Symbol.Set.t;
     slot_offsets : Slot_offsets.t Code_id.Map.t;
     debuginfo_rewrites : Debuginfo.t Simple.Map.t;
     are_lifting_conts : Are_lifting_conts.t;
@@ -51,7 +52,8 @@ let print_lifted_cont ppf (denv, original_handlers) =
 let [@ocamlformat "disable"] print ppf
       { denv; continuation_uses_env; shareable_constants; used_value_slots;
         lifted_constants; flow_acc; demoted_exn_handlers; code_ids_to_remember;
-        code_ids_to_never_delete; code_ids_never_simplified; slot_offsets; debuginfo_rewrites;
+        code_ids_to_never_delete; code_ids_never_simplified; forward_declared_symbols;
+        slot_offsets; debuginfo_rewrites;
         are_lifting_conts; lifted_continuations; continuation_lifting_budget;
         continuation_specialization_budget; continuations_to_specialize; specialization_map; } =
   Format.fprintf ppf "@[<hov 1>(\
@@ -65,6 +67,7 @@ let [@ocamlformat "disable"] print ppf
       @[<hov 1>(code_ids_to_remember@ %a)@]@ \
       @[<hov 1>(code_ids_to_never_delete@ %a)@]@ \
       @[<hov 1>(code_ids_never_simplified@ %a)@]@ \
+      @[<hov 1>(forward_declared_symbols@ %a)@]@ \
       @[<hov 1>(slot_offsets@ %a)@ \
       @[<hov 1>(debuginfo_rewrites@ %a)@]@ \
       @[<hov 1>(are_lifting_conts@ %a)@]@ \
@@ -84,6 +87,7 @@ let [@ocamlformat "disable"] print ppf
     Code_id.Set.print code_ids_to_remember
     Code_id.Set.print code_ids_to_never_delete
     Code_id.Set.print code_ids_never_simplified
+    Symbol.Set.print forward_declared_symbols
     (Code_id.Map.print Slot_offsets.print) slot_offsets
     (Simple.Map.print Debuginfo.print_compact) debuginfo_rewrites
     Are_lifting_conts.print are_lifting_conts
@@ -106,6 +110,7 @@ let create denv slot_offsets continuation_uses_env =
     code_ids_to_remember = Code_id.Set.empty;
     code_ids_to_never_delete = Code_id.Set.empty;
     code_ids_never_simplified = Code_id.Set.empty;
+    forward_declared_symbols = Symbol.Set.empty;
     debuginfo_rewrites = Simple.Map.empty;
     are_lifting_conts = Are_lifting_conts.no_lifting;
     lifted_continuations = [];
@@ -252,6 +257,19 @@ let code_ids_never_simplified t = t.code_ids_never_simplified
 
 let with_code_ids_never_simplified t ~code_ids_never_simplified =
   { t with code_ids_never_simplified }
+
+let add_forward_declared_symbols t syms =
+  { t with
+    forward_declared_symbols = Symbol.Set.union syms t.forward_declared_symbols
+  }
+
+let forward_declared_symbols t = t.forward_declared_symbols
+
+let with_forward_declared_symbols t ~forward_declared_symbols =
+  { t with forward_declared_symbols }
+
+let is_forward_declared_symbol t sym =
+  Symbol.Set.mem sym t.forward_declared_symbols
 
 let are_rebuilding_terms t = DE.are_rebuilding_terms t.denv
 

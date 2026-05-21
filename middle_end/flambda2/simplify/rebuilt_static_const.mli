@@ -47,6 +47,7 @@ val create_set_of_closures :
   t
 
 val create_block :
+  ?forward_decl:bool ->
   Are_rebuilding_terms.t ->
   Tag.Scannable.t ->
   Mutability.t ->

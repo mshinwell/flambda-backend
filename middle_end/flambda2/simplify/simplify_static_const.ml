@@ -77,35 +77,49 @@ let simplify_static_const_block_type ~machine_width ~tag ~fields ~shape
       Alloc_mode.For_types.heap ~machine_width
   | Mutable -> T.mutable_block Alloc_mode.For_types.heap
 
-let simplify_static_const_of_kind_value dacc (static_const : Static_const.t)
-    ~result_sym : Rebuilt_static_const.t * DA.t =
+let simplify_static_const_of_kind_value ?(forward_decl = false) dacc
+    (static_const : Static_const.t) ~result_sym : Rebuilt_static_const.t * DA.t
+    =
   let bind_result_sym typ =
     DA.map_denv dacc ~f:(fun denv ->
-        let denv = DE.define_symbol denv result_sym K.value in
+        let denv =
+          if DE.mem_symbol denv result_sym
+          then denv
+          else DE.define_symbol denv result_sym K.value
+        in
         DE.add_equation_on_symbol denv result_sym typ)
   in
   match static_const with
   | Block (tag, is_mutable, shape, fields) ->
-    let fields_with_tys =
-      let fields_with_kinds =
-        match shape with
-        | Value_only -> List.map (fun field -> field, K.value) fields
-        | Mixed_record shape ->
-          List.combine fields
-            (Array.to_list (K.Mixed_block_shape.field_kinds shape))
+    if forward_decl
+    then
+      let dacc = bind_result_sym (T.unknown K.value) in
+      ( Rebuilt_static_const.create_block ~forward_decl
+          (DA.are_rebuilding_terms dacc)
+          tag is_mutable shape ~fields:[],
+        dacc )
+    else
+      let fields_with_tys =
+        let fields_with_kinds =
+          match shape with
+          | Value_only -> List.map (fun field -> field, K.value) fields
+          | Mixed_record shape ->
+            List.combine fields
+              (Array.to_list (K.Mixed_block_shape.field_kinds shape))
+        in
+        List.map (simplify_field_of_block dacc) fields_with_kinds
       in
-      List.map (simplify_field_of_block dacc) fields_with_kinds
-    in
-    let fields, field_tys = List.split fields_with_tys in
-    let ty =
-      simplify_static_const_block_type ~tag ~fields:field_tys ~shape ~is_mutable
-        ~machine_width:(DE.machine_width (DA.denv dacc))
-    in
-    let dacc = bind_result_sym ty in
-    ( Rebuilt_static_const.create_block
-        (DA.are_rebuilding_terms dacc)
-        tag is_mutable shape ~fields,
-      dacc )
+      let fields, field_tys = List.split fields_with_tys in
+      let ty =
+        simplify_static_const_block_type ~tag ~fields:field_tys ~shape
+          ~is_mutable
+          ~machine_width:(DE.machine_width (DA.denv dacc))
+      in
+      let dacc = bind_result_sym ty in
+      ( Rebuilt_static_const.create_block ~forward_decl
+          (DA.are_rebuilding_terms dacc)
+          tag is_mutable shape ~fields,
+        dacc )
   | Boxed_float32 or_var ->
     let or_var, ty =
       simplify_or_variable dacc
@@ -311,6 +325,17 @@ let simplify_static_consts dacc (bound_static : Bound_static.t) static_consts
   then
     Misc.fatal_errorf "Bound symbols don't match static constants:@ %a@ =@ %a"
       Bound_static.print bound_static Static_const_group.print static_consts;
+  let forward_decl_symbols =
+    List.fold_left2
+      (fun acc bound_static_pat static_const_or_code ->
+        match (bound_static_pat : Bound_static.Pattern.t) with
+        | Block_like symbol
+          when Static_const_or_code.is_forward_decl static_const_or_code ->
+          Symbol.Set.add symbol acc
+        | Block_like _ | Code _ | Set_of_closures _ -> acc)
+      Symbol.Set.empty bound_static_list static_consts_list
+  in
+  let dacc = DA.add_forward_declared_symbols dacc forward_decl_symbols in
   (* The closure symbols are bound recursively across all of the definitions. We
      can start by giving these type [Unknown], since simplification of the
      constants that are neither pieces of code nor closures will not look at the
@@ -425,8 +450,9 @@ let simplify_static_consts dacc (bound_static : Bound_static.t) static_consts
       ~set_of_closures:(fun acc ~closure_symbols:_ _ -> acc)
       ~block_like:(fun
           (bound_static, static_consts, dacc) symbol static_const ->
+        let forward_decl = Symbol.Set.mem symbol forward_decl_symbols in
         let static_const, dacc =
-          simplify_static_const_of_kind_value dacc static_const
+          simplify_static_const_of_kind_value ~forward_decl dacc static_const
             ~result_sym:symbol
         in
         ( Bound_static.Pattern.block_like symbol :: bound_static,

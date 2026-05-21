@@ -112,6 +112,15 @@ val code_ids_never_simplified : t -> Code_id.Set.t
 val with_code_ids_never_simplified :
   t -> code_ids_never_simplified:Code_id.Set.t -> t
 
+val add_forward_declared_symbols : t -> Symbol.Set.t -> t
+
+val forward_declared_symbols : t -> Symbol.Set.t
+
+val with_forward_declared_symbols :
+  t -> forward_declared_symbols:Symbol.Set.t -> t
+
+val is_forward_declared_symbol : t -> Symbol.t -> bool
+
 val are_rebuilding_terms : t -> Are_rebuilding_terms.t
 
 val slot_offsets : t -> Slot_offsets.t Code_id.Map.t

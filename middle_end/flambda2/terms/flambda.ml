@@ -1366,6 +1366,11 @@ module Static_const_or_code = struct
     | Code _ | Deleted_code -> false
     | Static_const { const; _ } -> Static_const.is_set_of_closures const
 
+  let is_forward_decl t =
+    match t with
+    | Code _ | Deleted_code -> false
+    | Static_const { forward_decl; _ } -> forward_decl
+
   let to_code t =
     match t with
     | Code code -> Some code

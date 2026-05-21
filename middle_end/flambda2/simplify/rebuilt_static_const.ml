@@ -64,9 +64,9 @@ let cost_metrics t =
     cost_metrics
   | Code_not_rebuilt code -> Non_constructed_code.cost_metrics code
 
-let create_normal_non_code ~cost_metrics const =
+let create_normal_non_code ?(forward_decl = false) ~cost_metrics const =
   Normal
-    { const = Static_const_or_code.create_static_const const;
+    { const = Static_const_or_code.create_static_const ~forward_decl const;
       free_names = Static_const.free_names const;
       cost_metrics
     }
@@ -139,7 +139,8 @@ let free_names_of_fields fields =
     ~f:(fun free_names field ->
       Name_occurrences.union free_names (Simple.With_debuginfo.free_names field))
 
-let create_block are_rebuilding tag is_mutable shape ~fields =
+let create_block ?(forward_decl = false) are_rebuilding tag is_mutable shape
+    ~fields =
   let cost_metrics =
     Cost_metrics.from_size (Code_size.block (List.length fields))
   in
@@ -148,7 +149,8 @@ let create_block are_rebuilding tag is_mutable shape ~fields =
     let free_names = free_names_of_fields fields in
     Block_not_rebuilt { free_names; cost_metrics }
   else
-    create_normal_non_code ~cost_metrics (SC.block tag is_mutable shape fields)
+    create_normal_non_code ~forward_decl ~cost_metrics
+      (SC.block tag is_mutable shape fields)
 
 let create_boxed_float32 are_rebuilding ~machine_width or_var =
   let cost_metrics =
