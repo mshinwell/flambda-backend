@@ -441,7 +441,7 @@ let write_sh_launcher outchan bin_sh bindir search runtime =
   l  A  {|  test -n "$c" || c="$(command -v "$r")"                 |};
   l   E {|fi                                                       |};
   l  A  {|if test -z "$c"; then                                    |};
-  l  A  {|  echo 'This program requires an OCaml %s interpreter'>&2|} release;
+  l  A  {|  echo 'This program requires an OxCaml %s interpreter'>&2|} release;
   l  A  {|  echo "$r not found either with $0 or in \$PATH">&2     |};
   l  A  {|else                                                     |};
   l D   {|  exec %s "$0" "$@"                                      |} exec;

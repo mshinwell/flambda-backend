@@ -238,6 +238,20 @@ _install: compiler
 	done
 	mkdir _install/lib/stublibs
 	cp _build/main/parser.cmly _install/lib/ocaml/compiler-libs/
+	# Suffixed ocamlrun names for --enable-suffixing (relocatable port).
+	# dra27's bytelink emits launchers that reference [ocamlrun-<ZINC_ID>] (the
+	# Zinc Runtime ID, e.g. ocamlrun-4104). The Mangling.md scheme also
+	# expects [<TARGET>-ocamlrun-<BYTECODE_ID>] as the canonical file with
+	# symlinks for the shorter names. Create them here.
+	if [ "$(SUFFIXING)" = "true" ]; then \
+	  cd _install/bin && \
+	  for r in ocamlrun ocamlrund ocamlruni; do \
+	    if [ -f "$$r" ]; then \
+	      ln -sf "$$r" "$$r-$(ZINC_RUNTIME_ID)" ; \
+	      ln -sf "$$r" "$(TARGET)-$$r-$(BYTECODE_RUNTIME_ID)" ; \
+	    fi; \
+	  done; \
+	fi
 	find _build/main/ \( -name "flambda2*.cmi" -or -name "flambda2*.cms" \
           -or -name "flambda2*.cmti" -or -name "flambda2*.cmt" \) \
           -exec cp -f {} _install/lib/ocaml/compiler-libs \;

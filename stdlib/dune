@@ -50,6 +50,26 @@
  (action
   (run make COMPUTE_DEPS=false %{targets})))
 
+; runtime-launch-info is the bytecode-executable launcher prefixed with the
+; Zinc Runtime ID (or a NUL byte when suffixing is disabled). dra27's
+; commit #73 (Remove metadata from runtime-launch-info) made it a binary
+; artefact: <runtime-id-byte(s) | NUL> + tmpheader.exe contents. The
+; stdlib/Makefile rule for it (runtime-launch-info: tmpheader.exe) is what
+; we delegate to.
+(rule
+ (targets runtime-launch-info)
+ (deps
+  Makefile
+  header.c
+  ../Makefile.common
+  ../Makefile.config_if_required
+  ../Makefile.build_config
+  ../Makefile.config
+  ../%{env:RUNTIME_DIR=runtime-dir-env-var-not-set}/sak
+  ../%{env:RUNTIME_DIR=runtime-dir-env-var-not-set}/build_config.h)
+ (action
+  (run make COMPUTE_DEPS=false %{targets})))
+
 (copy_files ../Makefile.config)
 
 (install
@@ -508,7 +528,7 @@
   .stdlib.objs/native/stdlib__In_channel.cmx
   .stdlib.objs/native/stdlib__Out_channel.cmx
   (META as stdlib/META)
-  (runtime.info as runtime-launch-info))
+  runtime-launch-info)
  (section lib)
  (package ocaml_runtime_stdlib))
 

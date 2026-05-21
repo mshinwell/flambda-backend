@@ -398,7 +398,7 @@ NORETURN void search_and_exec_runtime(char_os *rntm, uint32_t rntm_bsz,
   }
 
   /* If we get here, we've failed... */
-  exit_with_error(T("This program requires OCaml ") SHORT_VERSION T("\n")
+  exit_with_error(T("This program requires OxCaml ") SHORT_VERSION T("\n")
                   T("Interpreter ("), (rntm_bindir_end + 1),
                   T(") not found with the program or in " PATH_NAME));
 }
