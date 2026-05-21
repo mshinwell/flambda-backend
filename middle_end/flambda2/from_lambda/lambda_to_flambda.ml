@@ -272,15 +272,14 @@ let is_user_visible env id : IR.user_visible =
       then Not_user_visible
       else User_visible
 
-(* For [Initializing_module { position = Field _ }] bindings, the [Llet]'s
-   id is, in [maybe_emit_module_block_init], bound to two Flambda variables:
-   a "renamed" variable that holds the defining expression (and feeds into
+(* For [Initializing_module { position = Field _ }] bindings, the [Llet]'s id
+   is, in [maybe_emit_module_block_init], bound to two Flambda variables: a
+   "renamed" variable that holds the defining expression (and feeds into
    [Module_block_init]) and a fresh "non-renamed" variable that becomes the
-   actual binding the body sees.  The renamed variable is an intermediate
-   that's invisible to the user, so we use [Not_user_visible] when
-   [close_let] / the let-cont creates it.  In all other cases (including
-   [Off_block] where no [Module_block_init] is emitted), we keep the normal
-   user-visibility. *)
+   actual binding the body sees. The renamed variable is an intermediate that's
+   invisible to the user, so we use [Not_user_visible] when [close_let] / the
+   let-cont creates it. In all other cases (including [Off_block] where no
+   [Module_block_init] is emitted), we keep the normal user-visibility. *)
 let user_visible_for_let_binding env id (let_kind : L.let_kind) :
     IR.user_visible =
   match let_kind with
@@ -844,8 +843,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
         defining_expr,
         body ) ->
     let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler:false
-      ~params:
-        [ id, duid, user_visible_for_let_binding env id let_kind, layout ]
+      ~params:[id, duid, user_visible_for_let_binding env id let_kind, layout]
       ~body:(fun acc env ccenv after_defining_expr ->
         cps_tail acc env ccenv defining_expr after_defining_expr k_exn)
       ~handler:(fun acc env ccenv ->
