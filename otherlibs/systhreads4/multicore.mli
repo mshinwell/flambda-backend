@@ -13,7 +13,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-@@ portable
 
 (** [Multicore] allows spawning preemptively scheduled threads to run on domains
     running in parallel. *)
@@ -30,9 +29,9 @@ val max_domains : unit -> int
       of the other domains managed by this library. *)
 val current_domain : unit -> int
 
-type ('a : value_or_null) spawn_result =
+type 'a spawn_result =
   | Spawned
-  | Failed of 'a * exn @@ aliased many * Printexc.raw_backtrace @@ aliased many
+  | Failed of 'a * exn * Printexc.raw_backtrace
 
 (** [spawn_on ~domain action] spawns [action] as a thread running on the
     specified [domain].
@@ -47,11 +46,10 @@ type ('a : value_or_null) spawn_result =
 
     @raise Sys_error in case the system fails to create a new thread. *)
 val spawn_on
-  :  ('a : value_or_null).
-     domain:int
-  -> ('a @ contended once portable unique -> unit) @ once portable unyielding
-  -> 'a @ contended once portable unique
-  -> 'a spawn_result @ contended once portable unique
+  :  domain:int
+  -> ('a -> unit)
+  -> 'a
+  -> 'a spawn_result
 
 (** [spawn action] spawns [action] as a thread running on some domain.
 
@@ -64,7 +62,6 @@ val spawn_on
 
     @raise Sys_error in case the system fails to create a new thread. *)
 val spawn
-  :  ('a : value_or_null).
-     ('a @ contended once portable unique -> unit) @ once portable unyielding
-  -> 'a @ contended once portable unique
-  -> 'a spawn_result @ contended once portable unique
+  :  ('a -> unit)
+  -> 'a
+  -> 'a spawn_result

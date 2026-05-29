@@ -14,7 +14,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-@@ portable
 
 open! Stdlib
 
@@ -373,7 +372,7 @@ module Make (Ord : OrderedType) : S with type key = Ord.t
 (** Functor building an implementation of the map structure
    given a totally ordered type. *)
 
-module MakePortable (Ord : sig @@ portable include OrderedType end)
-  : sig @@ portable include S with type key = Ord.t end
+module MakePortable (Ord : sig include OrderedType end)
+  : sig include S with type key = Ord.t end
 (** Like [Make], but takes a portable [compare] function to
     portable [Map] operations. *)

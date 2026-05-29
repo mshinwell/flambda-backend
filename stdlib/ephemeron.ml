@@ -381,7 +381,7 @@ module GenHashTable = struct
 
   end
 
-  module MakeSeededPortable(H: sig @@ portable
+  module MakeSeededPortable(H: sig
     type t
     type 'a container
     val create: t -> 'a -> 'a container
@@ -390,7 +390,7 @@ module GenHashTable = struct
     val get_data: 'a container -> 'a option
     val set_key_data: 'a container -> t -> 'a -> unit
     val check_key: 'a container -> bool
-  end) : sig @@ portable include SeededS with type key = H.t end
+  end) : sig include SeededS with type key = H.t end
   = struct
 
     type 'a t =
@@ -417,10 +417,10 @@ module GenHashTable = struct
     module Rng : sig
       val bits : unit -> int
     end = struct
-      (* This is safe since [bits] is a C call that cannot be preempted, 
+      (* This is safe since [bits] is a C call that cannot be preempted,
          we do not yield, and we do not borrow the state. *)
       let key = Domain.Safe.DLS.new_key Random.State.make_self_init
-      let[@inline] bits () = 
+      let[@inline] bits () =
         Random.State.bits (Obj.magic_uncontended (Domain.Safe.DLS.get key))
     end
 
@@ -776,7 +776,7 @@ module K1 = struct
       tbl
   end
 
-  module MakeSeededPortable (H:sig @@ portable include Hashtbl.SeededHashedType end) =
+  module MakeSeededPortable (H:sig include Hashtbl.SeededHashedType end) =
     GenHashTable.MakeSeededPortable(struct
       type 'a container = (H.t,'a) t
       type t = H.t
@@ -801,8 +801,8 @@ module K1 = struct
       let check_key = check_key
     end)
 
-  module MakePortable(H:sig @@ portable include Hashtbl.HashedType end)
-    : sig @@ portable include S with type key = H.t end =
+  module MakePortable(H:sig include Hashtbl.HashedType end)
+    : sig include S with type key = H.t end =
   struct
     include MakeSeededPortable(struct
         type t = H.t
@@ -937,8 +937,8 @@ module K2 = struct
   end
 
   module MakeSeededPortable
-      (H1:sig @@ portable include Hashtbl.SeededHashedType end)
-      (H2:sig @@ portable include Hashtbl.SeededHashedType end) =
+      (H1:sig include Hashtbl.SeededHashedType end)
+      (H2:sig include Hashtbl.SeededHashedType end) =
     GenHashTable.MakeSeededPortable(struct
       type 'a container = (H1.t,H2.t,'a) t
       type t = H1.t * H2.t
@@ -964,9 +964,9 @@ module K2 = struct
     end)
 
   module MakePortable
-      (H1: sig @@ portable include Hashtbl.HashedType end)
-      (H2: sig @@ portable include Hashtbl.HashedType end):
-    sig @@ portable include S with type key = H1.t * H2.t end =
+      (H1: sig include Hashtbl.HashedType end)
+      (H2: sig include Hashtbl.HashedType end):
+    sig include S with type key = H1.t * H2.t end =
   struct
     include MakeSeededPortable
         (struct
@@ -1114,7 +1114,7 @@ module Kn = struct
       tbl
   end
 
-  module MakeSeededPortable (H:sig @@ portable include Hashtbl.SeededHashedType end) =
+  module MakeSeededPortable (H:sig include Hashtbl.SeededHashedType end) =
     GenHashTable.MakeSeededPortable(struct
       type 'a container = (H.t,'a) t
       type t = H.t array
@@ -1160,8 +1160,8 @@ module Kn = struct
         check c (length c - 1)
     end)
 
-  module MakePortable(H: sig @@ portable include Hashtbl.HashedType end):
-    sig @@ portable include S with type key = H.t array end =
+  module MakePortable(H: sig include Hashtbl.HashedType end):
+    sig include S with type key = H.t array end =
   struct
     include MakeSeededPortable(struct
         type t = H.t

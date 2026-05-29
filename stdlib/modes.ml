@@ -13,35 +13,35 @@
 (**************************************************************************)
 
 module Global = struct
-  type ('a : value_or_null) t = { global : 'a @@ global } [@@unboxed]
+  type 'a t = { global : 'a } [@@unboxed]
 end
 
 module Portable = struct
-  type ('a : value_or_null) t = { portable : 'a @@ portable } [@@unboxed]
+  type 'a t = { portable : 'a } [@@unboxed]
 end
 
 module Contended = struct
-  type ('a : value_or_null) t = { contended : 'a @@ contended } [@@unboxed]
+  type 'a t = { contended : 'a } [@@unboxed]
 end
 
 module Portended = struct
-  type ('a : value_or_null) t =
-    { portended : 'a @@ portable contended }
+  type 'a t =
+    { portended : 'a }
   [@@unboxed]
 end
 
 module Aliased = struct
-  type ('a : value_or_null) t = { aliased : 'a @@ aliased } [@@unboxed]
+  type 'a t = { aliased : 'a } [@@unboxed]
 end
 
 module Shared = struct
-  type ('a : value_or_null) t = { shared : 'a @@ shared } [@@unboxed]
+  type 'a t = { shared : 'a } [@@unboxed]
 end
 
 module Many = struct
-  type ('a : value_or_null) t = { many : 'a @@ many } [@@unboxed]
+  type 'a t = { many : 'a } [@@unboxed]
 end
 
 module Unyielding = struct
-  type ('a : value_or_null) t = { unyielding : 'a @@ unyielding } [@@unboxed]
+  type 'a t = { unyielding : 'a } [@@unboxed]
 end

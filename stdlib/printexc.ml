@@ -106,25 +106,24 @@ let catch fct arg =
     eprintf "Uncaught exception: %s\n" (to_string x);
     exit 2
 
-type raw_backtrace_slot : immutable_data
+type raw_backtrace_slot
 type raw_backtrace_entry = private int
 type raw_backtrace = raw_backtrace_entry iarray
 
 external unsafe_iarray_to_array:
-  'a iarray -> 'a array @@ portable = "%array_of_iarray"
+  'a iarray -> 'a array = "%array_of_iarray"
 
 external iarray_length:
-  'a iarray -> int @@ portable = "%array_length"
+  'a iarray -> int = "%array_length"
 
 let to_array bt = Array.copy (unsafe_iarray_to_array bt)
 
 let raw_backtrace_entries bt = to_array bt
 
 external get_raw_backtrace:
-  unit -> raw_backtrace @@ portable = "caml_get_exception_raw_backtrace"
+  unit -> raw_backtrace = "caml_get_exception_raw_backtrace"
 
-external raise_with_backtrace: ('a : value_or_null).
-  exn -> raw_backtrace -> 'a @ portable unique @@ portable
+external raise_with_backtrace: exn -> raw_backtrace -> 'a
   = "%raise_with_backtrace"
 
 (* Disable warning 37: values are constructed in the runtime *)
@@ -145,10 +144,10 @@ type[@warning "-37"] backtrace_slot =
     }
 
 external convert_raw_backtrace_slot:
-  raw_backtrace_slot -> backtrace_slot @@ portable = "caml_convert_raw_backtrace_slot"
+  raw_backtrace_slot -> backtrace_slot = "caml_convert_raw_backtrace_slot"
 
 external convert_raw_backtrace:
-  raw_backtrace -> backtrace_slot array @@ portable = "caml_convert_raw_backtrace"
+  raw_backtrace -> backtrace_slot array = "caml_convert_raw_backtrace"
 
 let convert_raw_backtrace bt =
   try Some (convert_raw_backtrace bt)
@@ -283,18 +282,18 @@ end
 let raw_backtrace_length bt = iarray_length bt
 
 external get_raw_backtrace_slot :
-  raw_backtrace -> int -> raw_backtrace_slot @@ portable = "caml_raw_backtrace_slot"
+  raw_backtrace -> int -> raw_backtrace_slot = "caml_raw_backtrace_slot"
 
 external get_raw_backtrace_next_slot :
-  raw_backtrace_slot -> raw_backtrace_slot option @@ portable
+  raw_backtrace_slot -> raw_backtrace_slot option
   = "caml_raw_backtrace_next_slot"
 
 (* confusingly named:
    returns the *string* corresponding to the global current backtrace *)
 let get_backtrace () = raw_backtrace_to_string (get_raw_backtrace ())
 
-external record_backtrace: bool -> unit @@ portable = "caml_record_backtrace"
-external backtrace_status: unit -> bool @@ portable = "caml_backtrace_status"
+external record_backtrace: bool -> unit = "caml_record_backtrace"
+external backtrace_status: unit -> bool = "caml_backtrace_status"
 
 let rec register_printer_safe fn =
   let old_printers = Atomic.get printers in
@@ -304,7 +303,7 @@ let rec register_printer_safe fn =
 
 let register_printer_unsafe fn = register_printer_safe (Obj.magic_portable fn)
 
-external get_callstack: int -> raw_backtrace @@ portable = "caml_get_current_callstack"
+external get_callstack: int -> raw_backtrace = "caml_get_current_callstack"
 
 let exn_slot x =
   let x = Obj.repr x in
@@ -318,7 +317,7 @@ let exn_slot_name x =
   let slot = exn_slot x in
   (Obj.obj (Obj.field slot 0) : string)
 
-external get_debug_info_status : unit -> int @@ portable = "caml_ml_debug_info_status"
+external get_debug_info_status : unit -> int = "caml_ml_debug_info_status"
 
 (* Descriptions for errors in startup.h. See also backtrace.c *)
 let errors = [| "";

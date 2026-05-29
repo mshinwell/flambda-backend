@@ -14,7 +14,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-@@ portable
 
 open! Stdlib
 
@@ -46,7 +45,7 @@ val set_methods : table -> label array -> unit
 val narrow : table -> string array -> string array -> string array -> unit
 val widen : table -> unit
 val add_initializer : table -> (obj -> unit) -> unit
-val dummy_table : table @@ nonportable
+val dummy_table : table
 val create_table : string array -> table
 val init_class : table -> unit
 val inherits :
@@ -147,7 +146,7 @@ type params =
     mutable retry_count : int;
     mutable bucket_small_size : int }
 
-val params : params @@ nonportable
+val params : params
 
 (** {1 Statistics} *)
 

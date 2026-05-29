@@ -14,7 +14,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-@@ portable
 
 (** Floating-point arithmetic.
 
@@ -42,22 +41,22 @@ val one : t
 val minus_one : t
 (** The floating-point -1.s *)
 
-external neg : (t[@local_opt]) -> (t[@local_opt]) = "%negfloat32"
+external neg : t -> t = "%negfloat32"
 (** Unary negation. *)
 
-external add : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt])
+external add : t -> t -> t
   = "%addfloat32"
 (** Floating-point addition. *)
 
-external sub : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt])
+external sub : t -> t -> t
   = "%subfloat32"
 (** Floating-point subtraction. *)
 
-external mul : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt])
+external mul : t -> t -> t
   = "%mulfloat32"
 (** Floating-point multiplication. *)
 
-external div : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt])
+external div : t -> t -> t
   = "%divfloat32"
 (** Floating-point division. *)
 
@@ -67,22 +66,22 @@ external pow : t -> t -> t = "caml_power_float32_bytecode" "powf"
 
 (** Floating-point arithmetic operator overloads. *)
 module Operators : sig
-  external ( ~-. ) : (t[@local_opt]) -> (t[@local_opt]) = "%negfloat32"
+  external ( ~-. ) : t -> t = "%negfloat32"
   (** Unary negation. *)
 
-  external ( +. ) : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt])
+  external ( +. ) : t -> t -> t
     = "%addfloat32"
   (** Floating-point addition. *)
 
-  external ( -. ) : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt])
+  external ( -. ) : t -> t -> t
     = "%subfloat32"
   (** Floating-point subtraction. *)
 
-  external ( *. ) : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt])
+  external ( *. ) : t -> t -> t
     = "%mulfloat32"
   (** Floating-point multiplication. *)
 
-  external ( /. ) : (t[@local_opt]) -> (t[@local_opt]) -> (t[@local_opt])
+  external ( /. ) : t -> t -> t
     = "%divfloat32"
   (** Floating-point division. *)
 
@@ -114,7 +113,7 @@ val pred : t -> t
    the greatest floating-point number smaller than [x].  See also
    {!next_after}. *)
 
-external abs : (t[@local_opt]) -> (t[@local_opt]) = "%absfloat32"
+external abs : t -> t = "%absfloat32"
 (** [abs f] returns the absolute value of [f]. *)
 
 val infinity : t
@@ -168,27 +167,27 @@ val is_nan : t -> bool
 val is_integer : t -> bool
 (** [is_integer x] is [true] if and only if [x] is an integer. *)
 
-external of_float : (float[@local_opt]) -> t = "%float32offloat"
+external of_float : float -> t = "%float32offloat"
 (** Convert a 64-bit float to the nearest representable 32-bit float. *)
 
-external to_float : (t[@local_opt]) -> float = "%floatoffloat32"
+external to_float : t -> float = "%floatoffloat32"
 (** Convert a 32-bit float to a 64-bit float. *)
 
 external of_int : int -> t = "%float32ofint"
 (** Convert an integer to floating-point. *)
 
-external to_int : (t[@local_opt]) -> int = "%intoffloat32"
+external to_int : t -> int = "%intoffloat32"
 (** Truncate the given floating-point number to an integer.
     The result is unspecified if the argument is [nan] or falls outside the
     range of representable integers. *)
 
-external of_int64 : (int64[@local_opt]) -> t
+external of_int64 : int64 -> t
   = "caml_float32_of_int64_bytecode" "caml_float32_of_int64"
   [@@unboxed] [@@noalloc] [@@builtin]
 (** Convert the given 64-bit integer to the nearest representable 32-bit float.
     The amd64 OxCaml compiler translates this call to CVTSI2SS. *)
 
-external to_int64 : (t[@local_opt]) -> int64
+external to_int64 : t -> int64
   = "caml_float32_to_int64_bytecode" "caml_float32_to_int64"
   [@@unboxed] [@@noalloc] [@@builtin]
 (** Convert the given 32-bit float to a 64-bit integer,
@@ -198,14 +197,14 @@ external to_int64 : (t[@local_opt]) -> int64
     an unspecified, platform-dependent integer is returned.
     The amd64 OxCaml compiler translates this call to CVTTSS2SI. *)
 
-external of_bits : (int32[@local_opt]) -> t
+external of_bits : int32 -> t
   = "caml_float32_of_bits_bytecode" "caml_float32_of_bits"
   [@@unboxed] [@@noalloc] [@@builtin]
 (** Convert a 32-bit integer to a 32-bit float, preserving the value's
     bit pattern.
     The amd64 OxCaml compiler translates this call to MOVD. *)
 
-external to_bits : (t[@local_opt]) -> int32
+external to_bits : t -> int32
   = "caml_float32_to_bits_bytecode" "caml_float32_to_bits"
   [@@unboxed] [@@noalloc] [@@builtin]
 (** Convert a 32-bit float to a 32-bit integer, preserving the value's

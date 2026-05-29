@@ -36,65 +36,48 @@ type (+'a : any mod separable) t = 'a iarray
 
 (* Array operations *)
 
-external length : ('a : any mod separable). local_ 'a iarray -> int @@ portable
+external length : 'a iarray -> int
   = "%array_length"
-[@@layout_poly]
 external get :
-  ('a : any mod separable). ('a iarray[@local_opt]) -> int -> ('a[@local_opt])
-  @@ portable = "%array_safe_get"
-[@@layout_poly]
+  'a iarray -> int -> 'a = "%array_safe_get"
 external ( .:() ) :
-  ('a : any mod separable). ('a iarray[@local_opt]) -> int -> ('a[@local_opt])
-  @@ portable = "%array_safe_get"
-[@@layout_poly]
+  'a iarray -> int -> 'a = "%array_safe_get"
 external unsafe_get :
-  ('a : any mod separable). ('a iarray[@local_opt]) -> int -> ('a[@local_opt])
-  @@ portable = "%array_unsafe_get"
-[@@layout_poly]
-external concat : ('a : any mod separable). 'a iarray list -> 'a iarray
-  @@ portable = "caml_array_concat"
+  'a iarray -> int -> 'a = "%array_unsafe_get"
+external concat : 'a iarray list -> 'a iarray = "caml_array_concat"
 external concat_local :
-  ('a : any mod separable). local_ 'a iarray list -> local_ 'a iarray
-  @@ portable = "caml_array_concat_local"
+  'a iarray list -> 'a iarray = "caml_array_concat_local"
 
 external append_prim :
-  ('a : any mod separable). 'a iarray -> 'a iarray -> 'a iarray @@ portable
+  'a iarray -> 'a iarray -> 'a iarray
   = "caml_array_append"
 external append_prim_local :
-  ('a : any mod separable).
-  local_ 'a iarray -> local_ 'a iarray -> local_ 'a iarray @@ portable
+  'a iarray -> 'a iarray -> 'a iarray
   = "caml_array_append_local"
 external unsafe_sub :
-  ('a : any mod separable). 'a iarray -> int -> int -> 'a iarray @@ portable
+  'a iarray -> int -> int -> 'a iarray
   = "caml_array_sub"
 external unsafe_sub_local :
-  ('a : any mod separable). local_ 'a iarray -> int -> int -> local_ 'a iarray
-  @@ portable = "caml_array_sub_local"
-external unsafe_of_array : ('a : any mod separable). 'a array -> 'a iarray
-  @@ portable = "%array_to_iarray"
-external unsafe_to_array : ('a : any mod separable). 'a iarray -> 'a array
-  @@ portable = "%array_of_iarray"
+  'a iarray -> int -> int -> 'a iarray = "caml_array_sub_local"
+external unsafe_of_array : 'a array -> 'a iarray = "%array_to_iarray"
+external unsafe_to_array : 'a iarray -> 'a array = "%array_of_iarray"
 
 (* Used only to reimplement [init] *)
 external unsafe_set_mutable :
-  ('a : any mod separable). 'a array -> int -> 'a -> unit @@ portable
+  'a array -> int -> 'a -> unit
   = "%array_unsafe_set"
-[@@layout_poly]
 
 (* VERY UNSAFE: Any of these functions can be used to violate the "no forward
    pointers" restriction for the local stack if not used carefully.  Each of
    these can either make a local mutable array or mutate its contents, and if
    not careful, this can lead to an array's contents pointing forwards. *)
 external make_mutable_local :
-  ('a : value_or_null mod separable). int -> local_ 'a -> local_ 'a array
-  @@ portable = "caml_array_make_local"
+  int -> 'a -> 'a array = "caml_array_make_local"
 external unsafe_of_local_array :
-  ('a : any mod separable). local_ 'a array -> local_ 'a iarray @@ portable
+  'a array -> 'a iarray
   = "%array_to_iarray"
 external unsafe_set_local :
-  ('a : any mod separable). local_ 'a array -> int -> local_ 'a -> unit
-  @@ portable = "%array_unsafe_set"
-[@@layout_poly]
+  'a array -> int -> 'a -> unit = "%array_unsafe_set"
 
 (* We can't use immutable array literals in this file, since we don't want to
    require the stdlib to be compiled with extensions, so instead of [[::]] we
@@ -104,8 +87,7 @@ external unsafe_set_local :
 (* Really trusting the inliner here; to get maximum performance, it has to
    inline both [unsafe_init_local] *and* [f]. *)
 (** Precondition: [l >= 0]. *)
-let[@inline always] unsafe_init_local l (local_ f : int -> local_ 'a) = exclave_
-  if l = 0 then
+let[@inline always] unsafe_init_local l (f : int -> 'a) = if l = 0 then
     unsafe_of_local_array [||]
   else
     (* The design of this function is exceedingly delicate, and is the only way
@@ -119,7 +101,7 @@ let[@inline always] unsafe_init_local l (local_ f : int -> local_ 'a) = exclave_
        function, and why it's not tail-recursive; if it were tail-recursive,
        then we wouldn't have anywhere to put the array elements during the whole
        process. *)
-    let rec go ~l ~f i = exclave_ begin
+    let rec go ~l ~f i = begin
       let x = f i in
       if i = l - 1 then
         make_mutable_local l x
@@ -132,7 +114,7 @@ let[@inline always] unsafe_init_local l (local_ f : int -> local_ 'a) = exclave_
     unsafe_of_local_array (go ~l ~f 0)
 
 (* The implementation is copied from [Array] so that [f] can be [local_] *)
-let init l (local_ f) =
+let init l (f) =
   if l = 0 then unsafe_of_array [||] else
   if l < 0 then invalid_arg "Iarray.init"
   (* See #6575. We could also check for maximum array size, but this depends
@@ -144,8 +126,7 @@ let init l (local_ f) =
    done;
    unsafe_of_array res
 
-let init_local l f = exclave_
-  if l < 0 then invalid_arg "Iarray.init_local"
+let init_local l f = if l < 0 then invalid_arg "Iarray.init_local"
   (* See #6575. We could also check for maximum array size, but this depends
      on whether we create a float array or a regular one... *)
   else unsafe_init_local l f
@@ -155,8 +136,7 @@ let append a1 a2 =
   else if length a2 = 0 then a1
   else append_prim a1 a2
 
-let append_local a1 a2 = exclave_
-  if length a1 = 0 then a2 (* Safe because they're immutable *)
+let append_local a1 a2 = if length a1 = 0 then a2 (* Safe because they're immutable *)
   else if length a2 = 0 then a1
   else append_prim_local a1 a2
 
@@ -165,8 +145,7 @@ let sub a ofs len =
   then invalid_arg "Iarray.sub"
   else unsafe_sub a ofs len
 
-let sub_local a ofs len = exclave_
-  if ofs < 0 || len < 0 || ofs > length a - len
+let sub_local a ofs len = if ofs < 0 || len < 0 || ofs > length a - len
   then invalid_arg "Iarray.sub"
   else unsafe_sub_local a ofs len
 
@@ -210,8 +189,7 @@ let map f a =
     unsafe_of_array r
   end
 
-let map_local f a = exclave_
-  unsafe_init_local (length a) (fun i -> exclave_ f (unsafe_get a i))
+let map_local f a = unsafe_init_local (length a) (fun i -> f (unsafe_get a i))
 
 let map_local_input f a =
   let l = length a in
@@ -223,8 +201,7 @@ let map_local_input f a =
     unsafe_of_array r
   end
 
-let map_local_output f a = exclave_
-  unsafe_init_local (length a) (fun i -> exclave_ f (unsafe_get a i))
+let map_local_output f a = unsafe_init_local (length a) (fun i -> f (unsafe_get a i))
 
 let map2 f a b =
   let la = length a in
@@ -241,13 +218,12 @@ let map2 f a b =
     end
   end
 
-let map2_local f a b = exclave_
-  let la = length a in
+let map2_local f a b = let la = length a in
   let lb = length b in
   if la <> lb then
     invalid_arg "Iarray.map2_local: arrays must have the same length"
   else
-    unsafe_init_local la (fun i -> exclave_ f (unsafe_get a i) (unsafe_get b i))
+    unsafe_init_local la (fun i -> f (unsafe_get a i) (unsafe_get b i))
 
 let map2_local_inputs f a b =
   let la = length a in
@@ -264,13 +240,12 @@ let map2_local_inputs f a b =
     end
   end
 
-let map2_local_output f a b = exclave_
-  let la = length a in
+let map2_local_output f a b = let la = length a in
   let lb = length b in
   if la <> lb then
     invalid_arg "Iarray.map2_local: arrays must have the same length"
   else
-    unsafe_init_local la (fun i -> exclave_ f (unsafe_get a i) (unsafe_get b i))
+    unsafe_init_local la (fun i -> f (unsafe_get a i) (unsafe_get b i))
 
 let map2_local_first_input f a b =
   let la = length a in
@@ -302,21 +277,19 @@ let map2_local_second_input f a b =
     end
   end
 
-let map2_local_first_input_and_output f a b = exclave_
-  let la = length a in
+let map2_local_first_input_and_output f a b = let la = length a in
   let lb = length b in
   if la <> lb then
     invalid_arg "Iarray.map2_local: arrays must have the same length"
   else
-    unsafe_init_local la (fun i -> exclave_ f (unsafe_get a i) (unsafe_get b i))
+    unsafe_init_local la (fun i -> f (unsafe_get a i) (unsafe_get b i))
 
-let map2_local_second_input_and_output f a b = exclave_
-  let la = length a in
+let map2_local_second_input_and_output f a b = let la = length a in
   let lb = length b in
   if la <> lb then
     invalid_arg "Iarray.map2_local: arrays must have the same length"
   else
-    unsafe_init_local la (fun i -> exclave_ f (unsafe_get a i) (unsafe_get b i))
+    unsafe_init_local la (fun i -> f (unsafe_get a i) (unsafe_get b i))
 
 let iteri f a =
   for i = 0 to length a - 1 do f i (unsafe_get a i) done
@@ -334,8 +307,7 @@ let mapi f a =
     unsafe_of_array r
   end
 
-let mapi_local f a = exclave_
-  unsafe_init_local (length a) (fun i -> exclave_ f i (unsafe_get a i))
+let mapi_local f a = unsafe_init_local (length a) (fun i -> f i (unsafe_get a i))
 
 let mapi_local_input f a =
   let l = length a in
@@ -347,17 +319,14 @@ let mapi_local_input f a =
     unsafe_of_array r
   end
 
-let mapi_local_output f a = exclave_
-  unsafe_init_local (length a) (fun i -> exclave_ f i (unsafe_get a i))
+let mapi_local_output f a = unsafe_init_local (length a) (fun i -> f i (unsafe_get a i))
 
 let to_list a =
   let rec tolist i res =
     if i < 0 then res else tolist (i - 1) (unsafe_get a i :: res) in
   tolist (length a - 1) []
 
-let to_list_local a = exclave_
-  let rec tolist i res = exclave_
-    if i < 0 then res else tolist (i - 1) (unsafe_get a i :: res) in
+let to_list_local a = let rec tolist i res = if i < 0 then res else tolist (i - 1) (unsafe_get a i :: res) in
   tolist (length a - 1) []
 
 let of_list l = unsafe_of_array (Array.of_list l)
@@ -370,12 +339,11 @@ let rec list_length accu = function
 (* This shouldn't violate the forward-pointers restriction because the list
    elements already exist *)
 let of_list_local = function
-  | [] -> exclave_ unsafe_of_array [||]
-  | hd::tl as l -> exclave_
-      let a = make_mutable_local (list_length 0 l) hd in
+  | [] -> unsafe_of_array [||]
+  | hd::tl as l -> let a = make_mutable_local (list_length 0 l) hd in
       let rec fill i = function
-        | [] -> exclave_ a
-        | hd::tl -> exclave_ unsafe_set_local a i hd; fill (i+1) tl in
+        | [] -> a
+        | hd::tl -> unsafe_set_local a i hd; fill (i+1) tl in
       unsafe_of_local_array (fill 1 tl)
 
 let to_array ia = Array.copy (unsafe_to_array ia)
@@ -389,10 +357,8 @@ let fold_left f x a =
   done;
   !r
 
-let fold_left_local f x a = exclave_
-  let len = length a in
-  let rec go r i = exclave_
-    if i = len
+let fold_left_local f x a = let len = length a in
+  let rec go r i = if i = len
     then r
     else go (f r (unsafe_get a i)) (i+1)
   in
@@ -405,10 +371,8 @@ let fold_left_local_input f x a =
   done;
   !r
 
-let fold_left_local_output f x a = exclave_
-  let len = length a in
-  let rec go r i = exclave_
-    if i = len
+let fold_left_local_output f x a = let len = length a in
+  let rec go r i = if i = len
     then r
     else go (f r (unsafe_get a i)) (i+1)
   in
@@ -428,11 +392,9 @@ let fold_left_map f acc input_array =
     !acc, unsafe_of_array output_array
   end
 
-let fold_left_map_local f acc input_array = exclave_
-  let len = length input_array in
+let fold_left_map_local f acc input_array = let len = length input_array in
   if len = 0 then (acc, unsafe_of_local_array [||]) else begin
-    let rec go acc i = exclave_
-      let acc, elt = f acc (unsafe_get input_array i) in
+    let rec go acc i = let acc, elt = f acc (unsafe_get input_array i) in
       if i = len - 1 then
         acc, make_mutable_local len elt
       else begin
@@ -459,11 +421,9 @@ let fold_left_map_local_input f acc input_array =
     !acc, unsafe_of_array output_array
   end
 
-let fold_left_map_local_output f acc input_array = exclave_
-  let len = length input_array in
+let fold_left_map_local_output f acc input_array = let len = length input_array in
   if len = 0 then (acc, unsafe_of_local_array [||]) else begin
-    let rec go acc i = exclave_
-      let acc, elt = f acc (unsafe_get input_array i) in
+    let rec go acc i = let acc, elt = f acc (unsafe_get input_array i) in
       if i = len - 1 then
         acc, make_mutable_local len elt
       else begin
@@ -483,9 +443,7 @@ let fold_right f a x =
   done;
   !r
 
-let fold_right_local f a x = exclave_
-  let rec go r i = exclave_
-    if i = -1
+let fold_right_local f a x = let rec go r i = if i = -1
     then r
     else go (f (unsafe_get a i) r) (i-1)
   in
@@ -498,9 +456,7 @@ let fold_right_local_input f a x =
   done;
   !r
 
-let fold_right_local_output f a x = exclave_
-  let rec go r i = exclave_
-    if i = -1
+let fold_right_local_output f a x = let rec go r i = if i = -1
     then r
     else go (f (unsafe_get a i) r) (i-1)
   in
@@ -508,36 +464,32 @@ let fold_right_local_output f a x = exclave_
 
 (* CR aspectorzabusky: Why do I need this?  Shouldn't mode-crossing handle doing
    this? *)
-let[@inline always] globalize_bool : local_ bool -> bool = fun b -> b
+let[@inline always] globalize_bool : bool -> bool = fun b -> b
 
 let exists p a =
   let n = length a in
-  let rec loop i = exclave_
-    if i = n then false
+  let rec loop i = if i = n then false
     else if p (unsafe_get a i) then true
     else loop (succ i) in
   globalize_bool (loop 0)
 
 let exists_local p a =
   let n = length a in
-  let rec loop i = exclave_
-    if i = n then false
+  let rec loop i = if i = n then false
     else if p (unsafe_get a i) then true
     else loop (succ i) in
   globalize_bool (loop 0)
 
 let for_all p a =
   let n = length a in
-  let rec loop i = exclave_
-    if i = n then true
+  let rec loop i = if i = n then true
     else if p (unsafe_get a i) then loop (succ i)
     else false in
   globalize_bool (loop 0)
 
 let for_all_local p a =
   let n = length a in
-  let rec loop i = exclave_
-    if i = n then true
+  let rec loop i = if i = n then true
     else if p (unsafe_get a i) then loop (succ i)
     else false in
   globalize_bool (loop 0)
@@ -546,8 +498,7 @@ let for_all2 p l1 l2 =
   let n1 = length l1
   and n2 = length l2 in
   if n1 <> n2 then invalid_arg "Iarray.for_all2"
-  else let rec loop i = exclave_
-    if i = n1 then true
+  else let rec loop i = if i = n1 then true
     else if p (unsafe_get l1 i) (unsafe_get l2 i) then loop (succ i)
     else false in
   globalize_bool (loop 0)
@@ -556,8 +507,7 @@ let for_all2_local p l1 l2 =
   let n1 = length l1
   and n2 = length l2 in
   if n1 <> n2 then invalid_arg "Iarray.for_all2_local"
-  else let rec loop i = exclave_
-    if i = n1 then true
+  else let rec loop i = if i = n1 then true
     else if p (unsafe_get l1 i) (unsafe_get l2 i) then loop (succ i)
     else false in
   globalize_bool (loop 0)
@@ -566,8 +516,7 @@ let for_all2_local_first p l1 l2 =
   let n1 = length l1
   and n2 = length l2 in
   if n1 <> n2 then invalid_arg "Iarray.for_all2_local_first"
-  else let rec loop i = exclave_
-    if i = n1 then true
+  else let rec loop i = if i = n1 then true
     else if p (unsafe_get l1 i) (unsafe_get l2 i) then loop (succ i)
     else false in
   globalize_bool (loop 0)
@@ -576,8 +525,7 @@ let for_all2_local_second p l1 l2 =
   let n1 = length l1
   and n2 = length l2 in
   if n1 <> n2 then invalid_arg "Iarray.for_all2_local_second"
-  else let rec loop i = exclave_
-    if i = n1 then true
+  else let rec loop i = if i = n1 then true
     else if p (unsafe_get l1 i) (unsafe_get l2 i) then loop (succ i)
     else false in
   globalize_bool (loop 0)
@@ -586,8 +534,7 @@ let exists2 p l1 l2 =
   let n1 = length l1
   and n2 = length l2 in
   if n1 <> n2 then invalid_arg "Iarray.exists2"
-  else let rec loop i = exclave_
-    if i = n1 then false
+  else let rec loop i = if i = n1 then false
     else if p (unsafe_get l1 i) (unsafe_get l2 i) then true
     else loop (succ i) in
   globalize_bool (loop 0)
@@ -596,8 +543,7 @@ let exists2_local p l1 l2 =
   let n1 = length l1
   and n2 = length l2 in
   if n1 <> n2 then invalid_arg "Iarray.exists2_local"
-  else let rec loop i = exclave_
-    if i = n1 then false
+  else let rec loop i = if i = n1 then false
     else if p (unsafe_get l1 i) (unsafe_get l2 i) then true
     else loop (succ i) in
   globalize_bool (loop 0)
@@ -606,8 +552,7 @@ let exists2_local_first p l1 l2 =
   let n1 = length l1
   and n2 = length l2 in
   if n1 <> n2 then invalid_arg "Iarray.exists2_local_first"
-  else let rec loop i = exclave_
-    if i = n1 then false
+  else let rec loop i = if i = n1 then false
     else if p (unsafe_get l1 i) (unsafe_get l2 i) then true
     else loop (succ i) in
   globalize_bool (loop 0)
@@ -616,24 +561,21 @@ let exists2_local_second p l1 l2 =
   let n1 = length l1
   and n2 = length l2 in
   if n1 <> n2 then invalid_arg "Iarray.exists2_local_second"
-  else let rec loop i = exclave_
-    if i = n1 then false
+  else let rec loop i = if i = n1 then false
     else if p (unsafe_get l1 i) (unsafe_get l2 i) then true
     else loop (succ i) in
   globalize_bool (loop 0)
 
 let mem x a =
   let n = length a in
-  let rec loop i = exclave_
-    if i = n then false
+  let rec loop i = if i = n then false
     else if compare (unsafe_get a i) x = 0 then true
     else loop (succ i) in
   globalize_bool (loop 0)
 
 let memq x a =
   let n = length a in
-  let rec loop i = exclave_
-    if i = n then false
+  let rec loop i = if i = n then false
     else if x == (unsafe_get a i) then true
     else loop (succ i) in
   globalize_bool (loop 0)
@@ -649,10 +591,8 @@ let find_opt p a =
   in
   loop 0 [@nontail]
 
-let find_opt_local p a = exclave_
-  let n = length a in
-  let rec loop i = exclave_
-    if i = n then None
+let find_opt_local p a = let n = length a in
+  let rec loop i = if i = n then None
     else
       let x = unsafe_get a i in
       if p x then Some x
@@ -671,10 +611,8 @@ let find_map f a =
   in
   loop 0 [@nontail]
 
-let find_map_local f a = exclave_
-  let n = length a in
-  let rec loop i = exclave_
-    if i = n then None
+let find_map_local f a = let n = length a in
+  let rec loop i = if i = n then None
     else
       match f (unsafe_get a i) with
       | None -> loop (succ i)
@@ -693,10 +631,8 @@ let find_map_local_input f a =
   in
   loop 0 [@nontail]
 
-let find_map_local_output f a = exclave_
-  let n = length a in
-  let rec loop i = exclave_
-    if i = n then None
+let find_map_local_output f a = let n = length a in
+  let rec loop i = if i = n then None
     else
       match f (unsafe_get a i) with
       | None -> loop (succ i)
@@ -723,8 +659,7 @@ let split x =
 (* This shouldn't violate the forward-pointers restriction because the array
    elements already exist.  (This doesn't work for [combine], where we need to
    create the tuples.) *)
-let split_local x = exclave_
-  if x = unsafe_of_array [||]
+let split_local x = if x = unsafe_of_array [||]
   then unsafe_of_array [||], unsafe_of_array [||]
   else begin
     let a0, b0 = unsafe_get x 0 in
@@ -753,11 +688,10 @@ let combine a b =
   end in
   unsafe_of_array r
 
-let combine_local a b = exclave_
-  let na = length a in
+let combine_local a b = let na = length a in
   let nb = length b in
   if na <> nb then invalid_arg "Iarray.combine_local";
-  unsafe_init_local na (fun i -> exclave_ unsafe_get a i, unsafe_get b i)
+  unsafe_init_local na (fun i -> unsafe_get a i, unsafe_get b i)
 
 (* Must be fully applied due to the value restriction *)
 let lift_sort sorter cmp iarr =

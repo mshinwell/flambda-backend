@@ -20,18 +20,18 @@
 
 module TLS = Domain.Safe.TLS
 
-type t : value mod contended portable
+type t
 
 external thread_initialize : unit -> unit = "caml_thread_initialize"
-external thread_cleanup : unit -> unit @@ portable = "caml_thread_cleanup"
-external thread_new : (unit -> unit) @ once -> t @@ portable = "caml_thread_new"
-external thread_uncaught_exception : exn -> unit @@ portable =
+external thread_cleanup : unit -> unit = "caml_thread_cleanup"
+external thread_new : (unit -> unit) -> t = "caml_thread_new"
+external thread_uncaught_exception : exn -> unit =
             "caml_thread_uncaught_exception"
 
-external yield : unit -> unit @@ portable = "caml_thread_yield"
-external self : unit -> t @@ portable = "caml_thread_self" [@@noalloc]
-external id : t -> int @@ portable = "caml_thread_id" [@@noalloc]
-external join : t -> unit @@ portable = "caml_thread_join"
+external yield : unit -> unit = "caml_thread_yield"
+external self : unit -> t = "caml_thread_self" [@@noalloc]
+external id : t -> int = "caml_thread_id" [@@noalloc]
+external join : t -> unit = "caml_thread_join"
 
 (* For new, make sure the function passed to thread_new never
    raises an exception. *)
@@ -42,12 +42,12 @@ let default_uncaught_exception_handler = thread_uncaught_exception
 
 let uncaught_exception_handler = Atomic.make { Modes.Portable.portable = default_uncaught_exception_handler }
 
-let set_uncaught_exception_handler (fn @ portable) =
+let set_uncaught_exception_handler (fn) =
   Atomic.set uncaught_exception_handler { Modes.Portable.portable = fn }
 
 exception Exit
 
-let create (fn @ once) arg =
+let create (fn) arg =
   let tls_keys = Domain.TLS.Private.get_initial_keys () in
   thread_new
     (fun () ->
@@ -78,12 +78,12 @@ let create (fn @ once) arg =
           flush stderr)
 
 module Portable = struct
-  let create (fn @ once portable) arg = create fn arg
+  let create (fn) arg = create fn arg
 end
 
-let create (fn @ many) arg = create fn arg
+let create (fn) arg = create fn arg
 
-external exit_stub : unit -> unit @@ portable = "caml_thread_exit"
+external exit_stub : unit -> unit = "caml_thread_exit"
 
 let exit () =
   ignore (Sys.opaque_identity (check_memprof_cb ()));
@@ -132,9 +132,9 @@ let select = Unix.select
 
 let wait_pid p = Unix.waitpid [] p
 
-external sigmask : Unix.sigprocmask_command -> int list -> int list @@ portable
+external sigmask : Unix.sigprocmask_command -> int list -> int list
    = "caml_thread_sigmask"
-external wait_signal : int list -> int @@ portable = "caml_wait_signal"
+external wait_signal : int list -> int = "caml_wait_signal"
 
-external set_current_thread_name  : string -> unit @@ portable =
+external set_current_thread_name  : string -> unit =
   "caml_set_current_thread_name"

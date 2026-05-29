@@ -14,40 +14,32 @@
 
 [@@@ocaml.flambda_o3]
 
-type ('a : value_or_null, 'b : any) t : bits64 mod everything = ('a, 'b) idx_imm
+type ('a, 'b) t : bits64 mod everything = ('a, 'b) idx_imm
 
 external get
-  : ('a : value_or_null) ('b : any).
-  ('a[@local_opt]) -> ('a, 'b) idx_imm -> ('b[@local_opt])
+  : 'a -> ('a, 'b) idx_imm -> 'b
   = "%get_idx_imm"
-[@@layout_poly]
 
 external unsafe_create_into_iarray
-  : ('a : any mod non_float). int -> ('a iarray, 'a) idx_imm
+  : int -> ('a iarray, 'a) idx_imm
   = "%unsafe_array_idx"
-[@@layout_poly]
 
 external unsafe_create_into_iarray_indexed_by_int8
-  : ('a : any mod non_float). int8# -> ('a iarray, 'a) idx_imm
+  : int8# -> ('a iarray, 'a) idx_imm
   = "%unsafe_array_idx_indexed_by_int8#"
-[@@layout_poly]
 
 external unsafe_create_into_iarray_indexed_by_int16
-  : ('a : any mod non_float). int16# -> ('a iarray, 'a) idx_imm
+  : int16# -> ('a iarray, 'a) idx_imm
   = "%unsafe_array_idx_indexed_by_int16#"
-[@@layout_poly]
 
 external unsafe_create_into_iarray_indexed_by_int32
-  : ('a : any mod non_float). int32# -> ('a iarray, 'a) idx_imm
+  : int32# -> ('a iarray, 'a) idx_imm
   = "%unsafe_array_idx_indexed_by_int32#"
-[@@layout_poly]
 
 external unsafe_create_into_iarray_indexed_by_int64
-  : ('a : any mod non_float). int64# -> ('a iarray, 'a) idx_imm
+  : int64# -> ('a iarray, 'a) idx_imm
   = "%unsafe_array_idx_indexed_by_int64#"
-[@@layout_poly]
 
 external unsafe_create_into_iarray_indexed_by_nativeint
-  : ('a : any mod non_float). nativeint# -> ('a iarray, 'a) idx_imm
+  : nativeint# -> ('a iarray, 'a) idx_imm
   = "%unsafe_array_idx_indexed_by_nativeint#"
-[@@layout_poly]

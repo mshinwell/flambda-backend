@@ -30,7 +30,7 @@ let get_object_field (arr : _ array) field =
 
 (**** Object representation ****)
 
-external set_id: 'a -> 'a @@ portable = "caml_set_oo_id" [@@noalloc]
+external set_id: 'a -> 'a = "caml_set_oo_id" [@@noalloc]
 
 (**** Object copy ****)
 
@@ -76,7 +76,7 @@ type t = DummyA | DummyB | DummyC of int
 let _ = [DummyA; DummyB; DummyC 0] (* to avoid warnings *)
 
 type obj = t array
-external ret : (obj -> 'a) -> closure @@ portable = "%identity"
+external ret : (obj -> 'a) -> closure = "%identity"
 
 (**** Labels ****)
 
@@ -410,10 +410,10 @@ let create_object_and_run_initializers obj_0 table =
 let sendself obj lab =
   (magic obj : (obj -> t) array array).(0).(lab) obj
 *)
-external send : obj -> tag -> 'a @@ portable = "%send"
-external sendcache : obj -> tag -> t -> int -> 'a @@ portable = "%sendcache"
-external sendself : obj -> label -> 'a @@ portable = "%sendself"
-external get_public_method : obj -> tag -> closure @@ portable
+external send : obj -> tag -> 'a = "%send"
+external sendcache : obj -> tag -> t -> int -> 'a = "%sendcache"
+external sendself : obj -> label -> 'a = "%sendself"
+external get_public_method : obj -> tag -> closure
     = "caml_get_public_method" [@@noalloc]
 
 (**** table collection access ****)

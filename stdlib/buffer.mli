@@ -14,7 +14,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-@@ portable
 
 (** Extensible buffers.
 
@@ -49,7 +48,7 @@ open! Stdlib
     with a {!Mutex.t}).
 *)
 
-type t : mutable_data
+type t
 (** The abstract type of buffers. *)
 
 val create : int -> t
@@ -81,7 +80,7 @@ val sub : t -> int -> int -> string
     @raise Invalid_argument if [off] and [len] do not designate a valid
     range of [b]. *)
 
-val blit : t @ local -> int -> bytes @ local -> int -> int -> unit
+val blit : t -> int -> bytes -> int -> int -> unit
 (** [Buffer.blit src srcoff dst dstoff len] copies [len] characters from
    the current contents of the buffer [src], starting at offset [srcoff]
    to [dst], starting at character [dstoff].
@@ -148,10 +147,10 @@ val add_utf_16be_uchar : t -> Uchar.t -> unit
 
     @since 4.06 *)
 
-val add_string : t @ local -> string @ local -> unit
+val add_string : t -> string -> unit
 (** [add_string b s] appends the string [s] at the end of buffer [b]. *)
 
-val add_bytes : t @ local -> bytes @ local -> unit
+val add_bytes : t -> bytes -> unit
 (** [add_bytes b s] appends the byte sequence [s] at the end of buffer [b].
     @since 4.02 *)
 

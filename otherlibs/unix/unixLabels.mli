@@ -28,7 +28,6 @@
    manual/src/library/libunix.etex
 *)
 
-@@ portable
 
 (** Interface to the Unix system.
 
@@ -129,10 +128,10 @@ exception Unix_error of error * string * string
    {!UnixLabels.Unix_error} and {!Unix.Unix_error} are the same, and
    catching one will catch the other. *)
 
-val error_message : error @ local -> string
+val error_message : error -> string
 (** Return a string describing the given error code. *)
 
-val handle_unix_error : ('a -> 'b) @ local once -> 'a -> 'b @@ nonportable
+val handle_unix_error : ('a -> 'b) -> 'a -> 'b
 (** [handle_unix_error f x] applies [f] to [x] and returns the result.
    If the exception {!Unix_error} is raised, it prints a message
    describing the error and exits with code 2. *)
@@ -155,7 +154,7 @@ val unsafe_environment : unit -> string array
 
     @since 4.06 (4.12 in UnixLabels) *)
 
-val getenv : string @ local -> string
+val getenv : string -> string
 (** Return the value associated to a variable in the process
    environment, unless the process has special privileges.
    @raise Not_found if the variable is unbound or the process has
@@ -163,7 +162,7 @@ val getenv : string @ local -> string
 
    This function is identical to {!Sys.getenv}. *)
 
-val unsafe_getenv : string @ local -> string
+val unsafe_getenv : string -> string
 (** Return the value associated to a variable in the process
    environment.
 
@@ -177,9 +176,7 @@ val unsafe_getenv : string @ local -> string
    @raise Not_found if the variable is unbound.
    @since 4.06  *)
 
-val putenv : string @ local -> string @ local -> unit @@ nonportable
-[@@alert unsafe_multidomain
-    "Mutating the environment makes reading the environment unsafe."]
+val putenv : string -> string -> unit
 (** [putenv name value] sets the value associated to a
    variable in the process environment.
    [name] is the name of the environment variable,
@@ -218,7 +215,7 @@ type wait_flag = Unix.wait_flag =
   | WUNTRACED (** Report also the children that receive stop signals. *)
 (** Flags for {!waitpid}. *)
 
-val execv : prog:string @ local -> args:string array @ local read -> 'a
+val execv : prog:string -> args:string array -> 'a
 (** [execv prog args] execute the program in file [prog], with the arguments
    [args], and the current process environment.  Note that the first
    argument, [args.(0)], is by convention the filename of the program being
@@ -234,22 +231,22 @@ val execv : prog:string @ local -> args:string array @ local read -> 'a
    @raise Unix_error on failure *)
 
 val execve :
-  prog:string @ local -> args:string array @ local read ->
-  env:string array @ local read -> 'a
+  prog:string -> args:string array ->
+  env:string array -> 'a
 (** Same as {!execv}, except that the third argument provides the
    environment to the program executed. *)
 
-val execvp : prog:string @ local -> args:string array @ local read -> 'a
+val execvp : prog:string -> args:string array -> 'a
 (** Same as {!execv}, except that
    the program is searched in the path. *)
 
 val execvpe :
-  prog:string @ local -> args:string array @ local read ->
-  env:string array @ local read -> 'a
+  prog:string -> args:string array ->
+  env:string array -> 'a
 (** Same as {!execve}, except that
    the program is searched in the path. *)
 
-val fork : unit -> int @@ nonportable
+val fork : unit -> int
 (** Fork a new process. The returned integer is 0 for the child
    process, the pid of the child process for the parent process. It
    fails if the OCaml process is multi-core (any domain has been
@@ -267,7 +264,7 @@ val wait : unit -> int * process_status
 
    @raise Invalid_argument on Windows. Use {!waitpid} instead. *)
 
-val waitpid : mode:wait_flag list @ local -> int -> int * process_status
+val waitpid : mode:wait_flag list -> int -> int * process_status
 (** Same as {!wait}, but waits for the child process whose pid is given.
    A pid of [-1] means wait for any child.
    A pid of [0] means wait for any child in the same process group
@@ -373,7 +370,7 @@ type file_perm = int
     read for group, none for others *)
 
 external openfile :
-  (string[@local_opt]) -> mode:(open_flag list[@local_opt]) -> perm:file_perm
+  string -> mode:open_flag list -> perm:file_perm
   -> file_descr = "caml_unix_open"
 (** Open the named file with the given flags. Third argument is the
    permissions to give to the file if it is created (see
@@ -387,7 +384,7 @@ val fsync : file_descr -> unit
 
     @since 4.08 (4.12 in UnixLabels) *)
 
-val read : file_descr -> buf:bytes @ local -> pos:int -> len:int -> int
+val read : file_descr -> buf:bytes -> pos:int -> len:int -> int
 (** [read fd ~buf ~pos ~len] reads [len] bytes from descriptor [fd],
     storing them in byte sequence [buf], starting at position [pos] in
     [buf]. Return the number of bytes actually read. *)
@@ -395,12 +392,12 @@ val read : file_descr -> buf:bytes @ local -> pos:int -> len:int -> int
 val read_bigarray :
   file_descr ->
   buf:(_, Bigarray.int8_unsigned_elt, Bigarray.c_layout)
-    Bigarray.Array1.t @ local ->
+    Bigarray.Array1.t ->
   pos:int -> len:int -> int
 (** Same as {!read}, but read the data into a bigarray.
     @since 5.2 *)
 
-val write : file_descr -> buf:bytes @ local read -> pos:int -> len:int -> int
+val write : file_descr -> buf:bytes -> pos:int -> len:int -> int
 (** [write fd ~buf ~pos ~len] writes [len] bytes to descriptor [fd],
     taking them from byte sequence [buf], starting at position [pos]
     in [buff]. Return the number of bytes actually written.  [write]
@@ -410,25 +407,25 @@ val write : file_descr -> buf:bytes @ local read -> pos:int -> len:int -> int
 val write_bigarray :
   file_descr ->
   buf:(_, Bigarray.int8_unsigned_elt, Bigarray.c_layout)
-    Bigarray.Array1.t @ local read ->
+    Bigarray.Array1.t ->
   pos:int -> len:int -> int
 (** Same as {!write}, but take the data from a bigarray.
     @since 5.2 *)
 
 val single_write :
-  file_descr -> buf:bytes @ local read -> pos:int -> len:int -> int
+  file_descr -> buf:bytes -> pos:int -> len:int -> int
 (** Same as {!write}, but attempts to write only once.
    Thus, if an error occurs, [single_write] guarantees that no data
    has been written. *)
 
 val write_substring :
-  file_descr -> buf:string @ local -> pos:int -> len:int -> int
+  file_descr -> buf:string -> pos:int -> len:int -> int
 (** Same as {!write}, but take the data from a string instead of a byte
     sequence.
     @since 4.02 *)
 
 val single_write_substring :
-  file_descr -> buf:string @ local -> pos:int -> len:int -> int
+  file_descr -> buf:string -> pos:int -> len:int -> int
 (** Same as {!single_write}, but take the data from a string instead of
     a byte sequence.
     @since 4.02 *)
@@ -436,13 +433,12 @@ val single_write_substring :
 val single_write_bigarray :
   file_descr ->
   buf:(_, Bigarray.int8_unsigned_elt, Bigarray.c_layout)
-    Bigarray.Array1.t @ local read ->
+    Bigarray.Array1.t ->
   pos:int -> len:int -> int
 (** Same as {!single_write}, but take the data from a bigarray.
     @since 5.2 *)
 
 (** {1 Interfacing with the standard input/output library} *)
-
 
 
 val in_channel_of_descr : file_descr -> in_channel
@@ -518,7 +514,7 @@ val lseek : file_descr -> int -> mode:seek_command -> int
 (** Set the current position for a file descriptor, and return the resulting
     offset (from the beginning of the file). *)
 
-val truncate : string @ local -> len:int -> unit
+val truncate : string -> len:int -> unit
 (** Truncates the named file to the given size. *)
 
 val ftruncate : file_descr -> len:int -> unit
@@ -554,10 +550,10 @@ type stats = Unix.stats =
   }
 (** The information returned by the {!stat} calls. *)
 
-val stat : string @ local -> stats
+val stat : string -> stats
 (** Return the information for the named file. *)
 
-val lstat : string @ local -> stats
+val lstat : string -> stats
 (** Same as {!stat}, but in case the file is a symbolic link,
    return the information for the link itself. *)
 
@@ -573,13 +569,13 @@ val isatty : file_descr -> bool
 
 module LargeFile :
   sig
-    val lseek : file_descr -> int64 @ local -> mode:seek_command -> int64
+    val lseek : file_descr -> int64 -> mode:seek_command -> int64
     (** See [lseek]. *)
 
-    val truncate : string @ local -> len:int64 @ local -> unit
+    val truncate : string -> len:int64 -> unit
     (** See [truncate]. *)
 
-    val ftruncate : file_descr -> len:int64 @ local -> unit
+    val ftruncate : file_descr -> len:int64 -> unit
     (** See [ftruncate]. *)
 
     type stats = Unix.LargeFile.stats =
@@ -596,8 +592,8 @@ module LargeFile :
         st_mtime : float;           (** Last modification time *)
         st_ctime : float;           (** Last status change time *)
       }
-    val stat : string @ local -> stats
-    val lstat : string @ local -> stats
+    val stat : string -> stats
+    val lstat : string -> stats
     val fstat : file_descr -> stats
   end
 (** File operations on large files.
@@ -618,7 +614,7 @@ val map_file :
   ?pos (* thwart tools/sync_stdlib_docs *):int64 ->
   kind:('a, 'b) Stdlib.Bigarray.kind ->
   layout:'c Stdlib.Bigarray.layout -> shared:bool ->
-  dims:int array @ local read ->
+  dims:int array ->
   ('a, 'b, 'c) Stdlib.Bigarray.Genarray.t
 (** Memory mapping of a file as a Bigarray.
   [map_file fd ~kind ~layout ~shared ~dims]
@@ -670,7 +666,7 @@ val map_file :
 (** {1 Operations on file names} *)
 
 
-val unlink : string @ local -> unit
+val unlink : string -> unit
 (** Removes the named file.
 
     If the named file is a directory, raises:
@@ -680,7 +676,7 @@ val unlink : string @ local -> unit
     {- [EACCESS] on Windows}}
 *)
 
-val rename : src:string @ local -> dst:string @ local -> unit
+val rename : src:string -> dst:string -> unit
 (** [rename ~src ~dst] changes the name of a file from [src] to [dst],
     moving it between directories if needed.  If [dst] already
     exists, its contents will be replaced with those of [src].
@@ -688,8 +684,8 @@ val rename : src:string @ local -> dst:string @ local -> unit
     owner, etc) of [dst] can either be preserved or be replaced by
     those of [src].  *)
 
-val link : ?follow (* thwart tools/sync_stdlib_docs *) :bool @ local ->
-           src:string @ local -> dst:string @ local -> unit
+val link : ?follow (* thwart tools/sync_stdlib_docs *) :bool ->
+           src:string -> dst:string -> unit
 (** [link ?follow ~src ~dst] creates a hard link named [dst] to the file
    named [src].
 
@@ -703,7 +699,7 @@ val link : ?follow (* thwart tools/sync_stdlib_docs *) :bool @ local ->
                  unavailable.
    @raise ENOSYS On {e Windows} if [~follow:false] is requested. *)
 
-val realpath : string @ local -> string
+val realpath : string -> string
 (** [realpath p] is an absolute pathname for [p] obtained by resolving
     all extra [/] characters, relative path segments and symbolic links.
 
@@ -720,7 +716,7 @@ type access_permission = Unix.access_permission =
 (** Flags for the {!access} call. *)
 
 
-val chmod : string @ local -> perm:file_perm -> unit
+val chmod : string -> perm:file_perm -> unit
 (** Change the permissions of the named file. *)
 
 val fchmod : file_descr -> perm:file_perm -> unit
@@ -728,7 +724,7 @@ val fchmod : file_descr -> perm:file_perm -> unit
 
     @raise Invalid_argument on Windows *)
 
-val chown : string @ local -> uid:int -> gid:int -> unit
+val chown : string -> uid:int -> gid:int -> unit
 (** Change the owner uid and owner gid of the named file.
 
     @raise Invalid_argument on Windows *)
@@ -744,7 +740,7 @@ val umask : file_perm -> file_perm
 
     @raise Invalid_argument on Windows *)
 
-val access : string @ local -> perm:access_permission list @ local -> unit
+val access : string -> perm:access_permission list -> unit
 (** Check that the process has the given permissions over the named file.
 
    On Windows: execute permission [X_OK] cannot be tested, just
@@ -757,14 +753,14 @@ val access : string @ local -> perm:access_permission list @ local -> unit
 (** {1 Operations on file descriptors} *)
 
 
-val dup : ?cloexec: (* thwart tools/sync_stdlib_docs *) bool @ local ->
+val dup : ?cloexec: (* thwart tools/sync_stdlib_docs *) bool ->
           file_descr -> file_descr
 (** Return a new file descriptor referencing the same file as
    the given descriptor.
    See {!set_close_on_exec} for documentation on the [cloexec]
    optional argument. *)
 
-val dup2 : ?cloexec: (* thwart tools/sync_stdlib_docs *) bool @ local ->
+val dup2 : ?cloexec: (* thwart tools/sync_stdlib_docs *) bool ->
            src:file_descr -> dst:file_descr -> unit
 (** [dup2 ~src ~dst] duplicates [src] to [dst], closing [dst] if already
    opened.
@@ -838,19 +834,19 @@ val clear_close_on_exec : file_descr -> unit
 (** {1 Directories} *)
 
 
-val mkdir : string @ local -> perm:file_perm -> unit
+val mkdir : string -> perm:file_perm -> unit
 (** Create a directory with the given permissions (see {!umask}). *)
 
-val rmdir : string @ local -> unit
+val rmdir : string -> unit
 (** Remove an empty directory. *)
 
-val chdir : string @ local -> unit
+val chdir : string -> unit
 (** Change the process working directory. *)
 
 val getcwd : unit -> string
 (** Return the name of the current working directory. *)
 
-val chroot : string @ local -> unit
+val chroot : string -> unit
 (** Change the process root directory.
 
     @raise Invalid_argument on Windows *)
@@ -858,25 +854,24 @@ val chroot : string @ local -> unit
 type dir_handle = Unix.dir_handle
 (** The type of descriptors over opened directories. *)
 
-val opendir : string @ local -> dir_handle
+val opendir : string -> dir_handle
 (** Open a descriptor on a directory *)
 
-val readdir : dir_handle @ local -> string
+val readdir : dir_handle -> string
 (** Return the next entry in a directory.
    @raise End_of_file when the end of the directory has been reached. *)
 
-val rewinddir : dir_handle @ local -> unit
+val rewinddir : dir_handle -> unit
 (** Reposition the descriptor to the beginning of the directory *)
 
-val closedir : dir_handle @ local -> unit
+val closedir : dir_handle -> unit
 (** Close a directory descriptor. *)
-
 
 
 (** {1 Pipes and redirections} *)
 
 
-val pipe : ?cloexec: (* thwart tools/sync_stdlib_docs *) bool @ local ->
+val pipe : ?cloexec: (* thwart tools/sync_stdlib_docs *) bool ->
            unit -> file_descr * file_descr
 (** Create a pipe. The first component of the result is opened
    for reading, that's the exit to the pipe. The second component is
@@ -884,7 +879,7 @@ val pipe : ?cloexec: (* thwart tools/sync_stdlib_docs *) bool @ local ->
    See {!set_close_on_exec} for documentation on the [cloexec]
    optional argument. *)
 
-val mkfifo : string @ local -> perm:file_perm -> unit
+val mkfifo : string -> perm:file_perm -> unit
 (** Create a named pipe with the given permissions (see {!umask}).
 
    @raise Invalid_argument on Windows *)
@@ -894,7 +889,7 @@ val mkfifo : string @ local -> perm:file_perm -> unit
 
 
 val create_process :
-  prog:string @ local -> args:string array @ local read -> stdin:file_descr ->
+  prog:string -> args:string array -> stdin:file_descr ->
   stdout:file_descr -> stderr:file_descr -> int
 (** [create_process ~prog ~args ~stdin ~stdout ~stderr] creates a new process
     that executes the program in file [prog], with arguments [args]. Note that
@@ -910,8 +905,8 @@ val create_process :
     process. *)
 
 val create_process_env :
-  prog:string @ local -> args:string array @ local read ->
-  env:string array @ local read -> stdin:file_descr -> stdout:file_descr ->
+  prog:string -> args:string array ->
+  env:string array -> stdin:file_descr -> stdout:file_descr ->
   stderr:file_descr -> int
 (** [create_process_env ~prog ~args ~env ~stdin ~stdout ~stderr]
    works as {!create_process}, except that the extra argument
@@ -1054,8 +1049,8 @@ val close_process_full :
 (** {1 Symbolic links} *)
 
 
-val symlink : ?to_dir: (* thwart tools/sync_stdlib_docs *) bool @ local ->
-              src:string @ local -> dst:string @ local -> unit
+val symlink : ?to_dir: (* thwart tools/sync_stdlib_docs *) bool ->
+              src:string -> dst:string -> unit
 (** [symlink ?to_dir ~src ~dst] creates the file [dst] as a symbolic link
    to the file [src]. On Windows, [~to_dir] indicates if the symbolic link
    points to a directory or a file; if omitted, [symlink] examines [src]
@@ -1094,7 +1089,7 @@ val has_symlink : unit -> bool
    simply indicates that the symlink system call is available.
    @since 4.03 *)
 
-val readlink : string @ local -> string
+val readlink : string -> string
 (** Read the contents of a symbolic link. *)
 
 
@@ -1102,10 +1097,10 @@ val readlink : string @ local -> string
 
 
 external select :
-  read:(file_descr list[@local_opt]) ->
-  write:(file_descr list[@local_opt]) ->
-  except:(file_descr list[@local_opt]) ->
-  timeout:(float[@local_opt]) ->
+  read:file_descr list ->
+  write:file_descr list ->
+  except:file_descr list ->
+  timeout:float ->
   file_descr list * file_descr list * file_descr list = "caml_unix_select"
 (** Wait until some input/output operations become possible on
    some channels. The three list arguments are, respectively, a set
@@ -1178,7 +1173,7 @@ type sigprocmask_command = Unix.sigprocmask_command =
   | SIG_BLOCK
   | SIG_UNBLOCK
 
-val sigprocmask : mode:sigprocmask_command -> int list @ local -> int list
+val sigprocmask : mode:sigprocmask_command -> int list -> int list
 (** [sigprocmask ~mode sigs] changes the set of blocked signals.
    If [mode] is [SIG_SETMASK], blocked signals are set to those in
    the list [sigs].
@@ -1201,7 +1196,7 @@ val sigpending : unit -> int list
    @raise Invalid_argument on Windows (no inter-process
    signals on Windows) *)
 
-val sigsuspend : int list @ local -> unit
+val sigsuspend : int list -> unit
 (** [sigsuspend sigs] atomically sets the blocked signals to [sigs]
    and waits for a non-ignored, non-blocked signal to be delivered.
    On return, the blocked signals are reset to their initial value.
@@ -1248,18 +1243,18 @@ val time : unit -> float
 val gettimeofday : unit -> float
 (** Same as {!time}, but with resolution better than 1 second. *)
 
-val gmtime : float @ local -> tm
+val gmtime : float -> tm
 (** Convert a time in seconds, as returned by {!time}, into a date and
    a time. Assumes UTC (Coordinated Universal Time), also known as GMT.
    To perform the inverse conversion, set the TZ environment variable
    to "UTC", use {!mktime}, and then restore the original value of TZ. *)
 
-val localtime : float @ local -> tm
+val localtime : float -> tm
 (** Convert a time in seconds, as returned by {!time}, into a date and
    a time. Assumes the local time zone.
    The function performing the inverse conversion is {!mktime}. *)
 
-val mktime : tm @ local -> float * tm
+val mktime : tm -> float * tm
 (** Convert a date and time, specified by the [tm] argument, into
    a time in seconds, as returned by {!time}.  The [tm_isdst],
    [tm_wday] and [tm_yday] fields of [tm] are ignored.  Also return a
@@ -1277,7 +1272,7 @@ val alarm : int -> int
 val sleep : int -> unit
 (** Stop execution for the given number of seconds. *)
 
-val sleepf : float @ local -> unit
+val sleepf : float -> unit
 (** Stop execution for the given number of seconds.  Like [sleep],
     but fractions of seconds are supported.
 
@@ -1290,7 +1285,7 @@ val times : unit -> process_times
    for child processes. *)
 
 val utimes :
-  string @ local -> access:float @ local -> modif:float @ local -> unit
+  string -> access:float -> modif:float -> unit
 (** Set the last access time (second arg) and last modification time
    (third arg) for a file. Times are expressed in seconds from
    00:00:00 GMT, Jan. 1, 1970.  If both times are [0.0], the access
@@ -1321,7 +1316,7 @@ val getitimer : interval_timer -> interval_timer_status
    @raise Invalid_argument on Windows *)
 
 val setitimer :
-  interval_timer -> interval_timer_status @ local -> interval_timer_status
+  interval_timer -> interval_timer_status -> interval_timer_status
 (** [setitimer t s] sets the interval timer [t] and returns
    its previous status. The [s] argument is interpreted as follows:
    [s.it_value], if nonzero, is the time to the next timer expiration;
@@ -1372,13 +1367,13 @@ val getgroups : unit -> int array
 
    On Windows: always returns [[|1|]]. *)
 
-val setgroups : int array @ local read -> unit
+val setgroups : int array -> unit
 (** [setgroups groups] sets the supplementary group IDs for the
     calling process. Appropriate privileges are required.
 
     @raise Invalid_argument on Windows *)
 
-val initgroups : string @ local -> int -> unit
+val initgroups : string -> int -> unit
 (** [initgroups user group] initializes the group access list by
     reading the group database /etc/group and using all groups of
     which [user] is a member. The additional group [group] is also
@@ -1408,11 +1403,11 @@ type group_entry = Unix.group_entry =
 val getlogin : unit -> string
 (** Return the login name of the user executing the process. *)
 
-val getpwnam : string @ local -> passwd_entry
+val getpwnam : string -> passwd_entry
 (** Find an entry in [passwd] with the given name.
    @raise Not_found if no such entry exists, or always on Windows. *)
 
-val getgrnam : string @ local -> group_entry
+val getgrnam : string -> group_entry
 (** Find an entry in [group] with the given name.
 
    @raise Not_found if no such entry exists, or always on Windows. *)
@@ -1434,7 +1429,7 @@ val getgrgid : int -> group_entry
 type inet_addr = Unix.inet_addr
 (** The abstract type of Internet addresses. *)
 
-val inet_addr_of_string : string @ local -> inet_addr
+val inet_addr_of_string : string -> inet_addr
 (** Conversion from the printable representation of an Internet
     address to its internal representation.  The argument string
     consists of 4 numbers separated by periods ([XXX.YYY.ZZZ.TTT])
@@ -1442,7 +1437,7 @@ val inet_addr_of_string : string @ local -> inet_addr
     for IPv6 addresses.
     @raise Failure when given a string that does not match these formats. *)
 
-val string_of_inet_addr : inet_addr @ local -> string
+val string_of_inet_addr : inet_addr -> string
 (** Return the printable representation of the given Internet address.
     See {!inet_addr_of_string} for a description of the
     printable representation. *)
@@ -1461,7 +1456,7 @@ val inet6_addr_any : inet_addr
 val inet6_addr_loopback : inet_addr
 (** A special IPv6 address representing the host machine ([::1]). *)
 
-val is_inet6_addr : inet_addr @ local -> bool
+val is_inet6_addr : inet_addr -> bool
 (** Whether the given [inet_addr] is an IPv6 address.
     @since 4.12 *)
 
@@ -1498,7 +1493,7 @@ type sockaddr = Unix.sockaddr =
    [port] is the port number. *)
 
 val socket :
-  ?cloexec: (* thwart tools/sync_stdlib_docs *) bool @ local ->
+  ?cloexec: (* thwart tools/sync_stdlib_docs *) bool ->
     domain:socket_domain -> kind:socket_type -> protocol:int -> file_descr
 (** Create a new socket in the given domain, and with the
    given kind. The third argument is the protocol type; 0 selects
@@ -1506,11 +1501,11 @@ val socket :
    See {!set_close_on_exec} for documentation on the [cloexec]
    optional argument. *)
 
-val domain_of_sockaddr: sockaddr @ local -> socket_domain
+val domain_of_sockaddr: sockaddr -> socket_domain
 (** Return the socket domain adequate for the given socket address. *)
 
 val socketpair :
-  ?cloexec: (* thwart tools/sync_stdlib_docs *) bool @ local ->
+  ?cloexec: (* thwart tools/sync_stdlib_docs *) bool ->
     domain:socket_domain -> kind:socket_type -> protocol:int ->
     file_descr * file_descr
 (** Create a pair of unnamed sockets, connected together.
@@ -1519,7 +1514,7 @@ val socketpair :
 
    @raise Invalid_argument on Windows *)
 
-val accept : ?cloexec: (* thwart tools/sync_stdlib_docs *) bool @ local ->
+val accept : ?cloexec: (* thwart tools/sync_stdlib_docs *) bool ->
              file_descr -> file_descr * sockaddr
 (** Accept connections on the given socket. The returned descriptor
    is a socket connected to the client; the returned address is
@@ -1527,10 +1522,10 @@ val accept : ?cloexec: (* thwart tools/sync_stdlib_docs *) bool @ local ->
    See {!set_close_on_exec} for documentation on the [cloexec]
    optional argument. *)
 
-val bind : file_descr -> addr:sockaddr @ local -> unit
+val bind : file_descr -> addr:sockaddr -> unit
 (** Bind a socket to an address. *)
 
-val connect : file_descr -> addr:sockaddr @ local -> unit
+val connect : file_descr -> addr:sockaddr -> unit
 (** Connect a socket to an address. *)
 
 val listen : file_descr -> max:int -> unit
@@ -1564,39 +1559,38 @@ type msg_flag = Unix.msg_flag =
 (** The flags for {!recv}, {!recvfrom}, {!send} and {!sendto}. *)
 
 val recv :
-  file_descr -> buf:bytes @ local -> pos:int -> len:int ->
-  mode:msg_flag list @ local -> int
+  file_descr -> buf:bytes -> pos:int -> len:int ->
+  mode:msg_flag list -> int
 (** Receive data from a connected socket. *)
 
 val recvfrom :
-  file_descr -> buf:bytes @ local -> pos:int -> len:int ->
-  mode:msg_flag list @ local -> int * sockaddr
+  file_descr -> buf:bytes -> pos:int -> len:int ->
+  mode:msg_flag list -> int * sockaddr
 (** Receive data from an unconnected socket. *)
 
 val send :
-  file_descr -> buf:bytes @ local read -> pos:int -> len:int ->
-    mode:msg_flag list @ local -> int
+  file_descr -> buf:bytes -> pos:int -> len:int ->
+    mode:msg_flag list -> int
 (** Send data over a connected socket. *)
 
 val send_substring :
-  file_descr -> buf:string @ local -> pos:int -> len:int ->
-  mode:msg_flag list @ local -> int
+  file_descr -> buf:string -> pos:int -> len:int ->
+  mode:msg_flag list -> int
 (** Same as [send], but take the data from a string instead of a byte
     sequence.
     @since 4.02 *)
 
 val sendto :
-  file_descr -> buf:bytes @ local read -> pos:int -> len:int ->
-    mode:msg_flag list @ local -> addr:sockaddr @ local -> int
+  file_descr -> buf:bytes -> pos:int -> len:int ->
+    mode:msg_flag list -> addr:sockaddr -> int
 (** Send data over an unconnected socket. *)
 
 val sendto_substring :
-  file_descr -> buf:string @ local -> pos:int -> len:int ->
-  mode:msg_flag list @ local -> sockaddr @ local -> int
+  file_descr -> buf:string -> pos:int -> len:int ->
+  mode:msg_flag list -> sockaddr -> int
 (** Same as [sendto], but take the data from a string instead of a
     byte sequence.
     @since 4.02 *)
-
 
 
 (** {1 Socket options} *)
@@ -1664,7 +1658,7 @@ val getsockopt_optint : file_descr -> socket_optint_option -> int option
     an [int option]. *)
 
 val setsockopt_optint :
-      file_descr -> socket_optint_option -> int option @ local -> unit
+      file_descr -> socket_optint_option -> int option -> unit
 (** Same as {!setsockopt} for a socket option whose value is
     an [int option]. *)
 
@@ -1672,7 +1666,7 @@ val getsockopt_float : file_descr -> socket_float_option -> float
 (** Same as {!getsockopt} for a socket option whose value is a
     floating-point number. *)
 
-val setsockopt_float : file_descr -> socket_float_option -> float @ local -> unit
+val setsockopt_float : file_descr -> socket_float_option -> float -> unit
 (** Same as {!setsockopt} for a socket option whose value is a
     floating-point number. *)
 
@@ -1683,7 +1677,7 @@ val getsockopt_error : file_descr -> error option
 (** {1 High-level network connection functions} *)
 
 
-val open_connection : sockaddr @ local -> in_channel * out_channel
+val open_connection : sockaddr -> in_channel * out_channel
 (** Connect to a server at the given address.
    Return a pair of buffered channels connected to the server.
    Remember to call {!Stdlib.flush} on the output channel at the right
@@ -1706,8 +1700,8 @@ val shutdown_connection : in_channel -> unit
    connection is over. *)
 
 val establish_server :
-  (in_channel -> out_channel -> unit) @ local -> addr:sockaddr @ local
-  -> unit @@ nonportable
+  (in_channel -> out_channel -> unit) -> addr:sockaddr
+  -> unit
 (** Establish a server on the given address.
    The function given as first argument is called for each connection
    with two buffered channels connected to the client. A new process
@@ -1752,29 +1746,29 @@ type service_entry = Unix.service_entry =
 val gethostname : unit -> string
 (** Return the name of the local host. *)
 
-val gethostbyname : string @ local -> host_entry
+val gethostbyname : string -> host_entry
 (** Find an entry in [hosts] with the given name.
     @raise Not_found if no such entry exists. *)
 
-val gethostbyaddr : inet_addr @ local -> host_entry
+val gethostbyaddr : inet_addr -> host_entry
 (** Find an entry in [hosts] with the given address.
     @raise Not_found if no such entry exists. *)
 
-val getprotobyname : string @ local -> protocol_entry @@ nonportable
+val getprotobyname : string -> protocol_entry
 (** Find an entry in [protocols] with the given name.
     @raise Not_found if no such entry exists. *)
 
-val getprotobynumber : int -> protocol_entry @@ nonportable
+val getprotobynumber : int -> protocol_entry
 (** Find an entry in [protocols] with the given protocol number.
     @raise Not_found if no such entry exists. *)
 
 val getservbyname :
-  string @ local -> protocol:string @ local -> service_entry @@ nonportable
+  string -> protocol:string -> service_entry
 (** Find an entry in [services] with the given name.
     @raise Not_found if no such entry exists. *)
 
 val getservbyport :
-  int -> protocol:string @ local -> service_entry @@ nonportable
+  int -> protocol:string -> service_entry
 (** Find an entry in [services] with the given service number.
     @raise Not_found if no such entry exists. *)
 
@@ -1800,7 +1794,7 @@ type getaddrinfo_option = Unix.getaddrinfo_option =
 (** Options to {!getaddrinfo}. *)
 
 val getaddrinfo :
-  string @ local -> string @ local -> getaddrinfo_option list @ local ->
+  string -> string -> getaddrinfo_option list ->
   addr_info list
 (** [getaddrinfo host service opts] returns a list of {!addr_info}
     records describing socket parameters and addresses suitable for
@@ -1835,7 +1829,7 @@ type getnameinfo_option = Unix.getnameinfo_option =
 (** Options to {!getnameinfo}. *)
 
 val getnameinfo :
-  sockaddr @ local -> getnameinfo_option list @ local -> name_info
+  sockaddr -> getnameinfo_option list -> name_info
 (** [getnameinfo addr opts] returns the host name and service name
     corresponding to the socket address [addr].  [opts] is a possibly
     empty list of options that governs how these names are obtained.
@@ -1911,7 +1905,7 @@ type setattr_when = Unix.setattr_when =
   | TCSAFLUSH
 
 val tcsetattr :
-  file_descr -> mode:setattr_when -> terminal_io @ local read -> unit
+  file_descr -> mode:setattr_when -> terminal_io -> unit
 (** Set the status of the terminal referred to by the given
    file descriptor. The second argument indicates when the
    status change takes place: immediately ([TCSANOW]),

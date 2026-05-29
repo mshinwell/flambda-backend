@@ -19,59 +19,44 @@ open! Stdlib
 [@@@ocaml.flambda_o3]
 
 (* An alias for the type of arrays. *)
-type ('a : any mod separable) t = 'a array
+type 'a t = 'a array
 
 (* Array operations *)
 
-external length : ('a : value_or_null mod separable).
-  ('a array[@local_opt]) @ immutable -> int @@ stateless
+external length : 'a array -> int
   = "%array_length"
-external get : ('a : value_or_null mod separable).
-  ('a array[@local_opt]) -> int -> 'a @@ portable
+external get : 'a array -> int -> 'a
   = "%array_safe_get"
-external set : ('a : value_or_null mod separable).
-  ('a array[@local_opt]) -> int -> 'a -> unit @@ portable
+external set : 'a array -> int -> 'a -> unit
   = "%array_safe_set"
-external unsafe_get : ('a : value_or_null mod separable).
-  ('a array[@local_opt]) -> int -> 'a @@ portable
+external unsafe_get : 'a array -> int -> 'a
   = "%array_unsafe_get"
-external unsafe_set : ('a : value_or_null mod separable).
-  ('a array[@local_opt]) -> int -> 'a -> unit @@ portable
+external unsafe_set : 'a array -> int -> 'a -> unit
   = "%array_unsafe_set"
-external make : ('a : value_or_null mod separable).
-  int -> 'a -> 'a array @@ portable = "caml_array_make"
-external create : ('a : value_or_null mod separable).
-  int -> 'a -> 'a array @@ portable = "caml_array_make"
-external unsafe_sub : ('a : value_or_null mod separable).
-  'a array -> int -> int -> 'a array @@ portable = "caml_array_sub"
-external append_prim : ('a : value_or_null mod separable).
-  'a array -> 'a array -> 'a array @@ portable = "caml_array_append"
-external concat : ('a : value_or_null mod separable).
-  'a array list -> 'a array @@ portable = "caml_array_concat"
-external unsafe_blit : ('a : value_or_null mod separable).
-  'a array -> int -> 'a array -> int -> int -> unit @@ portable = "caml_array_blit"
-external unsafe_fill : ('a : value_or_null mod separable).
-  'a array -> int -> int -> 'a -> unit @@ portable = "caml_array_fill"
-external create_float : ('a : value_or_null mod separable).
-  int -> float array @@ portable = "caml_array_create_float"
+external make : int -> 'a -> 'a array = "caml_array_make"
+external create : int -> 'a -> 'a array = "caml_array_make"
+external unsafe_sub : 'a array -> int -> int -> 'a array = "caml_array_sub"
+external append_prim : 'a array -> 'a array -> 'a array = "caml_array_append"
+external concat : 'a array list -> 'a array = "caml_array_concat"
+external unsafe_blit : 'a array -> int -> 'a array -> int -> int -> unit = "caml_array_blit"
+external unsafe_fill : 'a array -> int -> int -> 'a -> unit = "caml_array_fill"
+external create_float : int -> float array = "caml_array_create_float"
 
 module Floatarray = struct
-  external create : int -> floatarray @@ portable = "caml_floatarray_create"
-  external length : (floatarray[@local_opt]) @ immutable -> int @@ stateless
+  external create : int -> floatarray = "caml_floatarray_create"
+  external length : floatarray -> int
     = "%floatarray_length"
   external get
-    : (floatarray[@local_opt]) @ shared -> int -> (float[@local_opt])
-    @@ portable
+    : floatarray -> int -> float
     = "%floatarray_safe_get"
   external set
-    : (floatarray[@local_opt]) -> int -> (float[@local_opt]) -> unit @@ portable
+    : floatarray -> int -> float -> unit
     = "%floatarray_safe_set"
   external unsafe_get
-    : (floatarray[@local_opt]) @ shared -> int -> (float[@local_opt])
-    @@ portable
+    : floatarray -> int -> float
     = "%floatarray_unsafe_get"
   external unsafe_set
-    : (floatarray[@local_opt]) -> int -> (float[@local_opt]) -> unit @@ portable
+    : floatarray -> int -> float -> unit
     = "%floatarray_unsafe_set"
 end
 

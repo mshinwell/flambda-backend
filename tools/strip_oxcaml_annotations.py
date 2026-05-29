@@ -155,8 +155,52 @@ def strip_local_opt(content):
 
 
 def strip_layout_poly(content):
-    """Remove `[@layout_poly]` attribute on `external` declarations."""
-    return re.sub(r'\s*\[@layout_poly\]', '', content)
+    """Remove `[@layout_poly]` / `[@@layout_poly]` attributes on `external`
+    declarations.
+
+    The single-`@` form attaches to the immediately following item; the
+    double-`@` form attaches to the declaration as a whole and is typically
+    placed on its own line after the `= "primitive_name"` line.
+    """
+    # `[@@layout_poly]` often appears on its own line after the external.
+    content = re.sub(
+        r'\n[ \t]*\[@@layout_poly\][ \t]*(?=\n)',
+        '',
+        content,
+    )
+    content = re.sub(r'\s*\[@@layout_poly\]', '', content)
+    content = re.sub(r'\s*\[@layout_poly\]', '', content)
+    return content
+
+
+def strip_local_keyword(content):
+    """Remove the OxCaml `local_` keyword that prefixes type expressions.
+
+    `local_` is an OxCaml syntactic shorthand for the `@ local` mode on a type.
+    Upstream OCaml has no equivalent, so we drop the keyword.
+    """
+    return re.sub(r'\blocal_\s+', '', content)
+
+
+def strip_global_keyword(content):
+    """Remove the OxCaml `global_` field modifier.
+
+    Used on record fields to indicate the field is `global` even when the
+    enclosing value is `local`. Upstream has no notion of locality, so the
+    keyword is dropped.
+    """
+    return re.sub(r'\bglobal_\s+', '', content)
+
+
+def strip_exclave_keyword(content):
+    """Remove the OxCaml `exclave_` keyword.
+
+    `exclave_` introduces an expression evaluated in the caller's local region,
+    used to return a `local`-mode value from a function. Stripping it makes
+    the expression a normal global-mode expression, which is what upstream
+    OCaml expects.
+    """
+    return re.sub(r'\bexclave_\s+', '', content)
 
 
 def strip_unsafe_allow_mode_crossing(content):
@@ -348,28 +392,46 @@ def strip_kind_on_locally_abstract(content):
       `(type a b c)` (no kinds, no change)
       `(type (a : k) (b : k) (c : k))` -> `(type a b c)`
       `(type (a : k))` -> `(type a)`
+
+    Also handles the unparenthesized `: type` quantifier used in let-binding
+    type annotations:
+      `: type (a : k) (b : k). T` -> `: type a b. T`
+      `: type a : k. T` -> `: type a. T`
     """
+    def bindings_to_names(inner):
+        """Extract names from a sequence of `(a : k)` or bare `a` bindings."""
+        bindings = re.findall(
+            rf"\(\s*(\w+)\s*:\s*{KIND_RE}\s*\)|(\w+)", inner)
+        return [a or b for (a, b) in bindings]
+
     # Form A: bare `(type NAMES : KIND)` - colon directly after name list.
     pattern = rf"\(\s*type\s+((?:\w+\s+)*\w+)\s*:\s*{KIND_RE}\s*\)"
     content = re.sub(pattern, r"(type \1)", content)
 
     # Form B: parenthesized per-binding `(type (a : k) (b : k) ...)`.
-    # We rewrite the inside of `(type ...)` if any binding has the form
-    # `(name : kind)`.
     def repl_form_b(m):
-        inner = m.group(1)
-        # Split inner into bindings, which are either `(name : kind)` or `name`.
-        bindings = re.findall(
-            rf"\(\s*(\w+)\s*:\s*{KIND_RE}\s*\)|(\w+)", inner)
-        names = [a or b for (a, b) in bindings]
+        names = bindings_to_names(m.group(1))
         if not names:
             return m.group(0)
         return f"(type {' '.join(names)})"
 
-    # Match `(type ...)` where the body contains at least one `(name : kind)`.
     content = re.sub(
         rf"\(\s*type\s+((?:\s*(?:\(\s*\w+\s*:\s*{KIND_RE}\s*\)|\w+))+)\s*\)",
         repl_form_b,
+        content,
+    )
+
+    # Form C: unparenthesized `: type ... .` in let-binding type annotations.
+    # E.g. `let f : type (a : k) (b : k). ... = ...` -> `let f : type a b. ...`
+    def repl_form_c(m):
+        names = bindings_to_names(m.group(1))
+        if not names:
+            return m.group(0)
+        return f": type {' '.join(names)}."
+
+    content = re.sub(
+        rf":\s*type\s+((?:\s*(?:\(\s*\w+\s*:\s*{KIND_RE}\s*\)|\w+))+)\s*\.",
+        repl_form_c,
         content,
     )
     return content
@@ -415,6 +477,38 @@ def strip_top_level_modes(content):
     )
 
 
+def strip_borrow_keyword(content):
+    """Replace `borrow_ EXPR` with just `EXPR`.
+
+    `borrow_` is an OxCaml-specific keyword used by the uniqueness analysis to
+    create a borrowed reference. Upstream OCaml has no equivalent concept, so
+    we treat it as a no-op: `borrow_ x` becomes `x`.
+    """
+    return re.sub(r'\bborrow_\s+', '', content)
+
+
+def strip_redundant_ident_parens(content):
+    """Remove parens around bare identifiers in binding positions.
+
+    OxCaml allows mode annotations on the bound identifier with the syntax
+    `let (foo @ MODES) = ...` and `module (Foo @@ MODES) : ...`.  After we
+    strip the modes the parens are left empty (`let (foo)`, `module (Foo)`),
+    which is invalid OCaml syntax. This pass removes those now-redundant
+    parens.
+
+    We only strip parens around bare ident-shaped names (not operators like
+    `(+)`, `(==)`, etc.), and only in positions immediately after `let`,
+    `and`, `module`, `module rec`, or `val` (with possible `rec`/`type`/etc.
+    modifiers in between).
+    """
+    # Match a binder keyword + optional `rec`/`type` + `(NAME)` where NAME is
+    # a normal lowercase/uppercase identifier.
+    pattern = re.compile(
+        r'\b(let|and|module|val)(\s+rec)?(\s+)\(\s*([A-Za-z_]\w*)\s*\)'
+    )
+    return pattern.sub(r'\1\2\3\4', content)
+
+
 # ---------------------------------------------------------------------------
 # Cleanup
 # ---------------------------------------------------------------------------
@@ -452,6 +546,13 @@ PIPELINE = [
     strip_top_level_modes,
     strip_at_at_modes,
     strip_at_modes,
+    # OxCaml-specific keywords.
+    strip_borrow_keyword,
+    strip_local_keyword,
+    strip_global_keyword,
+    strip_exclave_keyword,
+    # Tidy up paren artifacts left after stripping mode-annotated binders.
+    strip_redundant_ident_parens,
     # Final cleanup.
     cleanup_whitespace,
 ]

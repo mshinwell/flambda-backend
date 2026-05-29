@@ -526,7 +526,7 @@ and ('a, 'b, 'c, 'd, 'e, 'f) ignored =
 and ('a, 'b, 'c, 'd, 'e, 'f) format6 =
   Format of ('a, 'b, 'c, 'd, 'e, 'f) fmt * string
 
-let rec erase_rel : type a b c d e f g h i j k l .
+let rec erase_rel : type a b c d e f g h i j k l.
   (a, b, c, d, e, f,
    g, h, i, j, k, l) fmtty_rel -> (a, b, c, d, e, f) fmtty
 = function
@@ -572,16 +572,12 @@ let rec erase_rel : type a b c d e f g h i j k l .
    * CamlinternalFormat.fmtty_of_ignored_format to extract format type. *)
 
 (*
-let rec concat_fmtty : type a b c d e f g h .
+let rec concat_fmtty : type a b c d e f g h.
     (a, b, c, d, e, f) fmtty ->
     (f, b, c, e, g, h) fmtty ->
     (a, b, c, d, g, h) fmtty =
 *)
-let rec concat_fmtty :
-  type a1 b1 c1 d1 e1 f1
-       a2 b2 c2 d2 e2 f2
-       g1 j1 g2 j2
-  .
+let rec concat_fmtty : type a1 b1 c1 d1 e1 f1 a2 b2 c2 d2 e2 f2 g1 j1 g2 j2.
     (g1, b1, c1, j1, d1, a1,
      g2, b2, c2, j2, d2, a2) fmtty_rel ->
     (a1, b1, c1, d1, e1, f1,
@@ -625,7 +621,7 @@ fun fmtty1 fmtty2 -> match fmtty1 with
                            (* Format concatenation *)
 
 (* Concatenate two formats. *)
-let rec concat_fmt : type a b c d e f g h .
+let rec concat_fmt : type a b c d e f g h.
     (a, b, c, d, e, f) fmt ->
     (f, b, c, e, g, h) fmt ->
     (a, b, c, d, g, h) fmt =

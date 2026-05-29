@@ -14,7 +14,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-@@ portable
 
 open! Stdlib
 
@@ -454,8 +453,8 @@ module Hashtbl : sig
       the [create] operation of the result structure always returns
       non-randomized hash tables. *)
 
-    module MakePortable (H : sig @@ portable include HashedType end) :
-      sig @@ portable
+    module MakePortable (H : sig include HashedType end) :
+      sig
         include S with type key = H.t
                    and type 'a t = 'a Hashtbl.MakePortable(H).t
       end
@@ -544,8 +543,8 @@ module Hashtbl : sig
       or if randomization is globally on (see {!Hashtbl.randomize}).
       @since 4.00 *)
 
-    module MakeSeededPortable (H : sig @@ portable include SeededHashedType end) :
-    sig @@ portable
+    module MakeSeededPortable (H : sig include SeededHashedType end) :
+    sig
       include SeededS with type key = H.t
                        and type 'a t = 'a Hashtbl.MakeSeededPortable(H).t
     end
@@ -1041,8 +1040,8 @@ module Map : sig
   (** Functor building an implementation of the map structure
      given a totally ordered type. *)
 
-  module MakePortable (Ord : sig @@ portable include OrderedType end)
-    : sig @@ portable
+  module MakePortable (Ord : sig include OrderedType end)
+    : sig
       include S with type key = Ord.t
                  and type 'a t = 'a Map.MakePortable(Ord).t
     end
@@ -1360,8 +1359,8 @@ module Set : sig
   (** Functor building an implementation of the set structure
      given a totally ordered type. *)
 
-  module MakePortable (Ord : sig @@ portable include OrderedType end)
-    : sig @@ portable
+  module MakePortable (Ord : sig include OrderedType end)
+    : sig
       include S with type elt = Ord.t
                  and type t = Set.MakePortable(Ord).t
     end

@@ -26,4 +26,4 @@
  ******************************************************************************)
 
 (** Evaluate a quoted OCaml expression at runtime. *)
-val eval : 'a expr @ once -> 'a eval
+val eval : 'a expr -> 'a eval

@@ -24,13 +24,11 @@ open! Stdlib
 *)
 
 val register : string -> 'a -> unit
-[@@alert unsafe_multidomain "Use [Callback.Safe.register]."]
 (** [Callback.register n v] registers the value [v] under
    the name [n]. C code can later retrieve a handle to [v]
    by calling [caml_named_value(n)]. *)
 
 val register_exception : string -> exn -> unit
-[@@alert unsafe_multidomain "Use [Callback.Safe.register_exception]."]
 (** [Callback.register_exception n exn] registers the
    exception contained in the exception value [exn]
    under the name [n]. C code can later retrieve a handle to
@@ -41,13 +39,13 @@ val register_exception : string -> exn -> unit
 (** Submodule containing non-backwards-compatible functions which enforce thread safety
     via modes. *)
 module Safe : sig
-  val register : string -> 'a @ portable -> unit @@ portable
+  val register : string -> 'a -> unit
   (** Like {!register}, but is safe to use in the presence of multiple domains.
 
       The provided value must be [portable] as registered values may be looked up from
       any domain. *)
 
-  val register_exception : string -> exn @ portable -> unit @@ portable
+  val register_exception : string -> exn -> unit
   (** Like {!register_exception}, but is safe to use in the presence of multiple domains.
 
       The provided exception must be [portable] as registered exceptions may be looked up

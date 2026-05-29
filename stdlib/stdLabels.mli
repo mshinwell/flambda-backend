@@ -14,7 +14,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-@@ portable
 
 open! Stdlib
 
@@ -42,4 +41,4 @@ module Array = ArrayLabels
 module Bytes = BytesLabels
 module List = ListLabels
 module String = StringLabels
-end @@ nonportable
+end

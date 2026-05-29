@@ -22,11 +22,11 @@ open Modes.Portable
 
 [@@@ocaml.flambda_o3]
 
-external cpu_relax : unit -> unit @@ portable = "%cpu_relax"
+external cpu_relax : unit -> unit = "%cpu_relax"
 
-external runtime5 : unit -> bool @@ portable = "%runtime5"
+external runtime5 : unit -> bool = "%runtime5"
 
-module Obj_opt : sig @@ portable
+module Obj_opt : sig
   type t
   val some : 'a -> t
   val is_some : t -> bool
@@ -64,7 +64,7 @@ end = struct
     new_st
 
   external compare_and_set_field
-    : t array -> int -> t -> t -> bool @@ portable = "%atomic_cas_field"
+    : t array -> int -> t -> t -> bool = "%atomic_cas_field"
 
   let[@inline] compare_and_set st idx old new_ =
     (* In Flambda 2 there is a strict distinction between arrays and blocks. *)
@@ -182,7 +182,7 @@ module Runtime_4 = struct
   (* Unimplemented functions *)
   let not_implemented () =
     failwith "Multi-domain functionality not supported in runtime4"
-  type !'a t : value mod portable contended with 'a
+  type !'a t
   type id = int
   let spawn _ = not_implemented ()
   let join _ = not_implemented ()
@@ -207,20 +207,20 @@ module Runtime_5 = struct
       | Running
       | Finished of ('a, exn) result [@warning "-unused-constructor"]
 
-    type 'a term_sync : value mod portable contended with 'a = {
+    type 'a term_sync = {
       (* protected by [mut] *)
       mutable state : 'a state [@warning "-unused-field"] ;
       mut : Mutex.t ;
       cond : Condition.t ;
-    } [@@unsafe_allow_any_mode_crossing]
+    }
 
-    external spawn : (unit -> 'a) @ portable once -> 'a term_sync -> t @@ portable
+    external spawn : (unit -> 'a) -> 'a term_sync -> t
       = "caml_domain_spawn"
-    external self : unit -> t @@ portable
+    external self : unit -> t
       = "caml_ml_domain_id" [@@noalloc]
-    external get_recommended_domain_count: unit -> int @@ portable
+    external get_recommended_domain_count: unit -> int
       = "caml_recommended_domain_count" [@@noalloc]
-    external get_max_domain_count : unit -> int @@ portable
+    external get_max_domain_count : unit -> int
       = "caml_max_domain_count" [@@noalloc]
   end
 
@@ -235,12 +235,12 @@ module Runtime_5 = struct
 
     type dls_state = Obj_opt.t array
 
-    external get_dls_state : unit -> dls_state @@ portable = "%dls_get"
+    external get_dls_state : unit -> dls_state = "%dls_get"
 
-    external set_dls_state : dls_state -> unit @@ portable =
+    external set_dls_state : dls_state -> unit =
       "caml_domain_dls_set" [@@noalloc]
 
-    external compare_and_set_dls_state : dls_state -> dls_state -> bool @@ portable =
+    external compare_and_set_dls_state : dls_state -> dls_state -> bool =
       "caml_domain_dls_compare_and_set" [@@noalloc]
 
     let init () =
@@ -251,10 +251,9 @@ module Runtime_5 = struct
 
     let key_counter = Atomic.make 0
 
-    type key_initializer : value mod contended portable =
-        KI : 'a key * ('a -> (unit -> 'a) @ portable once) @@ portable
+    type key_initializer =
+        KI : 'a key * ('a -> (unit -> 'a))
         -> key_initializer
-    [@@unsafe_allow_any_mode_crossing "CR with-kinds"]
 
     type key_initializer_list = key_initializer list
 
@@ -333,9 +332,8 @@ module Runtime_5 = struct
       then (Obj_opt.unsafe_get obj : a)
       else init_idx idx obj init.portable
 
-    type key_value : value mod portable contended =
-        KV : 'a key * (unit -> 'a) @@ portable -> key_value
-    [@@unsafe_allow_any_mode_crossing "CR with-kinds"]
+    type key_value =
+        KV : 'a key * (unit -> 'a) -> key_value
 
     let get_initial_keys () : key_value list =
       List.map
@@ -357,10 +355,10 @@ module Runtime_5 = struct
 
   let is_main_domain () = (self () :> int) = 0
 
-  external self_index : unit -> int# @@ portable
+  external self_index : unit -> int#
     = "%domain_index" [@@noalloc]
 
-  external tag_int : int# -> int @@ portable = "%tag_int"
+  external tag_int : int# -> int = "%tag_int"
 
   let[@inline] self_index () = tag_int (self_index ())
 
@@ -464,29 +462,28 @@ module type S = sig
     type 'a key = int * (unit -> 'a) Modes.Portable.t
 
     val new_key
-      : ?split_from_parent:('a -> (unit -> 'a) @ portable once) @ portable
-      -> (unit -> 'a) @ portable
+      : ?split_from_parent:('a -> (unit -> 'a))
+      -> (unit -> 'a)
       -> 'a key
-      @@ portable
 
-    val get : 'a key -> 'a @@ portable
-    val set : 'a key -> 'a -> unit @@ portable
+    val get : 'a key -> 'a
+    val set : 'a key -> 'a -> unit
     val init : unit -> unit
   end
 
-  type !'a t : value mod portable contended with 'a
-  val spawn : (unit -> 'a) @ portable once -> 'a t @@ portable
-  val join : 'a t -> 'a @@ portable
+  type !'a t
+  val spawn : (unit -> 'a) -> 'a t
+  val join : 'a t -> 'a
   type id = private int
-  val get_id : 'a t -> id @@ portable
-  val self : unit -> id @@ portable
-  val is_main_domain : unit -> bool @@ portable
-  val recommended_domain_count : unit -> int @@ portable
+  val get_id : 'a t -> id
+  val self : unit -> id
+  val is_main_domain : unit -> bool
+  val recommended_domain_count : unit -> int
   val max_domain_count : int
-  val self_index : unit -> int @@ portable
-  val before_first_spawn : (unit -> unit) -> unit @@ nonportable
-  val at_exit : (unit -> unit) @ portable -> unit @@ portable
-  val do_at_exit : unit -> unit @@ nonportable
+  val self_index : unit -> int
+  val before_first_spawn : (unit -> unit) -> unit
+  val at_exit : (unit -> unit) -> unit
+  val do_at_exit : unit -> unit
 end
 
 let runtime_4_impl = (module Runtime_4 : S)
@@ -502,10 +499,10 @@ module TLS0 = struct
   type tls_state = Obj_opt.t array
 
   external get_tls_state
-    : unit -> tls_state @@ portable = "%tls_get"
+    : unit -> tls_state = "%tls_get"
   [@@noalloc]
   external set_tls_state
-    : tls_state -> unit @@ portable = "caml_domain_tls_set"
+    : tls_state -> unit = "caml_domain_tls_set"
   [@@noalloc]
 
   let get_tls_state =
@@ -520,10 +517,9 @@ module TLS0 = struct
 
   let key_counter = Atomic.make 0
 
-  type key_initializer : value mod contended portable =
-      KI : 'a key * ('a -> (unit -> 'a) @ portable once) @@ portable
+  type key_initializer =
+      KI : 'a key * ('a -> (unit -> 'a))
       -> key_initializer
-  [@@unsafe_allow_any_mode_crossing "CR with-kinds"]
 
   type key_initializer_list = key_initializer list
 
@@ -575,9 +571,8 @@ module TLS0 = struct
     then (Obj_opt.unsafe_get obj : a)
     else init_idx idx init.portable
 
-  type key_value : value mod portable contended =
-      KV : 'a key * (unit -> 'a) @@ portable -> key_value
-  [@@unsafe_allow_any_mode_crossing "CR with-kinds"]
+  type key_value =
+      KV : 'a key * (unit -> 'a) -> key_value
 
   module Private = struct
     type keys = key_value list
@@ -600,11 +595,11 @@ module TLS0 = struct
 end
 
 module Tick = struct
-  module type S = sig @@ portable
-    type t : mutable_data mod external_ global
+  module type S = sig
+    type t
 
-    val acquire : interval_usec:int -> t @ unique
-    val release : t @ unique -> unit
+    val acquire : interval_usec:int -> t
+    val release : t -> unit
   end
 
   module Runtime4 = struct
@@ -618,16 +613,16 @@ module Tick = struct
   end
 
   module Runtime5 = struct
-    module Registry : sig @@ portable
-      type t : sync_data
-      type inner : mutable_data
+    module Registry : sig
+      type t
+      type inner
 
       val create : unit -> t
 
       val protect
         : t
-        -> (inner -> 'r @ contended portable) @ local once portable
-        -> 'r @ contended portable
+        -> (inner -> 'r)
+        -> 'r
 
       (** These two functions return the new min interval *)
       val add : inner -> int -> int
@@ -644,28 +639,25 @@ module Tick = struct
         include Map.MakePortable (Int)
 
         external magic_empty_stateless
-          : ('a t[@local_opt])
-          -> ('a t[@local_opt]) @ stateless
-          @@ stateless
+          : 'a t
+          -> 'a t
           = "%identity"
 
         external magic_empty_read_write
-          : ('a t[@local_opt]) @ immutable
-          -> ('a t[@local_opt])
-          @@ stateless
+          : 'a t
+          -> 'a t
           = "%identity"
 
         let empty = magic_empty_stateless empty
         let[@inline] empty () = magic_empty_read_write empty
       end
 
-      type t : sync_data =
+      type t =
         { mutable inner : int Inner.t
         (* A bag, mapping the interval to the number of requesters of ticks with
            that interval *)
         ; mutex : Mutex.t
         }
-      [@@unsafe_allow_any_mode_crossing "All accesses protected by mutex"]
 
       type inner = t
 
@@ -728,7 +720,6 @@ module Tick = struct
 
     external set_tick_interval_usec
       : (int[@untagged]) -> (unit[@untagged])
-      @@ portable
       = "caml_domain_set_tick_interval_usec_bytecode"
           "caml_domain_set_tick_interval_usec"
 
@@ -762,7 +753,7 @@ module Tick = struct
   let () = Callback.Safe.register "Domain.Tick.release" release
 
   external effective_interval_usec_prim
-    : (unit[@untagged]) -> (int[@untagged]) @@ portable
+    : (unit[@untagged]) -> (int[@untagged])
     = "caml_effective_tick_interval_usec_bytecode"
         "caml_effective_tick_interval_usec"
   [@@noalloc]

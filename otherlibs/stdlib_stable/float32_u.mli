@@ -16,7 +16,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-@@ portable
 
 open! Stdlib
 
@@ -42,10 +41,10 @@ type t = float32#
    [infinity]) when we we support [float32]s in structures. *)
 
 (* Unboxed-specific stuff at the top. *)
-external to_float32 : t -> (float32[@local_opt]) = "%box_float32"
+external to_float32 : t -> float32 = "%box_float32"
 (** Box a [float32#] *)
 
-external of_float32 : (float32[@local_opt]) -> t = "%unbox_float32"
+external of_float32 : float32 -> t = "%unbox_float32"
 (** Unbox a boxed [float32] *)
 
 (* Below here, everything also appears in [Float32], though most things are

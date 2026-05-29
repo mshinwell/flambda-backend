@@ -14,7 +14,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-@@ portable
 
 open! Stdlib
 
@@ -99,10 +98,10 @@ val empty : string
     @since 4.13
 *)
 
-external length : (t[@local_opt]) -> int = "%string_length"
+external length : t -> int = "%string_length"
 (** [length s] is the length (number of bytes/characters) of [s]. *)
 
-external get : (t[@local_opt]) -> int -> char = "%string_safe_get"
+external get : t -> int -> char = "%string_safe_get"
 (** [get s i] is the character at index [i] in [s]. This is the same
     as writing [s.[i]].
 
@@ -123,7 +122,7 @@ val to_bytes : string -> bytes
 *)
 
 val blit :
-  string @ local -> int -> bytes @ local -> int -> int -> unit
+  string -> int -> bytes -> int -> int -> unit
 (** Same as {!Bytes.blit_string} which should be preferred. *)
 
 (** {1:concat Concatenating}
@@ -150,12 +149,12 @@ val cat : string -> string -> string
 (** {1:predicates Predicates and comparisons} *)
 
 external equal :
-  (t[@local_opt]) -> (t[@local_opt]) -> bool = "caml_string_equal" [@@noalloc]
+  t -> t -> bool = "caml_string_equal" [@@noalloc]
 (** [equal s0 s1] is [true] if and only if [s0] and [s1] are character-wise
     equal.
     @since 4.03 (4.05 in StringLabels) *)
 
-external compare : (t[@local_opt]) -> (t[@local_opt]) -> int = "%compare"
+external compare : t -> t -> int = "%compare"
 (** [compare s0 s1] sorts [s0] and [s1] in lexicographical order. [compare]
     behaves like {!Stdlib.compare} on strings but may be more efficient. *)
 
@@ -227,14 +226,12 @@ val mapi : (int -> char -> char) -> string -> string
 
     @since 4.02 *)
 
-val fold_left : ('acc : value_or_null)
-  . ('acc -> char -> 'acc) -> 'acc -> string -> 'acc
+val fold_left : ('acc -> char -> 'acc) -> 'acc -> string -> 'acc
 (** [fold_left f x s] computes [f (... (f (f x s.[0]) s.[1]) ...) s.[n-1]],
     where [n] is the length of the string [s].
     @since 4.13 *)
 
-val fold_right : ('acc : value_or_null)
-  . (char -> 'acc -> 'acc) -> string -> 'acc -> 'acc
+val fold_right : (char -> 'acc -> 'acc) -> string -> 'acc -> 'acc
 (** [fold_right f s x] computes [f s.[0] (f s.[1] ( ... (f s.[n-1] x) ...))],
     where [n] is the length of the string [s].
     @since 4.13 *)
@@ -306,7 +303,7 @@ val iteri : (int -> char -> unit) -> string -> unit
 
 (** {1:searching Searching} *)
 
-val index_from : string @ local -> int -> char -> int
+val index_from : string -> int -> char -> int
 (** [index_from s i c] is the index of the first occurrence of [c] in
     [s] after position [i].
 
@@ -314,21 +311,21 @@ val index_from : string @ local -> int -> char -> int
     @raise Invalid_argument if [i] is not a valid position in [s]. *)
 
 
-val index_from_opt : string @ local -> int -> char -> int option
+val index_from_opt : string -> int -> char -> int option
 (** [index_from_opt s i c] is the index of the first occurrence of [c]
     in [s] after position [i] (if any).
 
     @raise Invalid_argument if [i] is not a valid position in [s].
     @since 4.05 *)
 
-val rindex_from : string @ local -> int -> char -> int
+val rindex_from : string -> int -> char -> int
 (** [rindex_from s i c] is the index of the last occurrence of [c] in
     [s] before position [i+1].
 
     @raise Not_found if [c] does not occur in [s] before position [i+1].
     @raise Invalid_argument if [i+1] is not a valid position in [s]. *)
 
-val rindex_from_opt : string @ local -> int -> char -> int option
+val rindex_from_opt : string -> int -> char -> int option
 (** [rindex_from_opt s i c] is the index of the last occurrence of [c]
     in [s] before position [i+1] (if any).
 
@@ -489,7 +486,7 @@ val get_int32_ne : string -> int -> int32
     @since 4.13
 *)
 
-val hash : t @ local -> int
+val hash : t -> int
 (** An unseeded hash function for strings, with the same output value as
     {!Hashtbl.hash}. This function allows this module to be passed as argument
     to the functor {!Hashtbl.Make}.
@@ -497,7 +494,7 @@ val hash : t @ local -> int
     @since 5.0 *)
 
 external seeded_hash :
-  int -> (t[@local_opt]) -> int @@ portable = "caml_string_hash" [@@noalloc]
+  int -> t -> int = "caml_string_hash" [@@noalloc]
 (** A seeded hash function for strings, with the same output value as
     {!Hashtbl.seeded_hash}. This function allows this module to be passed as
     argument to the functor {!Hashtbl.MakeSeeded}.
@@ -543,7 +540,7 @@ val get_int64_le : string -> int -> int64
 
 (* The following is for system use only. Do not call directly. *)
 
-external unsafe_get : (t[@local_opt]) -> int -> char = "%string_unsafe_get"
+external unsafe_get : t -> int -> char = "%string_unsafe_get"
 external unsafe_blit :
   string -> int -> bytes -> int -> int ->
     unit = "caml_blit_string" [@@noalloc]

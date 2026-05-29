@@ -31,8 +31,8 @@ let id x = x
 
 (* A devoted type for sizes to avoid confusion
    between sizes and mere integers. *)
-module Size : sig @@ portable
-  type t : value mod portable contended
+module Size : sig
+  type t
 
   val to_int : t -> int
   val of_int : int -> t
@@ -48,7 +48,6 @@ end  = struct
   let unknown = -1
   let is_known n = n >= 0
 end
-
 
 
 (* The pretty-printing boxes definition:
@@ -1080,7 +1079,7 @@ and str_formatter = formatter_of_buffer stdbuf
 (* Initialise domain local state *)
 
 (* CR-soon mslater: switch to TLS to remove thread unsafety *)
-module DLS = struct 
+module DLS = struct
   let new_key = Domain.Safe.DLS.new_key
   let get = Obj.magic_portable Domain.DLS.get
   let set = Obj.magic_portable Domain.DLS.set
@@ -1164,8 +1163,8 @@ let make_synchronized_formatter_safe output flush =
     in
     make_formatter output' flush')
 
-let make_synchronized_formatter_unsafe output flush = 
-  make_synchronized_formatter_safe 
+let make_synchronized_formatter_unsafe output flush =
+  make_synchronized_formatter_safe
     (Obj.magic_portable output)
     (Obj.magic_portable flush)
 

@@ -552,7 +552,6 @@ let append a b =
   end
 
 
-
 (** {1:iteration Iteration} *)
 
 (* The implementation choice that we made for iterators is the one

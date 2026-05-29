@@ -96,14 +96,14 @@ module Await_atomic_bitset = struct
     ;;
 end
 
-type ('a : value_or_null) spawn_result =
+type 'a spawn_result =
   | Spawned
-  | Failed of 'a * exn @@ aliased many * Printexc.raw_backtrace @@ aliased many
+  | Failed of 'a * exn * Printexc.raw_backtrace
 
-type ('a : value_or_null) request_inner : value mod contended portable  =
-  { action : 'a @ contended once portable unique -> unit @@ portable
-  ; argument : 'a @@ contended portable
-  ; mutable result : 'a spawn_result @@ contended portable
+type 'a request_inner  =
+  { action : 'a -> unit
+  ; argument : 'a
+  ; mutable result : 'a spawn_result
   ; mutable ready : bool
   ; mutex : Mutex.t
   ; condition : Condition.t
@@ -111,11 +111,11 @@ type ('a : value_or_null) request_inner : value mod contended portable  =
 [@@unsafe_allow_any_mode_crossing
    (* The mutable fields are synchronized via [mutex] and [condition]. *)]
 
-type request : value mod contended portable =
-    Request : ('a : value_or_null). 'a request_inner -> request
+type request =
+    Request : 'a request_inner -> request
 [@@unboxed]
 
-type t : value mod contended portable =
+type t =
   { index : int
   ; threads : int Atomic.t
   ; incoming : request list Atomic.t
@@ -209,9 +209,8 @@ let () =
 ;;
 
 external magic_unique__contended_portable
-  :  ('a : value_or_null).
-     'a @ contended portable
-  -> 'a @ contended portable unique @@ portable
+  :  'a
+  -> 'a
   = "%identity"
 
 (** Run some function on a new thread. *)
@@ -293,10 +292,8 @@ let spawn_on ~domain:i f a =
        pass a function through a data structure such that it is statically known
        to be used only once without having to use a mutable box to do so. *)
     external magic_many__contended_portable
-      :  ('a : value_or_null).
-         'a @ contended once portable
-      -> 'a @ contended many portable
-      @@ portable
+      :  'a
+      -> 'a
       = "%identity"
   end in
   let f = magic_many__contended_portable f in

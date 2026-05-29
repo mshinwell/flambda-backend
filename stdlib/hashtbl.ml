@@ -65,10 +65,10 @@ let is_randomized () = Atomic.get randomized
 module Rng : sig
   val bits : unit -> int
 end = struct
-  (* This is safe since [bits] is a C call that cannot be preempted, 
+  (* This is safe since [bits] is a C call that cannot be preempted,
      we do not yield, and we do not borrow the state. *)
   let key = Domain.Safe.DLS.new_key Random.State.make_self_init
-  let[@inline] bits () = 
+  let[@inline] bits () =
     Random.State.bits (Obj.magic_uncontended (Domain.Safe.DLS.get key))
 end
 
@@ -506,8 +506,8 @@ module Make(H: HashedType): (S with type key = H.t) =
       tbl
   end
 
-module MakeSeededPortable(H: sig @@ portable include SeededHashedType end)
-  : sig @@ portable include SeededS with type key = H.t end =
+module MakeSeededPortable(H: sig include SeededHashedType end)
+  : sig include SeededS with type key = H.t end =
   struct
     type key = H.t
     type 'a hashtbl = (key, 'a) t
@@ -641,8 +641,8 @@ module MakeSeededPortable(H: sig @@ portable include SeededHashedType end)
     let to_seq_values = to_seq_values
   end
 
-module MakePortable(H: sig @@ portable include HashedType end)
-  : sig @@ portable include S with type key = H.t end =
+module MakePortable(H: sig include HashedType end)
+  : sig include S with type key = H.t end =
   struct
     include MakeSeededPortable(struct
         type t = H.t
@@ -661,7 +661,7 @@ module MakePortable(H: sig @@ portable include HashedType end)
    use - see #2202 *)
 
 external seeded_hash_param :
-  int -> int -> int -> 'a -> int @@ portable = "caml_hash_exn"
+  int -> int -> int -> 'a -> int = "caml_hash_exn"
 
 let hash x = seeded_hash_param 10 100 0 x
 let hash_param n1 n2 x = seeded_hash_param n1 n2 0 x

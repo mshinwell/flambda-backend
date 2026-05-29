@@ -16,7 +16,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-@@ portable
 
 open! Stdlib
 
@@ -46,10 +45,10 @@ type t = nativeint#
 *)
 
 (* Unboxed-specific stuff at the top. *)
-external to_nativeint : t -> (nativeint[@local_opt]) = "%box_nativeint" [@@warning "-187"]
+external to_nativeint : t -> nativeint = "%box_nativeint" [@@warning "-187"]
 (** Box a [nativeint#] *)
 
-external of_nativeint : (nativeint[@local_opt]) -> t =
+external of_nativeint : nativeint -> t =
   "%unbox_nativeint" [@@warning "-187"]
 (** Unbox a boxed [nativeint] *)
 

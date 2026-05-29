@@ -14,7 +14,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-@@ portable
 
 (** First-in first-out queues.
 
@@ -36,7 +35,7 @@ open! Stdlib
     with a {!Mutex.t}).
 *)
 
-type (!'a : value_or_null) t : mutable_data with 'a
+type !'a t
 (** The type of queues containing elements of type ['a]. *)
 
 
@@ -44,63 +43,62 @@ exception Empty
 (** Raised when {!Queue.take} or {!Queue.peek} is applied to an empty queue. *)
 
 
-val create : ('a : value_or_null) .unit -> 'a t
+val create : unit -> 'a t
 (** Return a new queue, initially empty. *)
 
-val add : ('a : value_or_null) . 'a -> 'a t @ local -> unit
+val add : 'a -> 'a t -> unit
 (** [add x q] adds the element [x] at the end of the queue [q]. *)
 
-val push : ('a : value_or_null) . 'a -> 'a t @ local -> unit
+val push : 'a -> 'a t -> unit
 (** [push] is a synonym for [add]. *)
 
-val take : ('a : value_or_null) . 'a t @ local -> 'a
+val take : 'a t -> 'a
 (** [take q] removes and returns the first element in queue [q],
    or raises {!Empty} if the queue is empty. *)
 
-val take_opt : ('a : value_or_null) . 'a t @ local -> 'a option
+val take_opt : 'a t -> 'a option
 (** [take_opt q] removes and returns the first element in queue [q],
    or returns [None] if the queue is empty.
    @since 4.08 *)
 
-val pop : ('a : value_or_null) . 'a t @ local -> 'a
+val pop : 'a t -> 'a
 (** [pop] is a synonym for [take]. *)
 
-val peek : ('a : value_or_null) . 'a t @ local -> 'a
+val peek : 'a t -> 'a
 (** [peek q] returns the first element in queue [q], without removing
    it from the queue, or raises {!Empty} if the queue is empty. *)
 
-val peek_opt : ('a : value_or_null) . 'a t @ local -> 'a option
+val peek_opt : 'a t -> 'a option
 (** [peek_opt q] returns the first element in queue [q], without removing
    it from the queue, or returns [None] if the queue is empty.
    @since 4.08 *)
 
-val top : ('a : value_or_null) . 'a t @ local -> 'a
+val top : 'a t -> 'a
 (** [top] is a synonym for [peek]. *)
 
-val clear : ('a : value_or_null) . 'a t @ local -> unit
+val clear : 'a t -> unit
 (** Discard all elements from a queue. *)
 
-val copy : ('a : value_or_null) . 'a t @ local -> 'a t
+val copy : 'a t -> 'a t
 (** Return a copy of the given queue. *)
 
-val is_empty : ('a : value_or_null) . 'a t @ local -> bool
+val is_empty : 'a t -> bool
 (** Return [true] if the given queue is empty, [false] otherwise. *)
 
-val length : ('a : value_or_null) . 'a t @ local -> int
+val length : 'a t -> int
 (** Return the number of elements in a queue. *)
 
-val iter : ('a : value_or_null) . ('a -> unit) @ local -> 'a t @ local -> unit
+val iter : ('a -> unit) -> 'a t -> unit
 (** [iter f q] applies [f] in turn to all elements of [q],
    from the least recently entered to the most recently entered.
    The queue itself is unchanged. *)
 
-val fold : ('acc : value_or_null) ('a : value_or_null)
-  . ('acc -> 'a -> 'acc) @ local -> 'acc -> 'a t @ local -> 'acc
+val fold : ('acc -> 'a -> 'acc) -> 'acc -> 'a t -> 'acc
 (** [fold f accu q] is equivalent to [List.fold_left f accu l],
    where [l] is the list of [q]'s elements. The queue remains
    unchanged. *)
 
-val transfer : ('a : value_or_null) . 'a t @ local -> 'a t @ local -> unit
+val transfer : 'a t -> 'a t -> unit
 (** [transfer q1 q2] adds all of [q1]'s elements at the end of
    the queue [q2], then clears [q1]. It is equivalent to the
    sequence [iter (fun x -> add x q2) q1; clear q1], but runs
@@ -108,17 +106,17 @@ val transfer : ('a : value_or_null) . 'a t @ local -> 'a t @ local -> unit
 
 (** {1 Iterators} *)
 
-val to_seq : ('a : value_or_null) . 'a t -> 'a Seq.t
+val to_seq : 'a t -> 'a Seq.t
 (** Iterate on the queue, in front-to-back order.
     The behavior is not specified if the queue is modified
     during the iteration.
     @since 4.07 *)
 
-val add_seq : ('a : value_or_null) . 'a t -> 'a Seq.t -> unit
+val add_seq : 'a t -> 'a Seq.t -> unit
 (** Add the elements from a sequence to the end of the queue.
     @since 4.07 *)
 
-val of_seq : ('a : value_or_null) . 'a Seq.t -> 'a t
+val of_seq : 'a Seq.t -> 'a t
 (** Create a queue from a sequence.
     @since 4.07 *)
 

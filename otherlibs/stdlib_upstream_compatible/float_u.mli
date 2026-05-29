@@ -17,7 +17,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-@@ portable
 
 open! Stdlib
 
@@ -53,10 +52,10 @@ type t = float#
    [infinity]) when we we support [float64]s in structures. *)
 
 (* Unboxed-specific stuff at the top. *)
-external to_float : t -> (float[@local_opt]) = "%box_float" [@@warning "-187"]
+external to_float : t -> float = "%box_float" [@@warning "-187"]
 (** Box a [float#] *)
 
-external of_float : (float[@local_opt]) -> t = "%unbox_float" [@@warning "-187"]
+external of_float : float -> t = "%unbox_float" [@@warning "-187"]
 (** Unbox a boxed [float] *)
 
 (* Below here, everything also appears in [Float], though most things are

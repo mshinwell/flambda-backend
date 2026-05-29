@@ -14,7 +14,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-@@ portable
 
 open! Stdlib
 
@@ -182,7 +181,7 @@ val nativebits : unit -> Nativeint.t
 *)
 
 module State : sig
-  type t : mutable_data
+  type t
   (** The type of PRNG states. *)
 
   val make : int array -> t

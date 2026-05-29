@@ -14,7 +14,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-@@ portable
 
 open! Stdlib
 
@@ -142,7 +141,7 @@ val io_buffer_size: int
     @since 5.4
 *)
 
-val interactive : bool ref @@ nonportable
+val interactive : bool ref
 [@@alert unsynchronized_access
     "The interactive status is a mutable global state."
 ]
@@ -283,16 +282,14 @@ type signal_behavior =
    number as argument. *)
 
 external signal :
-  int -> signal_behavior -> signal_behavior @@ nonportable = "caml_install_signal_handler"
-[@@alert unsafe_multidomain "Use [Sys.Safe.signal]."]
+  int -> signal_behavior -> signal_behavior = "caml_install_signal_handler"
 (** Set the behavior of the system on receipt of a given signal.  The
    first argument is the signal number.  Return the behavior
    previously associated with the signal. If the signal number is
    invalid (or not available on your system), an [Invalid_argument]
    exception is raised. *)
 
-val set_signal : int -> signal_behavior -> unit @@ nonportable
-[@@alert unsafe_multidomain "Use [Sys.Safe.set_signal]."]
+val set_signal : int -> signal_behavior -> unit
 (** Same as {!Sys.signal} but return value is ignored. *)
 
 
@@ -478,8 +475,8 @@ val runtime_warnings_enabled: unit -> bool
 
 (** {1 Optimization} *)
 
-external[@layout_poly] opaque_identity :
-  ('a : any). ('a[@local_opt]) -> ('a[@local_opt]) = "%opaque"
+external opaque_identity :
+  'a -> 'a = "%opaque"
 (** For the purposes of optimization, [opaque_identity] behaves like an
     unknown (and thus possibly side-effecting) function.
 
@@ -525,14 +522,14 @@ end
     via modes. *)
 module Safe : sig
   external signal :
-    int -> signal_behavior @ portable -> signal_behavior @ portable
+    int -> signal_behavior -> signal_behavior
     = "caml_install_signal_handler"
   (** Like {!signal}, but is safe to call in the presence of multiple domains.
 
       The provided [signal_behavior] must be [portable] as it is shared between all
       domains. *)
 
-  val set_signal : int -> signal_behavior @ portable -> unit
+  val set_signal : int -> signal_behavior -> unit
   (** Like {!set_signal}, but is safe to call in the presence of multiple domains.
 
       The provided [signal_behavior] must be [portable] as it is shared between all

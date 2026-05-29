@@ -15,7 +15,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-@@ portable
 
 (** Dynamic arrays.
 
@@ -64,7 +63,7 @@
 
 (** {1:dynarrays Dynamic arrays} *)
 
-type !'a t : mutable_data with 'a
+type !'a t
 (** A dynamic array containing values of type ['a].
 
     A dynamic array [a] provides constant-time [get] and [set]
@@ -522,7 +521,6 @@ val reset : 'a t -> unit
     {{:noleaks}no leaks} guarantee, you can also speed up deleting
     elements.)
 *)
-
 
 
 (** {1:examples Code examples}

@@ -15,22 +15,22 @@
 
 [@@@alert "-do_not_spawn_domains"]
 
-type ('a : value_or_null) spawn_result =
+type 'a spawn_result =
   | Spawned
-  | Failed of 'a * exn @@ aliased many * Printexc.raw_backtrace @@ aliased many
+  | Failed of 'a * exn * Printexc.raw_backtrace
 
-type ('a : value_or_null) request_inner : value mod contended portable =
-  { action : 'a @ contended once portable unique -> unit @@ portable
-  ; argument : 'a @@ contended portable
+type 'a request_inner =
+  { action : 'a -> unit
+  ; argument : 'a
   ; mutable spawn_result : 'a spawn_result Modes.Portended.t or_null [@atomic]
   ; sender_domain : int
   }
 
-type request : value mod contended portable =
-    Request : ('a : value_or_null). 'a request_inner -> request
+type request =
+    Request : 'a request_inner -> request
 [@@unboxed]
 
-type t : value mod contended portable =
+type t =
   { mutable threads : int [@atomic]
   ; mutable incoming : request list [@atomic]
   (** Closures which have been requested to be run on this domain *)
@@ -78,9 +78,8 @@ let wakeup_incoming t =
   Condition.broadcast t.condition_incoming
 
 external magic_unique__contended_portable
-  :  ('a : value_or_null).
-     'a @ contended portable
-  -> 'a @ contended portable unique @@ portable
+  :  'a
+  -> 'a
   = "%identity"
 
 let wait_spawn_result req =
@@ -161,7 +160,7 @@ let manager () =
   else
     let open struct
       external caml_thread_fatal_spawn_outside_multicore
-        : unit -> 'a @@ portable
+        : unit -> 'a
         = "caml_thread_fatal_spawn_outside_multicore"
     end in
     caml_thread_fatal_spawn_outside_multicore ()
@@ -192,10 +191,8 @@ let spawn_on ~domain:i f a =
        pass a function through a data structure such that it is statically known
        to be used only once without having to use a mutable box to do so. *)
     external magic_many__contended_portable
-      :  ('a : value_or_null).
-         'a @ contended once portable
-      -> 'a @ contended many portable
-      @@ portable
+      :  'a
+      -> 'a
       = "%identity"
   end in
   let f = magic_many__contended_portable f in

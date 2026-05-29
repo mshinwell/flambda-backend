@@ -14,17 +14,16 @@
 (*                                                                        *)
 (**************************************************************************)
 
-@@ portable
 
 (** Lightweight threads for Posix [1003.1c] and Win32. *)
 
-type t : value mod contended portable
+type t
 (** The type of thread handles. *)
 
 (** {1 Thread creation and termination} *)
 
 module Portable : sig
-  val create : ('a -> 'b) @ once portable -> 'a -> t
+  val create : ('a -> 'b) -> 'a -> t
   (** [Thread.Portable.create funct arg] creates a new thread of control,
      in which the function application [funct arg]
      is executed concurrently with the other threads of the program.
@@ -39,7 +38,7 @@ module Portable : sig
      directly accessible to the parent thread. *)
 end
 
-val create : ('a -> 'b) -> 'a -> t @@ nonportable
+val create : ('a -> 'b) -> 'a -> t
 (** [Thread.create funct arg] creates a new thread of control,
    in which the function application [funct arg]
    is executed concurrently with the other threads of the program.
@@ -192,7 +191,7 @@ val default_uncaught_exception_handler : exn -> unit
 (** [Thread.default_uncaught_exception_handler] will print the thread's id,
     exception and backtrace (if available). *)
 
-val set_uncaught_exception_handler : (exn -> unit) @ portable -> unit
+val set_uncaught_exception_handler : (exn -> unit) -> unit
 (** [Thread.set_uncaught_exception_handler fn] registers [fn] as the handler
     for uncaught exceptions.
 
@@ -202,20 +201,20 @@ val set_uncaught_exception_handler : (exn -> unit) @ portable -> unit
 (** Thread-local storage. Like {!Domain.DLS}, but stores a distinct value
     for each thread. Domains can contain multiple threads, so [TLS] should be
     preferred in nearly all cases. *)
-module TLS : sig @@ portable
+module TLS : sig
 
-   type 'a key : value mod portable contended
+   type 'a key
    (** Type of a TLS key *)
 
    val new_key
-   : ?split_from_parent:('a -> (unit -> 'a) @ portable once) @ portable
-   -> (unit -> 'a) @ portable
+   : ?split_from_parent:('a -> (unit -> 'a))
+   -> (unit -> 'a)
    -> 'a key
    (** Like {!DLS.new_key}, but represents a distinct value in every thread. *)
 
-   val get : ('a : value mod portable). 'a key -> 'a @ contended
+   val get : 'a key -> 'a
    (** Like {!DLS.get}, but reads the value for the current thread. *)
 
-   val set : ('a : value mod contended). 'a key -> 'a @ portable -> unit
+   val set : 'a key -> 'a -> unit
    (** Like {!DLS.set}, but sets the value for the current thread. *)
 end

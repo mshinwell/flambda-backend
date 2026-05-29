@@ -20,11 +20,11 @@ open! Stdlib
 
 (* Module [Seq]: functional iterators *)
 
-type ('a : value_or_null) node =
+type 'a node =
   | Nil
   | Cons of 'a * 'a t
 
-and ('a : value_or_null) t = unit -> 'a node
+and 'a t = unit -> 'a node
 
 let empty () = Nil
 
@@ -99,7 +99,6 @@ let uncons xs =
       Some (x, xs)
   | Nil ->
       None
-
 
 
 let rec length_aux accu xs =
@@ -262,7 +261,6 @@ let rec compare cmp xs ys =
       +1
 
 
-
 (* [init_aux f i j] is the sequence [f i, ..., f (j-1)]. *)
 
 let rec init_aux f i j () =
@@ -322,7 +320,6 @@ let rec iterate1 f x () =
 
 let iterate f x =
   cons x (iterate1 f x)
-
 
 
 let rec mapi_aux f i xs () =
@@ -700,7 +697,6 @@ let to_dispenser xs =
     | Cons (x, xs) ->
         s := xs;
         Some x
-
 
 
 let rec ints i () =

@@ -23,8 +23,8 @@
 
 type t = int
 
-external is_runtime5 : unit -> bool @@ portable = "%runtime5"
-external poll : unit -> unit @@ portable = "%poll"
+external is_runtime5 : unit -> bool = "%runtime5"
+external poll : unit -> unit = "%poll"
 
 let cpu_relax =
   if is_runtime5 ()

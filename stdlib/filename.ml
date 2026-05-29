@@ -74,7 +74,7 @@ let generic_dirname is_dir_sep current_dir_name name =
   then current_dir_name
   else trailing_sep (String.length name - 1)
 
-module type SYSDEPS = sig @@ portable
+module type SYSDEPS = sig
   val null : string
   val current_dir_name : string
   val parent_dir_name : string
@@ -330,15 +330,15 @@ let remove_extension name =
   let l = extension_len name in
   if l = 0 then name else String.sub name 0 (String.length name - l)
 
-external open_desc: string -> open_flag list -> int -> int @@ portable = "caml_sys_open"
-external close_desc: int -> unit @@ portable = "caml_sys_close"
+external open_desc: string -> open_flag list -> int -> int = "caml_sys_open"
+external close_desc: int -> unit = "caml_sys_close"
 
 module DLS = Domain.Safe.DLS
 
 module Rng : sig
   val bits : unit -> int
 end = struct
-  (* This is safe since [bits] is a C call that cannot be preempted, 
+  (* This is safe since [bits] is a C call that cannot be preempted,
      we do not yield, and we do not borrow the state. *)
   let key = DLS.new_key Random.State.make_self_init
   let[@inline] bits () = Random.State.bits (Obj.magic_uncontended (DLS.get key))

@@ -19,10 +19,10 @@ open! Stdlib
 
 type t = float#
 
-external to_float : t -> (float[@local_opt]) @@ portable =
+external to_float : t -> float =
   "%box_float" [@@warning "-187"]
 
-external of_float : (float[@local_opt]) -> t @@ portable =
+external of_float : float -> t =
   "%unbox_float" [@@warning "-187"]
 
 (* CR layouts: Investigate whether it's worth making these things externals.

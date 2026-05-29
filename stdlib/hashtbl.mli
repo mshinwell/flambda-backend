@@ -14,7 +14,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-@@ portable
 
 open! Stdlib
 
@@ -64,7 +63,7 @@ open! Stdlib
 (** {1 Generic interface} *)
 
 
-type (!'a, !'b) t : mutable_data with 'a with 'b
+type (!'a, !'b) t
 (** The type of hash tables from type ['a] to type ['b]. *)
 
 val create : ?random: (* thwart tools/sync_stdlib_docs *) bool ->
@@ -433,8 +432,8 @@ module Make (H : HashedType) : S with type key = H.t
     the [create] operation of the result structure always returns
     non-randomized hash tables. *)
 
-module MakePortable (H : sig @@ portable include HashedType end)
-  : sig @@ portable include S with type key = H.t end
+module MakePortable (H : sig include HashedType end)
+  : sig include S with type key = H.t end
 (** Like [Make], but takes a portable [hash] function to
     portable [Hashtbl] operations. *)
 
@@ -518,8 +517,8 @@ module MakeSeeded (H : SeededHashedType) : SeededS with type key = H.t
     or if randomization is globally on (see {!Hashtbl.randomize}).
     @since 4.00 *)
 
-module MakeSeededPortable (H : sig @@ portable include SeededHashedType end)
-  : sig @@ portable include SeededS with type key = H.t end
+module MakeSeededPortable (H : sig include SeededHashedType end)
+  : sig include SeededS with type key = H.t end
 (** Like [MakeSeeded], but takes a portable [seeded_hash] function to
     portable [Hashtbl] operations. *)
 

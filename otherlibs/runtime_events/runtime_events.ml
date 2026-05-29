@@ -292,18 +292,18 @@ module User = struct
        maximum number of threads that requested a buffer concurrently,
        and we never free those buffers. *)
     let create_buffer () = Bytes.create 1024 in
-    let open struct 
-      type buffer_cache = bytes Modes.Contended.t list Atomic.t 
+    let open struct
+      type buffer_cache = bytes Modes.Contended.t list Atomic.t
     end in
-    let write_buffer_cache = 
+    let write_buffer_cache =
       Domain.Safe.DLS.new_key (fun () : buffer_cache -> Atomic.make [])
     in
     let rec pop_or_create buffers =
       match Atomic.get buffers with
       | [] -> {Modes.Contended.contended = create_buffer ()}
       | (b :: bs) as old_buffers ->
-        if Atomic.compare_and_set buffers old_buffers bs 
-        then b 
+        if Atomic.compare_and_set buffers old_buffers bs
+        then b
         else pop_or_create buffers
     in
     let rec push buffers buf =
@@ -317,7 +317,7 @@ module User = struct
       let buffers = Domain.Safe.DLS.get write_buffer_cache in
       let buf = pop_or_create buffers in
       Fun.protect ~finally:(fun () -> push buffers buf)
-        (fun () -> 
+        (fun () ->
           (* Safe because [buffers] contains unique references and no other
              thread could have popped [buf]. *)
           let buf = Obj.magic_uncontended buf.Modes.Contended.contended in

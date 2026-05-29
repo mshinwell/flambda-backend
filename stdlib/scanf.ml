@@ -38,7 +38,7 @@ type ('a, 'b, 'c, 'd, 'e, 'f) format6 =
 (* The run-time library for scanners. *)
 
 (* Scanning buffers. *)
-module type SCANNING = sig @@ portable
+module type SCANNING = sig
 
   type in_channel
 
@@ -46,7 +46,7 @@ module type SCANNING = sig @@ portable
 
   type file_name = string
 
-  val stdin : in_channel @@ nonportable
+  val stdin : in_channel
   (* The scanning buffer reading from [Stdlib.stdin]. *)
 
   val next_char : scanbuf -> char
@@ -123,10 +123,10 @@ module type SCANNING = sig @@ portable
   (* [Scanning.name_of_input ib] returns the name of the character
      source for input buffer [ib]. *)
 
-  val open_in : file_name -> in_channel @@ nonportable
-  val open_in_bin : file_name -> in_channel @@ nonportable
-  val from_file : file_name -> in_channel @@ nonportable
-  val from_file_bin : file_name -> in_channel @@ nonportable
+  val open_in : file_name -> in_channel
+  val open_in_bin : file_name -> in_channel
+  val from_file : file_name -> in_channel
+  val from_file_bin : file_name -> in_channel
   val from_string : string -> in_channel
   val from_function : (unit -> char) -> in_channel
   val from_channel : Stdlib.in_channel -> in_channel
@@ -552,13 +552,13 @@ let token_float ib = float_of_string (Scanning.token ib)
    since those modules are not available to [Scanf].
    However, we can bind and use the corresponding primitives that are
    available in the runtime. *)
-external nativeint_of_string : string -> nativeint @@ portable
+external nativeint_of_string : string -> nativeint
   = "caml_nativeint_of_string"
 
-external int32_of_string : string -> int32 @@ portable
+external int32_of_string : string -> int32
   = "caml_int32_of_string"
 
-external int64_of_string : string -> int64 @@ portable
+external int64_of_string : string -> int64
   = "caml_int64_of_string"
 
 
@@ -1163,7 +1163,7 @@ let stopper_of_formatting_lit fmting =
    taking readers as arguments and aggregate them into an heterogeneous list *)
 (* When all readers are taken, finally pass the list of the readers to the
    continuation k. *)
-let rec take_format_readers : type a c d e f .
+let rec take_format_readers : type a c d e f.
     ((d, e) heter_list -> e) -> (a, Scanning.in_channel, c, d, e, f) fmt ->
     d =
 fun k fmt -> match fmt with
@@ -1206,7 +1206,7 @@ fun k fmt -> match fmt with
   | End_of_format                    -> k Nil
 
 (* Take readers associated to an fmtty coming from a Format_subst "%(...%)". *)
-and take_fmtty_format_readers : type x y a c d e f .
+and take_fmtty_format_readers : type x y a c d e f.
     ((d, e) heter_list -> e) -> (a, Scanning.in_channel, c, d, x, y) fmtty ->
       (y, Scanning.in_channel, c, x, e, f) fmt -> d =
 fun k fmtty fmt -> match fmtty with
@@ -1236,7 +1236,7 @@ fun k fmtty fmt -> match fmtty with
     take_fmtty_format_readers k (concat_fmtty ty rest) fmt
 
 (* Take readers associated to an ignored parameter. *)
-and take_ignored_format_readers : type x y a c d e f .
+and take_ignored_format_readers : type x y a c d e f.
     ((d, e) heter_list -> e) -> (a, Scanning.in_channel, c, d, x, y) ignored ->
       (y, Scanning.in_channel, c, x, e, f) fmt -> d =
 fun k ign fmt -> match ign with
@@ -1428,7 +1428,7 @@ fun ib fmt readers -> match fmt with
 (* Case analysis on padding and precision. *)
 (* Reject formats containing "%*" or "%.*". *)
 (* Pass padding and precision to the generic scanner `scan'. *)
-and pad_prec_scanf : type a c d e f x y z t .
+and pad_prec_scanf : type a c d e f x y z t.
     Scanning.in_channel -> (a, Scanning.in_channel, c, d, e, f) fmt ->
       (d, e) heter_list -> (x, y) padding -> (y, z -> a) precision ->
       (int -> int -> Scanning.in_channel -> t) ->
@@ -1464,7 +1464,7 @@ fun ib fmt readers pad prec scan token -> match pad, prec with
             (* Defining [scanf] and various flavors of [scanf] *)
 
 let kscanf_gen ib ef af (Format (fmt, str)) =
-  let rec apply : type a b . a -> (a, b) heter_list -> b =
+  let rec apply : type a b. a -> (a, b) heter_list -> b =
     fun f args -> match args with
     | Cons (x, r) -> apply (f x) r
     | Nil -> f

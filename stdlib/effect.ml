@@ -40,7 +40,7 @@ let _ = Callback.Safe.register_exception "Effect.Continuation_already_resumed"
 
 (* A paused fiber, awaiting an 'a, which terminates with an 'x,
    equipped with a handler that produces a 'b *)
-type (-'a, 'x, +'b) cont : value mod non_float
+type (-'a, 'x, +'b) cont
 
 (* A last_fiber is a tagged pointer, so does not keep the fiber alive.
    It must never be the sole reference to the fiber, and is only used to cache
@@ -82,7 +82,7 @@ let with_handler cont valuec exnc (effc : 'a. ('a, _, _) effc) f x =
 module Deep = struct
 
   type ('a,'b) continuation =
-    | Cont : ('a,'x,'b) cont -> ('a, 'b) continuation [@@unboxed]
+    | Cont : ('a,'x,'b) cont -> ('a, 'b) continuation [@@ocaml.boxed]
 
   let continue (Cont k) v = resume k (fun x-> x) v
 
@@ -130,7 +130,7 @@ end
 module Shallow = struct
 
   type ('a,'b) continuation =
-    | Cont : ('a,'b,'x) cont -> ('a,'b) continuation [@@unboxed]
+    | Cont : ('a,'b,'x) cont -> ('a,'b) continuation [@@ocaml.boxed]
 
   let fiber : type a b. (a -> b) -> (a, b) continuation = fun f ->
     let module M = struct type _ t += Initial_setup__ : a t end in

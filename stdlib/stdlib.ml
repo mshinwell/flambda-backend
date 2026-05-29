@@ -30,10 +30,10 @@ let () =
     (Invalid_argument "address was misaligned")
 
 external raise :
-  ('a : value_or_null). exn -> 'a @ portable unique @@ portable
+  exn -> 'a
   = "%reraise"
 external raise_notrace :
-  ('a : value_or_null). exn -> 'a @ portable unique @@ portable
+  exn -> 'a
   = "%raise_notrace"
 
 let failwith s = raise(Failure s)
@@ -55,137 +55,135 @@ exception Undefined_recursive_module = Undefined_recursive_module
 
 (* Composition operators *)
 
-external ( |> ) : ('a : value_or_null) ('b : value_or_null)
-  . 'a -> ('a -> 'b) -> 'b @@ portable = "%revapply"
-external ( @@ ) : ('a : value_or_null) ('b : value_or_null)
-  . ('a -> 'b) -> 'a -> 'b @@ portable = "%apply"
+external ( |> ) : 'a -> ('a -> 'b) -> 'b = "%revapply"
+external ( @@ ) : ('a -> 'b) -> 'a -> 'b = "%apply"
 
 (* Debugging *)
 
-external __LOC__ : string @@ portable = "%loc_LOC"
-external __FILE__ : string @@ portable = "%loc_FILE"
-external __LINE__ : int @@ portable = "%loc_LINE"
-external __MODULE__ : string @@ portable = "%loc_MODULE"
-external __POS__ : string * int * int * int @@ portable = "%loc_POS"
-external __FUNCTION__ : string @@ portable = "%loc_FUNCTION"
+external __LOC__ : string = "%loc_LOC"
+external __FILE__ : string = "%loc_FILE"
+external __LINE__ : int = "%loc_LINE"
+external __MODULE__ : string = "%loc_MODULE"
+external __POS__ : string * int * int * int = "%loc_POS"
+external __FUNCTION__ : string = "%loc_FUNCTION"
 
-external __LOC_OF__ : ('a : value_or_null) . 'a -> string * 'a @@ portable = "%loc_LOC"
-external __LINE_OF__ : ('a : value_or_null) . 'a -> int * 'a @@ portable = "%loc_LINE"
-external __POS_OF__ : ('a : value_or_null) . 'a -> (string * int * int * int) * 'a @@ portable = "%loc_POS"
+external __LOC_OF__ : 'a -> string * 'a = "%loc_LOC"
+external __LINE_OF__ : 'a -> int * 'a = "%loc_LINE"
+external __POS_OF__ : 'a -> (string * int * int * int) * 'a = "%loc_POS"
 
 (* Comparisons *)
 
-external ( = ) : ('a : value_or_null) . ('a[@local_opt]) -> ('a[@local_opt]) -> bool @@ portable = "%equal"
-external ( <> ) : ('a : value_or_null) . ('a[@local_opt]) -> ('a[@local_opt]) -> bool @@ portable = "%notequal"
-external ( < ) : ('a : value_or_null) . ('a[@local_opt]) -> ('a[@local_opt]) -> bool @@ portable = "%lessthan"
-external ( > ) : ('a : value_or_null) . ('a[@local_opt]) -> ('a[@local_opt]) -> bool @@ portable = "%greaterthan"
-external ( <= ) : ('a : value_or_null) . ('a[@local_opt]) -> ('a[@local_opt]) -> bool @@ portable = "%lessequal"
-external ( >= ) : ('a : value_or_null) . ('a[@local_opt]) -> ('a[@local_opt]) -> bool @@ portable = "%greaterequal"
-external compare : ('a : value_or_null) . ('a[@local_opt]) -> ('a[@local_opt]) -> int @@ portable = "%compare"
+external ( = ) : 'a -> 'a -> bool = "%equal"
+external ( <> ) : 'a -> 'a -> bool = "%notequal"
+external ( < ) : 'a -> 'a -> bool = "%lessthan"
+external ( > ) : 'a -> 'a -> bool = "%greaterthan"
+external ( <= ) : 'a -> 'a -> bool = "%lessequal"
+external ( >= ) : 'a -> 'a -> bool = "%greaterequal"
+external compare : 'a -> 'a -> int = "%compare"
 
 let min x y = if x <= y then x else y
 let max x y = if x >= y then x else y
 
-external ( == ) : ('a : value_or_null) . ('a[@local_opt]) -> ('a[@local_opt]) -> bool @@ portable = "%eq"
-external ( != ) : ('a : value_or_null) . ('a[@local_opt]) -> ('a[@local_opt]) -> bool @@ portable = "%noteq"
+external ( == ) : 'a -> 'a -> bool = "%eq"
+external ( != ) : 'a -> 'a -> bool = "%noteq"
 
 (* Boolean operations *)
 
-external not : (bool[@local_opt]) -> bool @@ portable = "%boolnot"
-external ( && ) : (bool[@local_opt]) -> (bool[@local_opt]) -> bool @@ portable = "%sequand"
-external ( || ) : (bool[@local_opt]) -> (bool[@local_opt]) -> bool @@ portable = "%sequor"
+external not : bool -> bool = "%boolnot"
+external ( && ) : bool -> bool -> bool = "%sequand"
+external ( || ) : bool -> bool -> bool = "%sequor"
 
 (* Integer operations *)
 
-external ( ~- ) : (int[@local_opt]) -> int @@ portable = "%negint"
-external ( ~+ ) : (int[@local_opt]) -> int @@ portable = "%identity"
-external succ : (int[@local_opt]) -> int @@ portable = "%succint"
-external pred : (int[@local_opt]) -> int @@ portable = "%predint"
-external ( + ) : (int[@local_opt]) -> (int[@local_opt]) -> int @@ portable = "%addint"
-external ( - ) : (int[@local_opt]) -> (int[@local_opt]) -> int @@ portable = "%subint"
-external ( * ) : (int[@local_opt]) -> (int[@local_opt]) -> int @@ portable = "%mulint"
-external ( / ) : (int[@local_opt]) -> (int[@local_opt]) -> int @@ portable = "%divint"
-external ( mod ) : (int[@local_opt]) -> (int[@local_opt]) -> int @@ portable = "%modint"
+external ( ~- ) : int -> int = "%negint"
+external ( ~+ ) : int -> int = "%identity"
+external succ : int -> int = "%succint"
+external pred : int -> int = "%predint"
+external ( + ) : int -> int -> int = "%addint"
+external ( - ) : int -> int -> int = "%subint"
+external ( * ) : int -> int -> int = "%mulint"
+external ( / ) : int -> int -> int = "%divint"
+external ( mod ) : int -> int -> int = "%modint"
 
 let abs x = if x >= 0 then x else -x
 
-external ( land ) : (int[@local_opt]) -> (int[@local_opt]) -> int @@ portable = "%andint"
-external ( lor ) : (int[@local_opt]) -> (int[@local_opt]) -> int @@ portable = "%orint"
-external ( lxor ) : (int[@local_opt]) -> (int[@local_opt]) -> int @@ portable = "%xorint"
+external ( land ) : int -> int -> int = "%andint"
+external ( lor ) : int -> int -> int = "%orint"
+external ( lxor ) : int -> int -> int = "%xorint"
 
 let lnot x = x lxor (-1)
 
-external ( lsl ) : (int[@local_opt]) -> (int[@local_opt]) -> int @@ portable = "%lslint"
-external ( lsr ) : (int[@local_opt]) -> (int[@local_opt]) -> int @@ portable = "%lsrint"
-external ( asr ) : (int[@local_opt]) -> (int[@local_opt]) -> int @@ portable = "%asrint"
+external ( lsl ) : int -> int -> int = "%lslint"
+external ( lsr ) : int -> int -> int = "%lsrint"
+external ( asr ) : int -> int -> int = "%asrint"
 
 let max_int = (-1) lsr 1
 let min_int = max_int + 1
 
 (* Floating-point operations *)
 
-external ( ~-. ) : (float[@local_opt]) -> (float[@local_opt]) @@ portable = "%negfloat"
-external ( ~+. ) : (float[@local_opt]) -> (float[@local_opt]) @@ portable = "%identity"
-external ( +. ) : (float[@local_opt]) -> (float[@local_opt]) -> (float[@local_opt]) @@ portable = "%addfloat"
-external ( -. ) : (float[@local_opt]) -> (float[@local_opt]) -> (float[@local_opt]) @@ portable = "%subfloat"
-external ( *. ) : (float[@local_opt]) -> (float[@local_opt]) -> (float[@local_opt]) @@ portable = "%mulfloat"
-external ( /. ) : (float[@local_opt]) -> (float[@local_opt]) -> (float[@local_opt]) @@ portable = "%divfloat"
-external ( ** ) : float -> float -> float @@ portable = "caml_power_float" "pow"
+external ( ~-. ) : float -> float = "%negfloat"
+external ( ~+. ) : float -> float = "%identity"
+external ( +. ) : float -> float -> float = "%addfloat"
+external ( -. ) : float -> float -> float = "%subfloat"
+external ( *. ) : float -> float -> float = "%mulfloat"
+external ( /. ) : float -> float -> float = "%divfloat"
+external ( ** ) : float -> float -> float = "caml_power_float" "pow"
   [@@unboxed] [@@noalloc]
-external exp : float -> float @@ portable = "caml_exp_float" "exp" [@@unboxed] [@@noalloc]
-external expm1 : float -> float @@ portable = "caml_expm1_float" "caml_expm1"
+external exp : float -> float = "caml_exp_float" "exp" [@@unboxed] [@@noalloc]
+external expm1 : float -> float = "caml_expm1_float" "caml_expm1"
   [@@unboxed] [@@noalloc]
-external acos : float -> float @@ portable = "caml_acos_float" "acos"
+external acos : float -> float = "caml_acos_float" "acos"
   [@@unboxed] [@@noalloc]
-external asin : float -> float @@ portable = "caml_asin_float" "asin"
+external asin : float -> float = "caml_asin_float" "asin"
   [@@unboxed] [@@noalloc]
-external atan : float -> float @@ portable = "caml_atan_float" "atan"
+external atan : float -> float = "caml_atan_float" "atan"
   [@@unboxed] [@@noalloc]
-external atan2 : float -> float -> float @@ portable = "caml_atan2_float" "atan2"
+external atan2 : float -> float -> float = "caml_atan2_float" "atan2"
   [@@unboxed] [@@noalloc]
-external hypot : float -> float -> float @@ portable
+external hypot : float -> float -> float
                = "caml_hypot_float" "caml_hypot" [@@unboxed] [@@noalloc]
-external cos : float -> float @@ portable = "caml_cos_float" "cos" [@@unboxed] [@@noalloc]
-external cosh : float -> float @@ portable = "caml_cosh_float" "cosh"
+external cos : float -> float = "caml_cos_float" "cos" [@@unboxed] [@@noalloc]
+external cosh : float -> float = "caml_cosh_float" "cosh"
   [@@unboxed] [@@noalloc]
-external acosh : float -> float @@ portable = "caml_acosh_float" "caml_acosh"
+external acosh : float -> float = "caml_acosh_float" "caml_acosh"
   [@@unboxed] [@@noalloc]
-external log : float -> float @@ portable = "caml_log_float" "log" [@@unboxed] [@@noalloc]
-external log10 : float -> float @@ portable = "caml_log10_float" "log10"
+external log : float -> float = "caml_log_float" "log" [@@unboxed] [@@noalloc]
+external log10 : float -> float = "caml_log10_float" "log10"
   [@@unboxed] [@@noalloc]
-external log1p : float -> float @@ portable = "caml_log1p_float" "caml_log1p"
+external log1p : float -> float = "caml_log1p_float" "caml_log1p"
   [@@unboxed] [@@noalloc]
-external sin : float -> float @@ portable = "caml_sin_float" "sin" [@@unboxed] [@@noalloc]
-external sinh : float -> float @@ portable = "caml_sinh_float" "sinh"
+external sin : float -> float = "caml_sin_float" "sin" [@@unboxed] [@@noalloc]
+external sinh : float -> float = "caml_sinh_float" "sinh"
   [@@unboxed] [@@noalloc]
-external asinh : float -> float @@ portable = "caml_asinh_float" "caml_asinh"
+external asinh : float -> float = "caml_asinh_float" "caml_asinh"
   [@@unboxed] [@@noalloc]
-external sqrt : float -> float @@ portable = "caml_sqrt_float" "sqrt"
+external sqrt : float -> float = "caml_sqrt_float" "sqrt"
   [@@unboxed] [@@noalloc]
-external tan : float -> float @@ portable = "caml_tan_float" "tan" [@@unboxed] [@@noalloc]
-external tanh : float -> float @@ portable = "caml_tanh_float" "tanh"
+external tan : float -> float = "caml_tan_float" "tan" [@@unboxed] [@@noalloc]
+external tanh : float -> float = "caml_tanh_float" "tanh"
   [@@unboxed] [@@noalloc]
-external atanh : float -> float @@ portable = "caml_atanh_float" "caml_atanh"
+external atanh : float -> float = "caml_atanh_float" "caml_atanh"
   [@@unboxed] [@@noalloc]
-external ceil : float -> float @@ portable = "caml_ceil_float" "ceil"
+external ceil : float -> float = "caml_ceil_float" "ceil"
   [@@unboxed] [@@noalloc]
-external floor : float -> float @@ portable = "caml_floor_float" "floor"
+external floor : float -> float = "caml_floor_float" "floor"
   [@@unboxed] [@@noalloc]
-external abs_float : (float[@local_opt]) -> (float[@local_opt]) @@ portable = "%absfloat"
-external copysign : float -> float -> float @@ portable
+external abs_float : float -> float = "%absfloat"
+external copysign : float -> float -> float
                   = "caml_copysign_float" "caml_copysign"
                   [@@unboxed] [@@noalloc]
-external mod_float : float -> float -> float @@ portable = "caml_fmod_float" "fmod"
+external mod_float : float -> float -> float = "caml_fmod_float" "fmod"
   [@@unboxed] [@@noalloc]
-external frexp : float -> float * int @@ portable = "caml_frexp_float"
-external ldexp : (float [@unboxed]) -> (int [@untagged]) -> (float [@unboxed]) @@ portable =
+external frexp : float -> float * int = "caml_frexp_float"
+external ldexp : (float [@unboxed]) -> (int [@untagged]) -> (float [@unboxed]) =
   "caml_ldexp_float" "caml_ldexp_float_unboxed" [@@noalloc]
-external modf : float -> float * float @@ portable = "caml_modf_float"
-external float : (int[@local_opt]) -> (float[@local_opt]) @@ portable = "%floatofint"
-external float_of_int : (int[@local_opt]) -> (float[@local_opt]) @@ portable = "%floatofint"
-external truncate : (float[@local_opt]) -> int @@ portable = "%intoffloat"
-external int_of_float : (float[@local_opt]) -> int @@ portable = "%intoffloat"
-external float_of_bits : int64 -> float @@ portable
+external modf : float -> float * float = "caml_modf_float"
+external float : int -> float = "%floatofint"
+external float_of_int : int -> float = "%floatofint"
+external truncate : float -> int = "%intoffloat"
+external int_of_float : float -> int = "%intoffloat"
+external float_of_bits : int64 -> float
   = "caml_int64_float_of_bits" "caml_int64_float_of_bits_unboxed"
   [@@unboxed] [@@noalloc]
 let infinity =
@@ -207,19 +205,19 @@ type fpclass =
   | FP_zero
   | FP_infinite
   | FP_nan
-external classify_float : (float [@unboxed]) -> fpclass @@ portable =
+external classify_float : (float [@unboxed]) -> fpclass =
   "caml_classify_float" "caml_classify_float_unboxed" [@@noalloc]
 
 (* String and byte sequence operations -- more in modules String and Bytes *)
 
-external string_length : string @ local -> int @@ portable = "%string_length"
-external bytes_length : bytes @ local -> int @@ portable = "%bytes_length"
-external bytes_create : int -> bytes @@ portable = "caml_create_bytes"
-external string_blit : string -> int -> bytes -> int -> int -> unit @@ portable
+external string_length : string -> int = "%string_length"
+external bytes_length : bytes -> int = "%bytes_length"
+external bytes_create : int -> bytes = "caml_create_bytes"
+external string_blit : string -> int -> bytes -> int -> int -> unit
                      = "caml_blit_string" [@@noalloc]
-external bytes_blit : bytes -> int -> bytes -> int -> int -> unit @@ portable
+external bytes_blit : bytes -> int -> bytes -> int -> int -> unit
                         = "caml_blit_bytes" [@@noalloc]
-external bytes_unsafe_to_string : bytes -> string @@ portable = "%bytes_to_string"
+external bytes_unsafe_to_string : bytes -> string = "%bytes_to_string"
 
 let ( ^ ) s1 s2 =
   let l1 = string_length s1 and l2 = string_length s2 in
@@ -230,39 +228,38 @@ let ( ^ ) s1 s2 =
 
 (* Character operations -- more in module Char *)
 
-external int_of_char : char -> int @@ portable = "%identity"
-external unsafe_char_of_int : int -> char @@ portable = "%identity"
+external int_of_char : char -> int = "%identity"
+external unsafe_char_of_int : int -> char = "%identity"
 let char_of_int n =
   if n < 0 || n > 255 then invalid_arg "char_of_int" else unsafe_char_of_int n
 
 (* Unit operations *)
 
-external ignore : ('a : value_or_null). 'a -> unit @@ portable = "%ignore"
-external ignore_contended : ('a : value_or_null).
-  'a @ contended local once -> unit @@ portable = "%ignore"
+external ignore : 'a -> unit = "%ignore"
+external ignore_contended : 'a -> unit = "%ignore"
 
 (* Pair operations *)
 
-external fst : ('a * 'b[@local_opt]) -> ('a[@local_opt]) @@ portable = "%field0_immut"
-external snd : ('a * 'b[@local_opt]) -> ('b[@local_opt]) @@ portable = "%field1_immut"
+external fst : 'a * 'b -> 'a = "%field0_immut"
+external snd : 'a * 'b -> 'b = "%field1_immut"
 
 (* References *)
 
-type ('a : value_or_null) ref = { mutable contents : 'a }
-external ref : ('a : value_or_null) . 'a -> ('a ref[@local_opt]) @@ portable = "%makemutable"
-external ( ! ) : ('a : value_or_null) . ('a ref[@local_opt]) -> 'a @@ portable = "%field0"
-external ( := ) : ('a : value_or_null) . ('a ref[@local_opt]) -> 'a -> unit @@ portable = "%setfield0"
-external incr : (int ref[@local_opt]) -> unit @@ portable = "%incr"
-external decr : (int ref[@local_opt]) -> unit @@ portable = "%decr"
+type 'a ref = { mutable contents : 'a }
+external ref : 'a -> 'a ref = "%makemutable"
+external ( ! ) : 'a ref -> 'a = "%field0"
+external ( := ) : 'a ref -> 'a -> unit = "%setfield0"
+external incr : int ref -> unit = "%incr"
+external decr : int ref -> unit = "%decr"
 
 (* Result type *)
 
-type ('a : value_or_null, 'b : value_or_null) result = Ok of 'a | Error of 'b
+type ('a, 'b) result = Ok of 'a | Error of 'b
 
 (* String conversion functions *)
 
-external format_int : string -> int -> string @@ portable = "caml_format_int"
-external format_float : string -> float -> string @@ portable = "caml_format_float"
+external format_int : string -> int -> string = "caml_format_int"
+external format_float : string -> float -> string = "caml_format_float"
 
 let string_of_bool b =
   if b then "true" else "false"
@@ -280,14 +277,14 @@ let string_of_int n =
   format_int "%d" n
 
 external int_of_string :
-  (string[@local_opt]) -> int @@ portable = "caml_int_of_string"
+  string -> int = "caml_int_of_string"
 
 let int_of_string_opt s =
   (* TODO: provide this directly as a non-raising primitive. *)
   try Some (int_of_string s)
   with Failure _ -> None
 
-external string_get : string -> int -> char @@ portable = "%string_safe_get"
+external string_get : string -> int -> char = "%string_safe_get"
 
 let valid_float_lexem s =
   let l = string_length s in
@@ -301,7 +298,7 @@ let valid_float_lexem s =
 
 let string_of_float f = valid_float_lexem (format_float "%.12g" f)
 
-external float_of_string : string -> float @@ portable = "caml_float_of_string"
+external float_of_string : string -> float = "caml_float_of_string"
 
 let float_of_string_opt s =
   (* TODO: provide this directly as a non-raising primitive. *)
@@ -319,12 +316,12 @@ let[@tail_mod_cons] rec ( @ ) l1 l2 =
 
 (* I/O operations *)
 
-type in_channel : value mod portable contended
-type out_channel : value mod portable contended
+type in_channel
+type out_channel
 
-external open_descriptor_out : int -> out_channel @@ portable
+external open_descriptor_out : int -> out_channel
                              = "caml_ml_open_descriptor_out"
-external open_descriptor_in : int -> in_channel @@ portable = "caml_ml_open_descriptor_in"
+external open_descriptor_in : int -> in_channel = "caml_ml_open_descriptor_in"
 
 let stdin = open_descriptor_in 0
 let stdout = open_descriptor_out 1
@@ -337,9 +334,9 @@ type open_flag =
   | Open_creat | Open_trunc | Open_excl
   | Open_binary | Open_text | Open_nonblock
 
-external open_desc : string -> open_flag list -> int -> int @@ portable = "caml_sys_open"
+external open_desc : string -> open_flag list -> int -> int = "caml_sys_open"
 
-external set_out_channel_name: out_channel -> string -> unit @@ portable =
+external set_out_channel_name: out_channel -> string -> unit =
   "caml_ml_set_channel_name"
 
 let open_out_gen mode perm name =
@@ -353,9 +350,9 @@ let open_out name =
 let open_out_bin name =
   open_out_gen [Open_wronly; Open_creat; Open_trunc; Open_binary] 0o666 name
 
-external flush : out_channel -> unit @@ portable = "caml_ml_flush"
+external flush : out_channel -> unit = "caml_ml_flush"
 
-external out_channels_list : unit -> out_channel list @@ portable
+external out_channels_list : unit -> out_channel list
                            = "caml_ml_out_channels_list"
 
 let flush_all () =
@@ -370,15 +367,14 @@ let flush_all () =
         iter l
   in iter (out_channels_list ())
 
-external unsafe_output : out_channel -> bytes @ local -> int -> int -> unit
-  @@ portable
+external unsafe_output : out_channel -> bytes -> int -> int -> unit
   = "caml_ml_output_bytes"
 
 external unsafe_output_string :
-  out_channel -> string @ local -> int -> int -> unit @@ portable
+  out_channel -> string -> int -> int -> unit
   = "caml_ml_output"
 
-external output_char : out_channel -> char -> unit @@ portable = "caml_ml_output_char"
+external output_char : out_channel -> char -> unit = "caml_ml_output_char"
 
 let output_bytes oc s =
   unsafe_output oc s 0 (bytes_length s)
@@ -396,27 +392,27 @@ let output_substring oc s ofs len =
   then invalid_arg "output_substring"
   else unsafe_output_string oc s ofs len
 
-external output_byte : out_channel -> int -> unit @@ portable = "caml_ml_output_char"
-external output_binary_int : out_channel -> int -> unit @@ portable = "caml_ml_output_int"
+external output_byte : out_channel -> int -> unit = "caml_ml_output_char"
+external output_binary_int : out_channel -> int -> unit = "caml_ml_output_int"
 
-external marshal_to_channel : ('a : value_or_null) . out_channel -> 'a -> unit list -> unit @@ portable
+external marshal_to_channel : out_channel -> 'a -> unit list -> unit
      = "caml_output_value"
 let output_value chan v = marshal_to_channel chan v []
 
-external seek_out : out_channel -> int -> unit @@ portable = "caml_ml_seek_out"
-external pos_out : out_channel -> int @@ portable = "caml_ml_pos_out"
-external out_channel_length : out_channel -> int @@ portable = "caml_ml_channel_size"
-external close_out_channel : out_channel -> unit @@ portable = "caml_ml_close_channel"
+external seek_out : out_channel -> int -> unit = "caml_ml_seek_out"
+external pos_out : out_channel -> int = "caml_ml_pos_out"
+external out_channel_length : out_channel -> int = "caml_ml_channel_size"
+external close_out_channel : out_channel -> unit = "caml_ml_close_channel"
 let close_out oc = flush oc; close_out_channel oc
 let close_out_noerr oc =
   (try flush oc with _ -> ());
   (try close_out_channel oc with _ -> ())
-external set_binary_mode_out : out_channel -> bool -> unit @@ portable
+external set_binary_mode_out : out_channel -> bool -> unit
                              = "caml_ml_set_binary_mode"
 
 (* General input functions *)
 
-external set_in_channel_name: in_channel -> string -> unit @@ portable =
+external set_in_channel_name: in_channel -> string -> unit =
   "caml_ml_set_channel_name"
 
 let open_in_gen mode perm name =
@@ -430,9 +426,9 @@ let open_in name =
 let open_in_bin name =
   open_in_gen [Open_rdonly; Open_binary] 0 name
 
-external input_char : in_channel -> char @@ portable = "caml_ml_input_char"
+external input_char : in_channel -> char = "caml_ml_input_char"
 
-external unsafe_input : in_channel -> bytes -> int -> int -> int @@ portable
+external unsafe_input : in_channel -> bytes -> int -> int -> int
                       = "caml_ml_input"
 
 let input ic s ofs len =
@@ -458,7 +454,7 @@ let really_input_string ic len =
   really_input ic s 0 len;
   bytes_unsafe_to_string s
 
-external input_scan_line : in_channel -> int @@ portable = "caml_ml_input_scan_line"
+external input_scan_line : in_channel -> int = "caml_ml_input_scan_line"
 
 let input_line chan =
   let rec build_result buf pos = function
@@ -488,15 +484,15 @@ let input_line chan =
     end
   in bytes_unsafe_to_string (scan [] 0)
 
-external input_byte : in_channel -> int @@ portable = "caml_ml_input_char"
-external input_binary_int : in_channel -> int @@ portable = "caml_ml_input_int"
-external input_value : ('a : value_or_null) . in_channel -> 'a @@ portable = "caml_input_value"
-external seek_in : in_channel -> int -> unit @@ portable = "caml_ml_seek_in"
-external pos_in : in_channel -> int @@ portable = "caml_ml_pos_in"
-external in_channel_length : in_channel -> int @@ portable = "caml_ml_channel_size"
-external close_in : in_channel -> unit @@ portable = "caml_ml_close_channel"
+external input_byte : in_channel -> int = "caml_ml_input_char"
+external input_binary_int : in_channel -> int = "caml_ml_input_int"
+external input_value : in_channel -> 'a = "caml_input_value"
+external seek_in : in_channel -> int -> unit = "caml_ml_seek_in"
+external pos_in : in_channel -> int = "caml_ml_pos_in"
+external in_channel_length : in_channel -> int = "caml_ml_channel_size"
+external close_in : in_channel -> unit = "caml_ml_close_channel"
 let close_in_noerr ic = (try close_in ic with _ -> ())
-external set_binary_mode_in : in_channel -> bool -> unit @@ portable
+external set_binary_mode_in : in_channel -> bool -> unit
                             = "caml_ml_set_binary_mode"
 
 (* Output functions on standard output *)
@@ -533,13 +529,13 @@ let read_float_opt () = float_of_string_opt(read_line())
 
 module LargeFile =
   struct
-    external seek_out : out_channel -> int64 -> unit @@ portable = "caml_ml_seek_out_64"
-    external pos_out : out_channel -> int64 @@ portable = "caml_ml_pos_out_64"
-    external out_channel_length : out_channel -> int64 @@ portable
+    external seek_out : out_channel -> int64 -> unit = "caml_ml_seek_out_64"
+    external pos_out : out_channel -> int64 = "caml_ml_pos_out_64"
+    external out_channel_length : out_channel -> int64
                                 = "caml_ml_channel_size_64"
-    external seek_in : in_channel -> int64 -> unit @@ portable = "caml_ml_seek_in_64"
-    external pos_in : in_channel -> int64 @@ portable = "caml_ml_pos_in_64"
-    external in_channel_length : in_channel -> int64 @@ portable = "caml_ml_channel_size_64"
+    external seek_in : in_channel -> int64 -> unit = "caml_ml_seek_in_64"
+    external pos_in : in_channel -> int64 = "caml_ml_pos_in_64"
+    external in_channel_length : in_channel -> int64 = "caml_ml_channel_size_64"
   end
 
 (* Formats *)
@@ -557,7 +553,7 @@ let string_of_format (Format (_fmt, str)) = str
 
 external format_of_string :
  ('a, 'b, 'c, 'd, 'e, 'f) format6 ->
- ('a, 'b, 'c, 'd, 'e, 'f) format6 @@ portable = "%identity"
+ ('a, 'b, 'c, 'd, 'e, 'f) format6 = "%identity"
 
 let ( ^^ ) (Format (fmt1, str1)) (Format (fmt2, str2)) =
   Format (CamlinternalFormatBasics.concat_fmt fmt1 fmt2,
@@ -568,20 +564,20 @@ let ( ^^ ) (Format (fmt1, str1)) (Format (fmt2, str2)) =
 external sys_exit : int -> 'a = "caml_sys_exit"
 
 (* for at_exit *)
-type 'a atomic_t : value mod portable contended
-external atomic_make : 'a @ contended portable -> 'a atomic_t @@ portable = "%makemutable"
-external atomic_get : 'a atomic_t -> 'a @ contended portable @@ portable = "%atomic_load"
-external atomic_compare_and_set : 'a atomic_t -> 'a @ contended portable -> 'a @ contended portable -> bool @@ portable
+type 'a atomic_t
+external atomic_make : 'a -> 'a atomic_t = "%makemutable"
+external atomic_get : 'a atomic_t -> 'a = "%atomic_load"
+external atomic_compare_and_set : 'a atomic_t -> 'a -> 'a -> bool
   = "%atomic_cas"
 
-external magic_portable : 'a -> 'a @ portable = "%identity"
+external magic_portable : 'a -> 'a = "%identity"
 
 (* [exit_function] is only executed from [do_at_exit] below, which is [nonportable],
    so it is safe to call [nonportable] functions from it as long as [exit] remains
    nonportable. *)
 let exit_function = atomic_make flush_all
 
-let rec at_exit_safe (f @ portable) =
+let rec at_exit_safe (f) =
   (* MPR#7253, MPR#7796: make sure "f" is executed only once *)
   let f_yet_to_run = atomic_make true in
   let old_exit = atomic_get exit_function in
@@ -592,11 +588,11 @@ let rec at_exit_safe (f @ portable) =
   let success = atomic_compare_and_set exit_function old_exit new_exit in
   if not success then at_exit_safe f
 
-let (at_exit @ nonportable) f = at_exit_safe (magic_portable f)
+let at_exit f = at_exit_safe (magic_portable f)
 
 let do_domain_local_at_exit = ref (fun () -> ())
 
-let (do_at_exit @ nonportable) () =
+let do_at_exit () =
   (!do_domain_local_at_exit) ();
   (atomic_get exit_function) ()
 
@@ -606,8 +602,8 @@ let exit retcode =
 
 let _ = register_named_value "Pervasives.do_at_exit" do_at_exit
 
-external major : unit -> unit @@ portable = "caml_gc_major"
-external naked_pointers_checked : unit -> bool @@ portable
+external major : unit -> unit = "caml_gc_major"
+external naked_pointers_checked : unit -> bool
   = "caml_sys_const_naked_pointers_checked"
 let () = if naked_pointers_checked () then at_exit major
 

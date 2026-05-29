@@ -13,7 +13,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-@@ portable
 
 open! Stdlib
 
@@ -143,7 +142,7 @@ open! Stdlib
    that would be a problematic situation,
    known as a {i deadlock}. *)
 
-type t : value mod portable contended
+type t
 (** The type of condition variables. *)
 
 val create : unit -> t
@@ -152,7 +151,7 @@ val create : unit -> t
    with a certain mutex [m] and with a certain property {i P} of the data
    structure that is protected by the mutex [m]. *)
 
-val wait : t @ local -> Mutex.t @ local -> unit
+val wait : t -> Mutex.t -> unit
 (**The call [wait c m] is permitted only if [m] is the mutex associated
    with the condition variable [c], and only if [m] is currently locked.
    This call atomically unlocks the mutex [m] and suspends the
@@ -164,7 +163,7 @@ val wait : t @ local -> Mutex.t @ local -> unit
    variable [c] holds when [wait] returns; one must explicitly test
    whether {i P} holds after calling [wait]. *)
 
-val signal : t @ local -> unit
+val signal : t -> unit
 (**[signal c] wakes up one of the threads waiting on the condition
    variable [c], if there is one. If there is none, this call has
    no effect.
@@ -172,7 +171,7 @@ val signal : t @ local -> unit
    It is recommended to call [signal c] inside a critical section,
    that is, while the mutex [m] associated with [c] is locked. *)
 
-val broadcast : t @ local -> unit
+val broadcast : t -> unit
 (**[broadcast c] wakes up all threads waiting on the condition
    variable [c]. If there are none, this call has no effect.
 

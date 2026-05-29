@@ -13,14 +13,14 @@
 (*                                                                        *)
 (**************************************************************************)
 
-type t : sync_data
-external create: unit -> t @@ portable = "caml_ml_mutex_new"
-external lock: t @ local -> unit @@ portable = "caml_ml_mutex_lock"
-external try_lock: t @ local -> bool @@ portable = "caml_ml_mutex_try_lock"
-external unlock: t @ local -> unit @@ portable = "caml_ml_mutex_unlock"
+type t
+external create: unit -> t = "caml_ml_mutex_new"
+external lock: t -> unit = "caml_ml_mutex_lock"
+external try_lock: t -> bool = "caml_ml_mutex_try_lock"
+external unlock: t -> unit = "caml_ml_mutex_unlock"
 
 (* private re-export *)
-external reraise : exn -> 'a @@ portable = "%reraise"
+external reraise : exn -> 'a = "%reraise"
 
 type nothing = |
 
