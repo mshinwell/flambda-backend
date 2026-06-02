@@ -55,16 +55,8 @@ f:
   subq  $8, %rsp
   movq  %rax, %rbx
   movq  camlTOP4__fn$5b$3a1$2c19$2d$2d45$5d_10@GOTPCREL(%rip), %rax
-<<<<<<< HEAD
   call  camlStdlib__List__map_16_124_code@PLT
 .L113:
-||||||| eb63e0e418
-  call  camlStdlib__List__map_15_113_code@PLT
-.L113:
-=======
-  call  camlStdlib__List__map_15_113_code@PLT
-.L0:
->>>>>>> 5.2.0minus-39
   movq  %rax, %rbx
   movq  camlTOP4__fn$5b$3a1$2c60$2d$2d86$5d_11@GOTPCREL(%rip), %rax
   addq  $8, %rsp
