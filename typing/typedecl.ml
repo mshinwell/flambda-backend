@@ -4635,7 +4635,8 @@ let transl_package_constraint ~loc ty =
 
 let abstract_type_decl ~injective ~jkind ~params =
   let arity = List.length params in
-  Ctype.with_local_level_generalize ~before_generalize:generalize_decl begin fun () ->
+  Ctype.with_local_level_generalize ~before_generalize:generalize_decl
+    begin fun () ->
     let params = List.map Ctype.newvar params in
     { type_params = params;
       type_arity = arity;

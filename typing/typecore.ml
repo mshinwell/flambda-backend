@@ -4199,7 +4199,8 @@ let rec check_counter_example_pat
         tpl expected_tys;
       let tpl_ann = List.combine tpl expected_tys in
       map_fold_cont
-        (fun ((l,p,_),(_,t,_,sort)) k -> check_rec p t (fun p -> k (l, p, sort)))
+        (fun ((l,p,_),(_,t,_,sort)) k ->
+          check_rec p t (fun p -> k (l, p, sort)))
         tpl_ann
         (fun pl ->
            let pat_type =
@@ -9859,7 +9860,8 @@ and type_apply_arg env ~app_loc ~funct ~index ~position_and_mode ~partial_app
           let arg, ty_arg, vars =
             with_local_level_generalize begin fun () ->
               let vars, ty_arg' =
-                with_local_level_generalize_structure_if separate begin fun () ->
+                with_local_level_generalize_structure_if separate
+                  begin fun () ->
                   instance_poly_fixed vars ty_arg'
                 end
               in

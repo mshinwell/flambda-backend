@@ -1461,7 +1461,8 @@ let message = function
            but the %a attribute for@ this signature does not apply to it@ \
            because its type is not syntactically a function type.@ \
            @[If it should be checked, use an explicit zero_alloc attribute@ \
-           with an arity.@ If not, use an explicit zero_alloc ignore attribute.@]"
+           with an arity.@ If not, use an explicit zero_alloc ignore \
+           attribute.@]"
         Style.inline_code (Printf.sprintf "[@@@zero_alloc %s]" s)
   | Unchecked_zero_alloc_attribute ->
       msg "the zero_alloc attribute cannot be checked.@ \
