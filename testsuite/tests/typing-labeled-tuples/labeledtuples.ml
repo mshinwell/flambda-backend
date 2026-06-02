@@ -110,7 +110,16 @@ Line 4, characters 3-25:
        ^^^^^^^^^^^^^^^^^^^^^^
 Error: This expression has type "a1:string * int * c:'a"
        but an expression was expected of type "a1:string * int * a2:string"
+<<<<<<< HEAD
        Labels "c" and "a2" do not match
+||||||| eb63e0e418
+Line 4, characters 3-24:
+4 |    ~a: "5", 10, ~c: "hi"
+       ^^^^^^^^^^^^^^^^^^^^^
+Error: This expression has type "a:string * int * c:'a"
+       but an expression was expected of type "a:string * int * a:string"
+=======
+>>>>>>> 5.2.0minus-39
 |}]
 
 (* Types in function argument/return *)
