@@ -339,6 +339,10 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
       | Univar _ -> Print_as "<univar>"
       | Genvar _ -> Print_as "<genvar>"
 
+    let print_sort_option : Jkind.Sort.Const.t option -> _ = function
+      | None -> Print_as "<unknown>"
+      | Some sort -> print_sort sort
+
     let outval_of_value max_steps max_depth check_depth env obj lpoly ty =
       if not @@ Types.Lpoly.is_empty_exn lpoly then Oval_stuff "<lpoly>"
       else
@@ -729,7 +733,11 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
               let name = Ident.name ld_id in
               (* PR#5722: print full module path only
                  for first record field *)
-              let is_void = Jkind.Sort.Const.(equal void ld_sort) in
+              let is_void =
+                match ld_sort with
+                  | None -> false
+                  | Some ld_sort -> Jkind.Sort.Const.(equal void ld_sort)
+              in
               let lid =
                 if first then tree_of_label env path name
                 else tree_of_name name
@@ -767,6 +775,7 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
         in
         Oval_record (tree_of_fields (pos = 0) pos lbl_list)
 
+      (* CR lmaurer: *Pretty please* let's cut down on the duplication here. *)
       and tree_of_record_unboxed_product_fields depth env path type_params
             ty_list lbl_list pos obj =
         let rec tree_of_fields first pos = function
@@ -780,7 +789,7 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
                 if first then tree_of_unboxed_product_label env path name
                 else tree_of_name name
               and v =
-                match print_sort ld_sort with
+                match print_sort_option ld_sort with
                 | Print_as msg -> Oval_stuff msg
                 | Print_as_value ->
                   match lbl_list with
@@ -890,7 +899,7 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
         in
         let args = instantiate_types env type_params ty_list cstr.cstr_args in
         let args = List.map2 (fun { ca_sort } arg ->
-            (arg, print_sort ca_sort))
+            (arg, print_sort_option ca_sort))
             cstr.cstr_args args
         in
         tree_of_constr_with_args
