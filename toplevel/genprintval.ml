@@ -448,7 +448,7 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
                     tree_of_record depth path type_params ty_list obj
                       lbl_list rep
                 | {type_kind = Type_record_unboxed_product
-                                 (lbl_list, Record_unboxed_product, _);
+                                 (lbl_list, _, _);
                   type_params} ->
                     begin match check_depth depth obj ty with
                       Some x -> x
@@ -645,7 +645,7 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
               let ty_args =
                 List.map2
                   (fun { ca_sort } ty_arg ->
-                      (ty_arg, print_sort ca_sort)
+                      (ty_arg, print_sort_option ca_sort)
                   ) l ty_args
               in
               tree_of_constr_with_args (tree_of_constr env path)
@@ -719,6 +719,8 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
                     else Outval_record_boxed
               | Record_dummy _ ->
                   Misc.fatal_error "dummy record representation"
+              | Record_variable ->
+                  Misc.fatal_error "variable record representation"
             in
             tree_of_record_fields depth
               env path type_params ty_list

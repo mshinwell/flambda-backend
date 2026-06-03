@@ -255,7 +255,7 @@ type matched_expression_desc =
       * texp_construct_identifier
   | Texp_record of
       { fields :
-          (Types.label_description
+          (Data_types.label_description
           * texp_record_field_identifier
           * record_label_definition)
           array;
@@ -442,14 +442,14 @@ type 'a matched_pattern_desc =
       -> value matched_pattern_desc
   | Tpat_construct :
       Longident.t Location.loc
-      * Types.constructor_description
+      * Data_types.constructor_description
       * (value_binding_identifier * value general_pattern) list
       * (tpat_construct_type_arg list * core_type) option
       * tpat_construct_identifier
       -> value matched_pattern_desc
   | Tpat_record :
       (Longident.t Location.loc
-      * Types.label_description
+      * Data_types.label_description
       * value general_pattern)
       list
       * Asttypes.closed_flag
@@ -459,7 +459,7 @@ type 'a matched_pattern_desc =
      everywhere_ *)
   | Tpat_record_unboxed_product :
       (Longident.t Location.loc
-      * Types.unboxed_label_description
+      * Data_types.unboxed_label_description
       * value general_pattern)
       list
       * Asttypes.closed_flag
