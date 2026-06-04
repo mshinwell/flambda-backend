@@ -98,7 +98,6 @@ external with_tag : int -> t -> t @@ portable = "caml_obj_with_tag"
 let first_non_constant_constructor_tag = 0
 let last_non_constant_constructor_tag = 242
 
-let code_block_tag = 243
 let forcing_tag = 244
 (* Note that cmmgen.ml contains a copy of [cont_tag] of its own *)
 let cont_tag = 245

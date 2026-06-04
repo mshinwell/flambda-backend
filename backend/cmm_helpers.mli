@@ -1219,6 +1219,26 @@ val make_symbol : ?compilation_unit:Compilation_unit.t -> string -> string
 *)
 val code_block_symbol_name : string -> string
 
+(** [emit_code_block ~block_sym ~own_entry ~code_dep_entries ~data_deps cont]
+    emits the synthetic "code block" for an unloadable function as an ordinary
+    [Closure_tag] block (so that no dedicated runtime tag is needed).
+
+    [code_dep_entries] (the function's unloadable code dependencies, given as
+    their entry symbols) are packed two per [Full_and_partial_application]
+    function slot, with each closinfo flagged so the major GC darkens both
+    code-pointer positions via their [entry - 1] back-pointers; [data_deps]
+    (the function's data-block dependencies) form the closure environment.
+    [own_entry] only fills a dummy slot when there are no code dependencies.
+    Data-block tracking should be suppressed around this call (the block is
+    tracked via the unit's code-block sentinel, not as a data block). *)
+val emit_code_block :
+  block_sym:symbol ->
+  own_entry:symbol ->
+  code_dep_entries:symbol list ->
+  data_deps:symbol list ->
+  data_item list ->
+  data_item list
+
 val machtype_of_layout : Lambda.layout -> machtype
 
 val machtype_of_layout_changing_tagged_int_to_val : Lambda.layout -> machtype

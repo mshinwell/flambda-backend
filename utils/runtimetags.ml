@@ -17,7 +17,6 @@
 
 let first_non_constant_constructor_tag = 0
 let last_non_constant_constructor_tag = 242
-let code_block_tag = 243
 let forcing_tag = 244
 let cont_tag = 245
 let lazy_tag = 246

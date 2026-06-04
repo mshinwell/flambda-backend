@@ -380,11 +380,14 @@ let caml_int64_ops = "caml_int64_ops"
 let pos_arity_in_closinfo = (8 * size_addr) - 8
 (* arity = the top 8 bits of the closinfo word *)
 
-let pack_closure_info ~arity ~startenv ~is_last ~is_unloadable =
+(* Full closinfo packer. Bit layout from the top: 8-bit signed [arity];
+   [is_last]; [is_unloadable]; [is_code_block]; then the start-of-environment
+   delta; then the low tag bit. [is_unloadable] and [is_code_block] each stole
+   one bit from the top of the delta field, so the delta now occupies two
+   fewer bits than the raw arity position would suggest. *)
+let pack_closure_info0 ~arity ~startenv ~is_last ~is_unloadable ~is_code_block =
   assert (-128 <= arity && arity <= 127);
-  (* The "delta" / startenv field now occupies one less bit than before (we
-     stole the top bit for [is_unloadable]). *)
-  assert (0 <= startenv && startenv < 1 lsl (pos_arity_in_closinfo - 3));
+  assert (0 <= startenv && startenv < 1 lsl (pos_arity_in_closinfo - 4));
   Nativeint.(
     add
       (shift_left (of_int arity) pos_arity_in_closinfo)
@@ -396,7 +399,23 @@ let pack_closure_info ~arity ~startenv ~is_last ~is_unloadable =
             (shift_left
                (Bool.to_int is_unloadable |> Nativeint.of_int)
                (pos_arity_in_closinfo - 2))
-            (add (shift_left (of_int startenv) 1) 1n))))
+            (add
+               (shift_left
+                  (Bool.to_int is_code_block |> Nativeint.of_int)
+                  (pos_arity_in_closinfo - 3))
+               (add (shift_left (of_int startenv) 1) 1n)))))
+
+let pack_closure_info ~arity ~startenv ~is_last ~is_unloadable =
+  pack_closure_info0 ~arity ~startenv ~is_last ~is_unloadable
+    ~is_code_block:false
+
+(* Closinfo for a synthetic code-block function slot (see [emit_code_block]).
+   Such a slot does not describe a real closure; the [is_code_block] bit tells
+   the major GC's closure walker to darken both code-pointer positions of the
+   slot via their [entry - 1] back-pointers. *)
+let pack_code_block_closure_info ~arity ~startenv ~is_last =
+  pack_closure_info0 ~arity ~startenv ~is_last ~is_unloadable:false
+    ~is_code_block:true
 
 let closure_info' ~arity ~startenv ~is_last ~is_unloadable =
   let arity =
@@ -4433,6 +4452,72 @@ let make_symbol ?compilation_unit name =
 
 let code_block_symbol_name entry_linkage_name =
   entry_linkage_name ^ "_code_block"
+
+(* Emit the synthetic "code block" for an unloadable function as an ordinary
+   [Closure_tag] block, so that no dedicated runtime tag is required.
+
+   Layout (see also [caml_darken_unloadable_code_blocks_in_closure]):
+
+     header | CP0a closinfo0 CP0b | infix | CP1a closinfo1 CP1b | ... | env...
+
+   - [code_dep_entries] are the function-entry symbols of the function's
+     unloadable code dependencies (same-CU functions reached directly). They
+     are packed two per [Full_and_partial_application]-shaped function slot
+     (arity 2, so each slot has two code-pointer positions, at offsets 0 and
+     2); when the count is odd the final dependency is duplicated into the
+     spare position. Every closinfo carries the [is_code_block] bit, so the
+     major GC darkens both positions of every slot via their [entry - 1]
+     back-pointers.
+   - [data_deps] are the function's data-block dependencies (same-CU symbols);
+     they form the closure environment and are darkened by the standard
+     closure environment scan.
+   - [own_entry] is used only when there are no code dependencies, to fill the
+     single dummy function slot needed to form a valid closure. That slot
+     carries no [is_code_block]/[is_unloadable] bit, so it is never darkened,
+     and its code-pointer position is skipped by the environment scan.
+
+   The block is reached during marking only via the [entry - 1] back-pointer
+   of the function it describes; it is never called. *)
+let emit_code_block ~(block_sym : symbol) ~(own_entry : symbol)
+    ~(code_dep_entries : symbol list) ~(data_deps : symbol list) cont =
+  let cp (sym : symbol) = Csymbol_address sym in
+  let slots, env_start =
+    match code_dep_entries with
+    | [] ->
+      (* No code dependencies: one dummy size-2 slot holding the function's
+         own entry. With no darkening bit the GC walker ignores it. *)
+      let env_start = 2 in
+      let closinfo =
+        pack_closure_info ~arity:0 ~startenv:env_start ~is_last:true
+          ~is_unloadable:false
+      in
+      [cp own_entry; Cint closinfo], env_start
+    | _ ->
+      let deps = Array.of_list code_dep_entries in
+      let n = Array.length deps in
+      let num_slots = (n + 1) / 2 in
+      (* Prefix = num_slots size-3 slots + (num_slots - 1) infix headers. *)
+      let env_start = (4 * num_slots) - 1 in
+      let slots =
+        List.concat
+          (List.init num_slots (fun k ->
+               let off = 4 * k in
+               let infix = if k = 0 then [] else [Cint (infix_header off)] in
+               let a = deps.(2 * k) in
+               let b =
+                 if (2 * k) + 1 < n then deps.((2 * k) + 1) else deps.(2 * k)
+               in
+               let closinfo =
+                 pack_code_block_closure_info ~arity:2
+                   ~startenv:(env_start - off) ~is_last:(k = num_slots - 1)
+               in
+               infix @ [cp a; Cint closinfo; cp b]))
+      in
+      slots, env_start
+  in
+  let env = List.map cp data_deps in
+  let wosize = env_start + List.length data_deps in
+  emit_unit_block block_sym (white_closure_header wosize) (slots @ env @ cont)
 
 (* Failure function for closures that should never be called indirectly *)
 

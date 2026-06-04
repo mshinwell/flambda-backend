@@ -470,6 +470,13 @@ Caml_inline void* Ptr_val(value val)
    The bit just below that is set iff this closure's code lives in an
    "unloadable" compilation unit (CU), i.e. the runtime may reclaim the
    code/data of that CU when no live reference remains.
+   The bit just below *that* is set iff this is a synthetic "code block"
+   slot: rather than describing a real closure, it packs two unloadable
+   code-pointer dependencies (at slot offsets 0 and 2) of a function in an
+   unloadable CU.  The major GC darkens both via their [entry - 1]
+   back-pointers (see [caml_darken_unloadable_code_blocks_in_closure]).
+   This lets code blocks be encoded as ordinary [Closure_tag] objects
+   instead of needing a dedicated runtime tag.
    The low bit is set to one, to look like an integer.
    The remaining bits are the field number for the first word of the scannable
    part of the environment, or, in other words, the offset (in words) from the
@@ -479,32 +486,34 @@ Caml_inline void* Ptr_val(value val)
 /* CR ncourant: it might be cleaner to use a packed struct here */
 #ifdef ARCH_SIXTYFOUR
 #define Arity_closinfo(info) ((intnat)(info) >> 56)
-#define Start_env_closinfo(info) (((uintnat)(info) << 10) >> 11)
+#define Start_env_closinfo(info) (((uintnat)(info) << 11) >> 12)
 #define Is_last_closinfo(info) (((uintnat)(info) << 8) >> 63)
 #define Unloadable_closinfo(info) (((uintnat)(info) << 9) >> 63)
-/* [delta] is masked to 53 bits so that it cannot alias into bit 54
-   (the [is_unloadable] bit) for either macro. In-tree callers pass
-   tiny deltas (closure prefix word counts), but the mask makes the
-   bit-field boundary explicit rather than accidental. */
+#define Code_block_closinfo(info) (((uintnat)(info) << 10) >> 63)
+/* [delta] is masked to 52 bits so that it cannot alias into bit 53 or 54
+   (the [is_code_block] / [is_unloadable] bits) for any macro. In-tree
+   callers pass tiny deltas (closure prefix word counts), but the mask
+   makes the bit-field boundary explicit rather than accidental. */
 #define Make_closinfo(arity,delta,is_last) \
   (((uintnat)(arity) << 56) + ((uintnat)(is_last) << 55) \
-    + (((uintnat)(delta) & (((uintnat)1 << 53) - 1)) << 1) + 1)
+    + (((uintnat)(delta) & (((uintnat)1 << 52) - 1)) << 1) + 1)
 #define Make_closinfo_unloadable(arity,delta,is_last,is_unloadable) \
   (((uintnat)(arity) << 56) + ((uintnat)(is_last) << 55) \
     + ((uintnat)(is_unloadable) << 54) \
-    + (((uintnat)(delta) & (((uintnat)1 << 53) - 1)) << 1) + 1)
+    + (((uintnat)(delta) & (((uintnat)1 << 52) - 1)) << 1) + 1)
 #else
 #define Arity_closinfo(info) ((intnat)(info) >> 24)
-#define Start_env_closinfo(info) (((uintnat)(info) << 10) >> 11)
+#define Start_env_closinfo(info) (((uintnat)(info) << 11) >> 12)
 #define Is_last_closinfo(info) (((uintnat)(info) << 8) >> 31)
 #define Unloadable_closinfo(info) (((uintnat)(info) << 9) >> 31)
+#define Code_block_closinfo(info) (((uintnat)(info) << 10) >> 31)
 #define Make_closinfo(arity,delta,is_last) \
   (((uintnat)(arity) << 24) + ((uintnat)(is_last) << 23) \
-    + (((uintnat)(delta) & (((uintnat)1 << 21) - 1)) << 1) + 1)
+    + (((uintnat)(delta) & (((uintnat)1 << 20) - 1)) << 1) + 1)
 #define Make_closinfo_unloadable(arity,delta,is_last,is_unloadable) \
   (((uintnat)(arity) << 24) + ((uintnat)(is_last) << 23) \
     + ((uintnat)(is_unloadable) << 22) \
-    + (((uintnat)(delta) & (((uintnat)1 << 21) - 1)) << 1) + 1)
+    + (((uintnat)(delta) & (((uintnat)1 << 20) - 1)) << 1) + 1)
 #endif
 
 /* This tag is used (with Forcing_tag & Forward_tag) to implement lazy values.
@@ -517,14 +526,6 @@ Caml_inline void* Ptr_val(value val)
 /* This tag is used (with Lazy_tag & Forward_tag) to implement lazy values.
  * See major_gc.c and stdlib/lazy.ml. */
 #define Forcing_tag 244
-
-/* Tag used for code-block descriptors emitted for functions in unloadable
- * compilation units. A Code_block is a heap-shaped object holding pointers to
- * dependency code-blocks and data blocks for one function; standard mark scan
- * darkens its fields. The tag is used by the unload-bookkeeping pass and for
- * safety assertions; it is not consulted by [caml_darken] beyond the standard
- * scannable-tag treatment. */
-#define Code_block_tag 243
 
 /* Another special case: variants */
 CAMLextern value caml_hash_variant(char const * tag);

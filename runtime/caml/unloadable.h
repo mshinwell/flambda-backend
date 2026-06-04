@@ -19,8 +19,11 @@
  *
  * Each unit holds:
  *   - A list of [Code_block] addresses (one per function defined in the
- *     unit), each a heap-shaped block tagged [Code_block_tag] holding
- *     pointers to dependency [Code_block]s and data blocks.
+ *     unit), each a heap-shaped [Closure_tag] block whose function slots
+ *     pack the function's unloadable code-pointer dependencies and whose
+ *     environment holds its data-block dependencies (see
+ *     [caml_darken_unloadable_code_blocks_in_closure] and the compiler-side
+ *     [Cmm_helpers.emit_code_block]).
  *   - A list of static-data block addresses (white-headed; unmarked at
  *     emission time per B.1).
  *   - A list of (text_start, text_end) ranges covering the JIT-emitted code
@@ -43,7 +46,7 @@
 struct caml_unloadable_unit {
   struct caml_unloadable_unit *next;
 
-  /* Code_block heap-shaped objects (tag = Code_block_tag) for each function
+  /* Code_block heap-shaped objects (tag = Closure_tag) for each function
    * defined in the unit. The mark phase darkens these via the closure /
    * frame back-pointer paths (F.1 / F.2). */
   value *code_blocks;
@@ -199,9 +202,9 @@ Caml_inline void caml_darken_code_block_for_entry(void *state, value entry) {
   caml_darken(state, code_block, NULL);
 }
 
-/* Walk every function-slot in a closure and darken the [Code_block] of any
- * function whose closinfo has the unloadable bit set. Handles both
- * single- and multi-function closures.
+/* Walk every function-slot in a closure and darken the relevant [Code_block]s.
+ * Handles both real closures and the synthetic "code block" closures emitted
+ * for unloadable functions (see below).
  *
  * Closure prefix layout (per [Slot_offsets.Layout]):
  *   [F_0] ([infix] [F_k])* (...env...)
@@ -211,6 +214,22 @@ Caml_inline void caml_darken_code_block_for_entry(void *state, value entry) {
  * 1; the actual function entry is at slot offset 0 (size 2) or slot offset 2
  * (size 3). The curry_ptr in a size-3 slot points to a non-unloadable
  * runtime stub and never needs back-pointer darkening.
+ *
+ * Two cases per slot:
+ *
+ *   - [Code_block_closinfo] set: this is a synthetic code-block slot. Code
+ *     blocks for unloadable functions are emitted as ordinary [Closure_tag]
+ *     objects (no dedicated runtime tag): their function slots pack the
+ *     function's unloadable code dependencies two-per-slot (a size-3 slot
+ *     carries a dependency entry at offset 0 *and* offset 2; arity is set to
+ *     2 to force size 3), and their environment holds the function's data
+ *     dependencies. Both code pointers are real unloadable entries, so we
+ *     darken both via their [entry - 1] back-pointers.
+ *
+ *   - [Unloadable_closinfo] set: this is a real closure whose code lives in
+ *     an unloadable CU. Only the live entry (offset 0 for size 2, offset 2
+ *     for size 3) is an unloadable entry; the size-3 curry trampoline at
+ *     offset 0 is a non-unloadable runtime stub and is left untouched.
  *
  * Slot size is decided by [Flambda 2]'s [closure_code_pointers]:
  * [Full_application_only] (size 2) for [Curried] with 0 or 1 param;
@@ -244,7 +263,16 @@ Caml_inline void caml_darken_unloadable_code_blocks_in_closure(
     intnat arity = Arity_closinfo(closinfo);
     uintnat slot_size = (arity > 1 || arity < 0) ? 3 : 2;
     if (slot_start + slot_size > env_start) break;
-    if (Unloadable_closinfo(closinfo)) {
+    if (Code_block_closinfo(closinfo)) {
+      /* Synthetic code-block slot: both code-pointer positions hold real
+       * unloadable function-entry dependencies. Darken each dependency's
+       * Code_block via its [entry - 1] back-pointer. */
+      caml_darken_code_block_for_entry(state, Field(closure, slot_start));
+      if (slot_size == 3) {
+        caml_darken_code_block_for_entry(state,
+                                         Field(closure, slot_start + 2));
+      }
+    } else if (Unloadable_closinfo(closinfo)) {
       uintnat code_offset =
         (slot_size == 2) ? slot_start : slot_start + 2;
       caml_darken_code_block_for_entry(state, Field(closure, code_offset));

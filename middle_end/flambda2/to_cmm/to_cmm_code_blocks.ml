@@ -27,6 +27,15 @@ let code_block_symbol_for code_id : Cmm.symbol =
      locate them by name when populating the unit's [code_blocks] table. *)
   { sym_name = linkage_name code_id; sym_global = Global }
 
+let entry_symbol_for code_id : Cmm.symbol =
+  (* The function's own entry symbol (the address whose [entry - 1] back-pointer
+     refers to its code block). Same-CU unloadable function entries are
+     exported [Global] (they are also listed in the unit's code-block
+     sentinel). *)
+  { sym_name = Linkage_name.to_string (Code_id.linkage_name code_id);
+    sym_global = Global
+  }
+
 let dep_is_unloadable all_code dep_code_id =
   match Exported_code.find all_code dep_code_id with
   | None -> false
@@ -42,46 +51,45 @@ let emit_code_block_for ~all_code (code : Code.t) res =
     in
     C.register_unloadable_code_block_entry entry_linkage_name;
     let free_names = Code.free_names_of_params_and_body code in
-    let code_id_deps =
+    (* Code dependencies become packed code-pointer slots in the code block;
+       each is recorded by its function-entry symbol (filtered to unloadable
+       same-CU callees, which are reached directly rather than via closures —
+       cross-CU edges go through closures carrying the closinfo flag). *)
+    let code_dep_entries =
       Name_occurrences.code_ids free_names
       |> Code_id.Set.filter (dep_is_unloadable all_code)
       |> Code_id.Set.elements
+      |> List.map entry_symbol_for
     in
-    (* Filter [symbol_deps] to symbols defined in the current (unloadable) CU.
-       Symbols carry data-block addresses (Symbol.mli: "identifies a piece of
-       statically-allocated data"); cross-CU symbols (e.g. [caml_int_ops],
-       stdlib lifted constants, predefined exceptions) have NOT_MARKABLE
-       headers, so [caml_darken] is a no-op on them and including them only
-       bloats Code_block dep_fields and the mark-scan workload. Same-CU [Local]
-       symbols are also no-op darkens (black headers) but the same-CU filter
-       keeps them in: any same-CU data block referenced from a function's code
-       path may be marked via the Code_block dep_field chain, and B.1 emits
-       same-CU unloadable data blocks with white headers. *)
-    let symbol_deps =
+    (* Data dependencies become the code block's closure environment. We filter
+       to symbols defined in the current (unloadable) CU. Cross-CU symbols
+       (e.g. [caml_int_ops], stdlib lifted constants, predefined exceptions)
+       have NOT_MARKABLE headers, so [caml_darken] is a no-op on them and
+       including them would only bloat the environment and the mark scan.
+       Same-CU [Local] symbols are also no-op darkens (black headers) but the
+       same-CU filter keeps them in: any same-CU data block referenced from a
+       function's code path may be marked via the environment scan, and B.1
+       emits same-CU unloadable data blocks with white headers. *)
+    let data_deps =
       Name_occurrences.symbols free_names
       |> Symbol.Set.filter (fun sym ->
-          Compilation_unit.is_current (Symbol.compilation_unit sym))
+             Compilation_unit.is_current (Symbol.compilation_unit sym))
       |> Symbol.Set.elements
+      |> List.map (fun sym : Cmm.symbol ->
+             { sym_name = Linkage_name.to_string (Symbol.linkage_name sym);
+               sym_global = Local
+             })
     in
-    let dep_fields =
-      List.map
-        (fun cid -> Cmm.Csymbol_address (code_block_symbol_for cid))
-        code_id_deps
-      @ List.map
-          (fun sym ->
-            let sym_name = Linkage_name.to_string (Symbol.linkage_name sym) in
-            Cmm.Csymbol_address { sym_name; sym_global = Local })
-          symbol_deps
-    in
-    let n_fields = List.length dep_fields in
-    let header = C.unit_block_header Runtimetags.code_block_tag n_fields in
     let block_sym = code_block_symbol_for code_id in
-    (* Suppress unloadable_data_block tracking for Code_blocks: they are tracked
+    let own_entry = entry_symbol_for code_id in
+    (* Suppress unloadable_data_block tracking for code blocks: they are tracked
        separately via the runtime's [code_blocks] list (located by the JIT
        loader using the [_code_block] symbol-name suffix). *)
     let prev = !C.suppress_unloadable_data_block_tracking in
     C.suppress_unloadable_data_block_tracking := true;
-    let data_items = C.emit_unit_block block_sym header dep_fields in
+    let data_items =
+      C.emit_code_block ~block_sym ~own_entry ~code_dep_entries ~data_deps []
+    in
     C.suppress_unloadable_data_block_tracking := prev;
     R.add_archive_data_items res data_items
 
@@ -107,12 +115,16 @@ let emit_entry_code_block ~(entry_sym : Cmm.symbol) res =
         sym_global = Global
       }
     in
-    let header = C.unit_block_header Runtimetags.code_block_tag 0 in
-    (* Suppress data-block tracking: Code_blocks are tracked separately via the
-       unit's [unloadable_code_blocks] sentinel array (see [to_cmm.ml] and the
-       JIT loader). *)
+    (* The entry's code block carries no dependencies (see the comment above):
+       [emit_code_block] therefore emits a single dummy function slot holding
+       [entry_sym] and no environment. Suppress data-block tracking: code
+       blocks are tracked separately via the unit's [unloadable_code_blocks]
+       sentinel array (see [to_cmm.ml] and the JIT loader). *)
     let prev = !C.suppress_unloadable_data_block_tracking in
     C.suppress_unloadable_data_block_tracking := true;
-    let data_items = C.emit_unit_block block_sym header [] in
+    let data_items =
+      C.emit_code_block ~block_sym ~own_entry:entry_sym ~code_dep_entries:[]
+        ~data_deps:[] []
+    in
     C.suppress_unloadable_data_block_tracking := prev;
     R.add_archive_data_items res data_items)
