@@ -64,6 +64,19 @@ val generic_level: int
 val lowest_level: int
         (* lowest level for type nodes; = Ident.lowest_scope *)
 
+val with_new_pool: level:int -> (unit -> 'a) -> 'a * transient_expr list
+        (* [with_new_pool ~level f] executes [f] and returns the nodes
+           that were created at level [level] and above *)
+val add_to_pool: level:int -> transient_expr -> unit
+        (* Add a type node to the pool associated to the level (which should
+           be the level of the type node).
+           Do nothing if [level = generic_level] or [level = lowest_level]. *)
+
+val newty3: level:int -> scope:int -> type_desc -> type_expr
+        (* Create a type with a fresh id *)
+val newty2: level:int -> type_desc -> type_expr
+        (* Create a type with a fresh id and no scope *)
+
 val newgenty: type_desc -> type_expr
         (* Create a generic type *)
 val newgenvar: ?name:string -> jkind_lr -> type_expr
@@ -72,16 +85,25 @@ val newgenstub: scope:int -> jkind_lr -> type_expr
         (* Return a fresh generic node, to be instantiated
            by [Transient_expr.set_stub_desc] *)
 
+val new_quote_ty: type_expr -> type_expr
+        (* Quote a type expression *)
+val new_splice_ty: type_expr -> type_expr
+        (* Splice a type expression *)
+val new_quote_eval_ty: type_expr -> type_expr
+        (* Quote-eval a type expression *)
+val new_box_ty: type_expr -> type_expr
+        (* Box a type expression *)
+
 (**** Types ****)
 
 val is_Tvar: type_expr -> bool
 val is_Tunivar: type_expr -> bool
 val is_Tconstr: type_expr -> bool
 val is_Tpoly: type_expr -> bool
-
+val is_poly_Tpoly: type_expr -> bool
 val dummy_method: label
 val type_kind_is_abstract: type_declaration -> bool
-val type_origin : type_declaration -> type_origin
+val type_origin: type_declaration -> type_origin
 
 (**** polymorphic variants ****)
 
@@ -119,6 +141,10 @@ val proxy: type_expr -> type_expr
 val tpoly_is_mono : type_expr -> bool
 val tpoly_get_mono : type_expr -> type_expr
 val tpoly_get_poly : type_expr -> type_expr * type_expr list
+
+(* Create an expression for the unboxing of the given type
+   if one exists in an empty environment *)
+val simple_unbox_ty : type_expr -> type_expr option
 
 (**** Utilities for private abbreviations with fixed rows ****)
 val row_of_type: type_expr -> type_expr
@@ -167,6 +193,7 @@ type 'a type_iterators =
     it_class_declaration: 'a type_iterators -> class_declaration -> unit;
     it_class_type_declaration:
         'a type_iterators -> class_type_declaration -> unit;
+    it_jkind_declaration: 'a type_iterators -> jkind_declaration -> unit;
     it_functor_param: 'a type_iterators -> functor_parameter -> unit;
     it_module_type: 'a type_iterators -> module_type -> unit;
     it_class_type: 'a type_iterators -> class_type -> unit;
@@ -313,10 +340,6 @@ val instance_variable_type : label -> class_signature -> type_expr
 (**** Forward declarations ****)
 val print_raw: (Format.formatter -> type_expr -> unit) ref
 
-(**** Type information getter ****)
-
-val cstr_type_path : constructor_description -> Path.t
-
 (* These modules exists here to resolve a dependency cycle: [Subst], [Predef],
    [Datarepr], and [Env] must not depend on [Jkind].  The portions intended for
    use outside of those modules are re-exported as [Jkind.With_bounds] and
@@ -327,32 +350,19 @@ module Jkind0 : sig
   module Mod_bounds : sig
     module Crossing = Mode.Crossing
     module Externality = Jkind_axis.Externality
-    module Nullability = Jkind_axis.Nullability
-    module Separability = Jkind_axis.Separability
 
     type t = mod_bounds =
       { crossing : Mode.Crossing.t;
         externality: Jkind_axis.Externality.t;
-        nullability: Jkind_axis.Nullability.t;
-        separability: Jkind_axis.Separability.t;
       }
 
-    val create :
-      Crossing.t->
-      externality:Externality.t ->
-      nullability:Nullability.t ->
-      separability:Separability.t ->
-      t
+    val create : Crossing.t -> externality:Externality.t -> t
 
     val crossing : t -> Crossing.t
     val externality : t -> Externality.t
-    val nullability : t -> Nullability.t
-    val separability : t -> Separability.t
 
     val set_crossing : Crossing.t -> t -> t
     val set_externality : Externality.t -> t -> t
-    val set_nullability : Nullability.t -> t -> t
-    val set_separability : Separability.t -> t -> t
 
     (** [set_max_in_set bounds axes] sets all the axes in [axes] to their [max]
         within [bounds] *)
@@ -373,9 +383,11 @@ module Jkind0 : sig
 
     val equal : t -> t -> bool
     val join : t -> t -> t
+    val to_axis_lattice : t -> Axis_lattice.t
+    val of_axis_lattice : Axis_lattice.t -> t
+    val meet : t -> t -> t
 
     val relevant_axes_of_modality :
-      relevant_for_shallow:[ `Irrelevant | `Relevant ] ->
       modality:Mode.Modality.Const.t -> Jkind_axis.Axis_set.t
 
     val debug_print : Format.formatter -> t -> unit
@@ -387,7 +399,6 @@ module Jkind0 : sig
     include Allow_disallow with type (_, _, 'd) sided = 'd t
 
     val add_modality :
-      relevant_for_shallow:[ `Irrelevant | `Relevant ] ->
       modality:Mode.Modality.Const.t ->
       type_expr:type_expr ->
       (allowed * disallowed) t ->
@@ -456,6 +467,10 @@ module Jkind0 : sig
 
       (** Value of types of this jkind are not retained at all at runtime *)
       val void : t
+
+      (** Value of types of this jkind can be scanned by the GC, but no other
+          scannable axis information about them is known. *)
+      val scannable : t
 
       (** This is the jkind of normal ocaml values or null pointers *)
       val value_or_null : t
@@ -650,12 +665,16 @@ module Jkind0 : sig
     val map_type_expr :
       (type_expr -> type_expr) -> ('l * 'r) jkind -> ('l * 'r) jkind
 
+    val instance : jkind_lr -> jkind_lr
+
     val has_with_bounds : jkind_l -> bool
 
     module Builtin : sig
       val any : why:Jkind_intf.History.any_creation_reason -> 'd jkind
       val void :
         why:Jkind_intf.History.void_creation_reason -> ('l * disallowed) jkind
+      val scannable :
+        why:Jkind_intf.History.scannable_creation_reason -> 'd Types.jkind
       val value_or_null :
         why:Jkind_intf.History.value_or_null_creation_reason -> 'd jkind
       val value : why:Jkind_intf.History.value_creation_reason -> 'd jkind
@@ -674,8 +693,9 @@ module Jkind0 : sig
         (type_expr * Mode.Modality.Const.t) list ->
         Jkind_types.Sort.t Jkind_types.Layout.t list ->
         jkind_l
-      val product_of_sorts :
-        why:Jkind_intf.History.product_creation_reason -> level:int -> int ->
+      val product_of_any :
+        why:Jkind_intf.History.product_creation_reason ->
+        int ->
         jkind_l
     end
 
@@ -688,6 +708,22 @@ module Jkind0 : sig
     val for_non_float : why:Jkind_intf.History.value_creation_reason -> 'd jkind
 
     val for_boxed_record : label_declaration list -> jkind_l
+
+    val for_boxed_record_with_updates :
+      (label_declaration * type_expr * Jkind_types.Sort.Const.t option) list ->
+      jkind_l
+
+    (* Shared type-level implementation of Steps B1-B4 from
+       Note [With-bounds for GADTs].  Callers choose the projection target via
+       [projected_params]: declaration parameters for boxed GADTs, or the
+       already-instantiated head arguments for unboxed GADTs. *)
+    val gadt_payload_subst :
+      projected_params:Types.type_expr list ->
+      res_args:Types.type_expr list ->
+      payload_tys:Types.type_expr list ->
+      get_free_vars:(Types.type_expr list -> TypeSet.t) ->
+      (Types.type_expr * Types.type_expr) list
+
     val for_boxed_variant :
       loc:Location.t ->
       decl_params:Types.type_expr list ->
@@ -696,14 +732,22 @@ module Jkind0 : sig
         Types.type_expr ->
         Types.type_expr list ->
         Types.type_expr) ->
-      free_vars:(Types.type_expr list -> TypeSet.t) ->
+      get_free_vars:(Types.type_expr list -> TypeSet.t) ->
       Types.constructor_declaration list ->
       Types.jkind_l
 
     val for_or_null_argument : Ident.t -> 'd jkind
+    val for_or_null_payload : Path.t -> 'd jkind
+    val for_variant_with_null_result :
+      Path.t -> modality:Mode.Modality.Const.t -> type_expr -> jkind_l
+
+    val for_effect_arg : Ident.t -> 'd jkind
 
     (** The jkind of a float. *)
     val for_float : Ident.t -> jkind_l
+
+    (** The jkind of a quoted expression, [_ expr]. *)
+    val for_expr : Types.jkind_l
 
     (** The jkind for [array] type arguments. *)
     val for_array_argument : jkind_lr

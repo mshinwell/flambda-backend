@@ -671,6 +671,10 @@ module Directive = struct
     | Private_extern _ | Section _ | Size _ | Type _ | Protected _ | Hidden _
     | Weak _ | External _ | Reloc _ ->
       offset_in_bytes
+
+  let map_new_label f = function[@warning "-4"]
+    | New_label (Label l, c) -> New_label (Label (f l), c)
+    | d -> d
 end
 
 (* A higher-level version of [Constant.t] which contains some more abstractions
@@ -726,6 +730,13 @@ let emit (d : Directive.t) =
 
 let emit_non_masm (d : Directive.t) =
   match TS.assembler () with MASM -> () | MacOS | GAS_like -> emit d
+
+let with_measuring ~f =
+  let saved = !emit_ref in
+  emit_ref := Some (fun _ -> ());
+  let result = f () in
+  emit_ref := saved;
+  result
 
 let align ~fill ~bytes = emit (Align { bytes; fill })
 

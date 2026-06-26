@@ -96,6 +96,7 @@ let array_kind = function
     "scannableproduct " ^ scannable_product_element_kinds kinds
   | Pgcignorableproductarray kinds ->
     "ignorableproduct " ^ ignorable_product_element_kinds kinds
+  | Punspecializedarray -> "unspecialized"
 
 let array_mut = function
   | Mutable -> "array"
@@ -122,6 +123,7 @@ let array_ref_kind ppf k =
     fprintf ppf "scannableproduct %s" (scannable_product_element_kinds kinds)
   | Pgcignorableproductarray_ref kinds ->
     fprintf ppf "ignorableproduct %s" (ignorable_product_element_kinds kinds)
+  | Punspecializedarray_ref mode -> fprintf ppf "unspecialized%a" pp_mode mode
 
 let array_index_kind ppf k =
   match k with
@@ -151,6 +153,7 @@ let array_set_kind ppf k =
       (scannable_product_element_kinds kinds)
   | Pgcignorableproductarray_set kinds ->
     fprintf ppf "ignorableproduct %s" (ignorable_product_element_kinds kinds)
+  | Punspecializedarray_set mode -> fprintf ppf "unspecialized%a" pp_mode mode
 
 let locality_mode_if_local = function
   | Alloc_heap -> ""
@@ -315,11 +318,13 @@ let print_bigarray name unsafe kind ppf layout =
 
 let record_rep ppf r = match r with
   | Record_unboxed -> fprintf ppf "unboxed"
-  | Record_boxed _ -> fprintf ppf "boxed"
+  | Record_boxed -> fprintf ppf "boxed"
   | Record_inlined _ -> fprintf ppf "inlined"
   | Record_float -> fprintf ppf "float"
   | Record_ufloat -> fprintf ppf "ufloat"
   | Record_mixed _ -> fprintf ppf "mixed"
+  | Record_dummy _ -> fprintf ppf "dummy"
+  | Record_variable -> fprintf ppf "variable"
 
 let rec mixed_block_element
   : 'a. (_ -> 'a -> _) -> _ -> 'a mixed_block_element -> _ =
@@ -396,8 +401,14 @@ let primitive ppf = function
   | Pbytes_to_string -> fprintf ppf "bytes_to_string"
   | Pbytes_of_string -> fprintf ppf "bytes_of_string"
   | Pignore -> fprintf ppf "ignore"
-  | Pgetglobal cu ->
-      fprintf ppf "global %a!" (Format_doc.compat Compilation_unit.print) cu
+  | Pgetglobal (cu, staticity) ->
+      let static =
+        match staticity with
+        | Static -> " static"
+        | Dynamic -> ""
+      in
+      fprintf ppf "global%s %a!"
+        static (Format_doc.compat Compilation_unit.print) cu
   | Pgetpredef id -> fprintf ppf "getpredef %a!" Ident.print id
   | Pmakeblock(tag, Immutable, shape, mode) ->
       fprintf ppf "make%sblock %i%a"
@@ -514,6 +525,8 @@ let primitive ppf = function
   | Pduprecord (rep, size) -> fprintf ppf "duprecord %a %i" record_rep rep size
   | Pwith_stack -> fprintf ppf "with_stack"
   | Pwith_stack_bind -> fprintf ppf "with_stack_bind"
+  | Pwith_stack_preemptible -> fprintf ppf "with_stack_preemptible"
+  | Pwith_stack_bind_preemptible -> fprintf ppf "with_stack_bind_preemptible"
   | Pperform -> fprintf ppf "perform"
   | Presume -> fprintf ppf "resume"
   | Preperform -> fprintf ppf "reperform"
@@ -759,10 +772,6 @@ let primitive ppf = function
      fprintf ppf "floatarray.%sget%s%s%s"
        (if unsafe then "unsafe_" else "") (vector_width size)
        (if boxed then "" else "#") (locality_kind mode)
-  | Pfloat_array_load_vec {size; unsafe; mode; boxed} ->
-     fprintf ppf "float_array.%sget%s%s%s"
-      (if unsafe then "unsafe_" else "") (vector_width size)
-      (if boxed then "" else "#") (locality_kind mode)
   | Pint_array_load_vec {size; unsafe; mode; boxed} ->
      fprintf ppf "int_array.%sget%s%s%s"
       (if unsafe then "unsafe_" else "") (vector_width size)
@@ -797,10 +806,6 @@ let primitive ppf = function
       (if boxed then "" else "#") (locality_kind mode)
   | Pfloatarray_set_vec {size; unsafe; boxed} ->
      fprintf ppf "floatarray.%sset%s%s"
-      (if unsafe then "unsafe_" else "") (vector_width size)
-      (if boxed then "" else "#")
-  | Pfloat_array_set_vec {size; unsafe; boxed} ->
-     fprintf ppf "float_array.%sset%s%s"
       (if unsafe then "unsafe_" else "") (vector_width size)
       (if boxed then "" else "#")
   | Pint_array_set_vec {size; unsafe; boxed} ->
@@ -864,9 +869,9 @@ let primitive ppf = function
   | Patomic_lxor_field -> fprintf ppf "atomic_lxor_field"
   | Popaque _ -> fprintf ppf "opaque"
   | Pdls_get -> fprintf ppf "dls_get"
+  | Ppoll -> fprintf ppf "poll"
   | Ptls_get -> fprintf ppf "tls_get"
   | Pdomain_index -> fprintf ppf "domain_index"
-  | Ppoll -> fprintf ppf "poll"
   | Pcpu_relax -> fprintf ppf "cpu_relax"
   | Pprobe_is_enabled {name} -> fprintf ppf "probe_is_enabled[%s]" name
   | Pobj_dup -> fprintf ppf "obj_dup"
@@ -1012,7 +1017,6 @@ let name_of_primitive = function
   | Pbigstring_set_64 _ -> "Pbigstring_set_64"
   | Pbigstring_set_vec _ -> "Pbigstring_set_vec"
   | Pfloatarray_load_vec _ -> "Pfloatarray_load_vec"
-  | Pfloat_array_load_vec _ -> "Pfloat_array_load_vec"
   | Pint_array_load_vec _ -> "Pint_array_load_vec"
   | Punboxed_float_array_load_vec _ -> "Punboxed_float_array_load_vec"
   | Punboxed_float32_array_load_vec _ -> "Punboxed_float32_array_load_vec"
@@ -1022,7 +1026,6 @@ let name_of_primitive = function
   | Punboxed_int64_array_load_vec _ -> "Punboxed_int64_array_load_vec"
   | Punboxed_nativeint_array_load_vec _ -> "Punboxed_nativeint_array_load_vec"
   | Pfloatarray_set_vec _ -> "Pfloatarray_set_vec"
-  | Pfloat_array_set_vec _ -> "Pfloat_array_set_vec"
   | Pint_array_set_vec _ -> "Pint_array_set_vec"
   | Punboxed_float_array_set_vec _ -> "Punboxed_float_array_set_vec"
   | Punboxed_float32_array_set_vec _ -> "Punboxed_float32_array_set_vec"
@@ -1062,13 +1065,15 @@ let name_of_primitive = function
   | Popaque _ -> "Popaque"
   | Pwith_stack -> "Pwith_stack"
   | Pwith_stack_bind -> "Pwith_stack_bind"
+  | Pwith_stack_preemptible -> "Pwith_stack_preemptible"
+  | Pwith_stack_bind_preemptible -> "Pwith_stack_bind_preemptible"
   | Presume -> "Presume"
   | Pperform -> "Pperform"
   | Preperform -> "Preperform"
   | Pdls_get -> "Pdls_get"
+  | Ppoll -> "Ppoll"
   | Ptls_get -> "Ptls_get"
   | Pdomain_index -> "Pdomain_index"
-  | Ppoll -> "Ppoll"
   | Pprobe_is_enabled _ -> "Pprobe_is_enabled"
   | Pobj_dup -> "Pobj_dup"
   | Pobj_magic _ -> "Pobj_magic"
@@ -1429,10 +1434,47 @@ let rec lam ppf = function
       fprintf ppf "$(%a)" slam slambda
 
 and slam ppf = function
+  | SLlayout layout -> fprintf ppf "⟪%a⟫" layout_annotation layout
+  | SLglobal cu ->
+    fprintf ppf "(global %a)" (Format_doc.compat Compilation_unit.print) cu
+  | SLvar id -> Slambdaident.print ppf id
   | SLmissing -> fprintf ppf "(missing)"
+  | SLrecord fields ->
+    let print_fields ppf =
+      List.iter (fun value -> fprintf ppf "%a;@ " slam value) fields
+    in
+    fprintf ppf "@[<hv 2>[@ %t]@]" print_fields
+  | SLfield (container, field) ->
+    fprintf ppf "%a.%i" slam container field
   | SLhalves { sval_comptime; sval_runtime } ->
     fprintf ppf "@[<hv 2>{ c = %a;@ r = ⟪ %a ⟫ }@]"
       slam sval_comptime lam sval_runtime
+  | SLproj_comptime value -> fprintf ppf "%a.c" slam value
+  | SLtemplate func -> fprintf ppf "(template %a)" slambda_function func
+  | SLinstantiate apply -> fprintf ppf "(%a)" slambda_apply apply
+  | SLlet _ as slet ->
+    let rec letbody ~sp = function
+    | SLlet { slet_name; slet_value; slet_body} ->
+        if sp then fprintf ppf "@ ";
+        fprintf ppf "@[<2>%a =@ %a@]"
+          Slambdaident.print slet_name slam slet_value;
+        letbody ~sp:true slet_body
+    | e -> e in
+    fprintf ppf "@[<2>(let@ @[<hv 1>(";
+    let expr = letbody ~sp:false slet in
+    fprintf ppf ")@]@ %a)@]" slam expr
+
+and slambda_function ppf { sfun_params; sfun_body } =
+  let print_params ppf =
+    Array.iter (fun id -> fprintf ppf "%a@ " Slambdaident.print id) sfun_params
+  in
+  fprintf ppf "@[<2>@[<2>%t->@]@ %a@]" print_params slam sfun_body
+
+and slambda_apply ppf { sapp_func; sapp_arguments } =
+  let print_args ppf =
+    Array.iter (fun arg -> fprintf ppf "@ %a" slam arg) sapp_arguments
+  in
+  fprintf ppf "@[<2>%a%t@]" slam sapp_func print_args
 
 and sequence ppf = function
   | Lsequence(l1, l2) ->

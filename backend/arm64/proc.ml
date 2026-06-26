@@ -23,10 +23,6 @@ open Misc
 open Reg
 open Arch
 
-(* Instruction selection *)
-
-let word_addressed = false
-
 (* Registers available for register allocation *)
 
 (* Integer register map:
@@ -236,9 +232,9 @@ let domainstate_ptr_dwarf_register_number = 28
 (* Registers destroyed by operations *)
 
 let destroyed_at_c_noalloc_call =
-  (* x19-x28, d8-d15 preserved *)
+  (* x20-x28, d8-d15 preserved *)
   let int_regs_destroyed_at_c_noalloc_call =
-    Regs.[| X0;X1;X2;X3;X4;X5;X6;X7;X8;X9;X10;X11;X12;X13;X14;X15 |]
+    Regs.[| X0;X1;X2;X3;X4;X5;X6;X7;X8;X9;X10;X11;X12;X13;X14;X15;X19 |]
   in
   let float_regs_destroyed_at_c_noalloc_call =
     Regs.[|D0;D1;D2;D3;D4;D5;D6;D7;
@@ -319,11 +315,10 @@ let destroyed_at_basic (basic : Cfg_intf.S.basic) =
       else
         destroy_neon_reg7
   | Op (Intop (Iadd  | Isub | Imul | Idiv|Imod|Iand|Ior|Ixor|Ilsl
-              |Ilsr|Iasr|Imulh _|Iclz _|Ictz _|Icomp _))
+              |Ilsr|Iasr|Imulh _|Iclz|Ictz|Icomp _))
   | Op (Int128op (Iadd128 | Isub128 | Imul64 _))
   | Op (Specific _
-        | Move | Spill | Reload | Dummy_use
-        | Floatop _
+        | Move | Spill | Reload | Floatop _
         | Csel _
         | Const_int _
         | Const_float32 _ | Const_float _
@@ -359,7 +354,9 @@ let destroyed_at_basic (basic : Cfg_intf.S.basic) =
 (* note: keep this function in sync with `is_destruction_point` below. *)
 let destroyed_at_terminator (terminator : Cfg_intf.S.terminator) =
   match terminator with
-  | Never -> assert false
+  | Never ->
+    Misc.fatal_error
+      "Proc.destroyed_at_terminator: unexpected Never terminator"
   | Call {op = Indirect _ | Direct _; _} ->
     all_phys_regs
   | Always _ | Parity_test _ | Truth_test _ | Float_test _
@@ -379,7 +376,9 @@ let destroyed_at_terminator (terminator : Cfg_intf.S.terminator) =
 (* note: keep this function in sync with `destroyed_at_terminator` above. *)
 let is_destruction_point ~(more_destruction_points : bool) (terminator : Cfg_intf.S.terminator) =
   match terminator with
-  | Never -> assert false
+  | Never ->
+    Misc.fatal_error
+      "Proc.is_destruction_point: unexpected Never terminator"
   | Call {op = Indirect _ | Direct _; _} ->
     true
   | Always _ | Parity_test _ | Truth_test _ | Float_test _
@@ -446,17 +445,50 @@ let slot_offset (loc : Reg.stack_location) ~stack_class ~stack_offset
 
 (* Calling the assembler *)
 
+(* Deferred JIT hook invocation. The hook (registered by [Jit_backend] via
+   [Arm64_binary_emitter.Binary_emitter.For_jit.Internal_assembler]) loads the
+   in-memory assembled sections and runs the entry function, which may
+   recursively re-enter the compiler (e.g. via [Eval.eval] in Opttoploop).
+   Running it inline from [end_emission] would do this in the middle of
+   [Asmgen.gen ()], before [Zero_alloc_checker.record_unit_info] has copied
+   function summaries from the local table into the current [Compilenv]
+   unit's [ui_zero_alloc_info]. A nested compile would replace [current_unit]
+   and refill the table, so the outer [record_unit_info] would write the
+   nested unit's symbols a second time and trip the "is already set" check
+   in [Zero_alloc_info.set_value]. To match the x86 path (where the hook is
+   captured during emit but invoked from [X86_proc.assemble_file], after
+   [record_unit_info]), [end_emission] stashes a thunk here and
+   [assemble_file] flushes it. *)
+let pending_jit_run : (unit -> unit) option ref = ref None
+
+let set_pending_jit_run run =
+  if Option.is_some !pending_jit_run
+  then Misc.fatal_error "Arm64 Proc.set_pending_jit_run: already set";
+  pending_jit_run := Some run
+
+let clear_pending_jit_run () = pending_jit_run := None
+
 let assemble_file infile outfile =
-  let dwarf_flag =
-    if !Clflags.native_code && !Clflags.debug then
-      Dwarf_flags.get_dwarf_as_toolchain_flag ()
-    else
-      ""
-  in
-  Ccomp.command (Config.asm ^ " " ^
-                 (String.concat " " (Misc.debug_prefix_map_flags ())) ^
-                 dwarf_flag ^
-                 " -o " ^ Filename.quote outfile ^ " " ^ Filename.quote infile)
+  match !pending_jit_run with
+  | Some run ->
+    (* JIT mode: the binary emitter has already produced sections in memory.
+       Run the deferred JIT hook (which loads them and executes the entry
+       function) and skip the system assembler. *)
+    pending_jit_run := None;
+    run ();
+    0
+  | None ->
+    let dwarf_flag =
+      if !Clflags.native_code && !Clflags.debug then
+        Dwarf_flags.get_dwarf_as_toolchain_flag ()
+      else
+        ""
+    in
+    Ccomp.command (Config.asm ^ " " ^
+                   (String.concat " " (Misc.debug_prefix_map_flags ())) ^
+                   dwarf_flag ^
+                   " -o " ^ Filename.quote outfile ^
+                   " " ^ Filename.quote infile)
 
 let has_three_operand_float_ops () = false
 
@@ -474,7 +506,7 @@ let operation_supported : Cmm.operation -> bool = function
   | Cnegf Float32 | Cabsf Float32 | Caddf Float32
   | Csubf Float32 | Cmulf Float32 | Cdivf Float32
   | Cpackf32
-  | Cclz _ | Cctz _ | Cbswap _
+  | Cclz | Cctz | Cbswap _
   | Capply _ | Cextcall _ | Cload _ | Calloc _ | Cstore _
   | Caddi | Csubi | Cmuli | Cmulhi _ | Cdivi | Cmodi
   | Cand | Cor | Cxor | Clsl | Clsr | Casr

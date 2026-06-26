@@ -47,8 +47,14 @@ let set_uncaught_exception_handler (fn @ portable) =
 
 exception Exit
 
+(* How often to preempt systhreads.
+
+   Should match [#define Thread_timeout_usec], in st_stubs.c *)
+let interval_usec = 50_000
+
 let create (fn @ once) arg =
   let tls_keys = Domain.TLS.Private.get_initial_keys () in
+  let tick = Domain.Tick.acquire ~interval_usec in
   thread_new
     (fun () ->
       Domain.TLS.Private.init ();
@@ -58,9 +64,11 @@ let create (fn @ once) arg =
         ignore (Sys.opaque_identity (check_memprof_cb ()))
       with
       | Exit ->
+        Domain.Tick.release tick;
         ignore (Sys.opaque_identity (check_memprof_cb ()))
       | exn ->
         let raw_backtrace = Printexc.get_raw_backtrace () in
+        Domain.Tick.release tick;
         flush stdout; flush stderr;
         try
           (Atomic.get uncaught_exception_handler).portable exn
@@ -105,10 +113,8 @@ let select = Unix.select
 
 let wait_pid p = Unix.waitpid [] p
 
-
-external sigmask : Unix.sigprocmask_command -> int list -> int list @@ portable
-   = "caml_thread_sigmask"
-external wait_signal : int list -> int @@ portable = "caml_wait_signal"
+let sigmask = Unix.sigprocmask
+let wait_signal = Unix.sigwait
 
 external use_domains : unit -> unit @@ portable = "caml_thread_use_domains"
 

@@ -64,9 +64,9 @@ let not_implemented_aux pp_instr ?msg i =
        (fun ppf msg -> Format.fprintf ppf "(%s)" msg))
     msg
 
-let not_implemented_basic = not_implemented_aux Cfg.print_basic
+let not_implemented_basic = not_implemented_aux Printcfg.basic
 
-let not_implemented_terminator = not_implemented_aux Cfg.print_terminator
+let not_implemented_terminator = not_implemented_aux Printcfg.terminator
 
 type c_call_wrapper =
   { args : LL.Type.t list;
@@ -629,7 +629,10 @@ let extcall t (i : Cfg.terminator Cfg.instruction) ~func_symbol ~alloc
             in
             emit_ins_no_res t (I.store ~ptr:slot ~to_store:temp)
           | Stack (Local _ | Incoming _ | Domainstate _) | Unknown | Reg _ ->
-            assert false)
+            Misc.fatal_errorf
+              "Llvmize.extcall: unexpected non-Outgoing stack-argument \
+               location %a for call to %s"
+              Printreg.reg reg func_symbol)
         stack_arg_regs;
       (* Prepare direct args + special values for [caml_c_call_stack_args] *)
       let stack_args_begin =
@@ -900,8 +903,8 @@ let int_op t (i : Cfg.basic Cfg.instruction) (op : Operation.integer_operation)
       emit_ins t (I.convert Zext ~arg:bool_res ~to_:T.i64)
     (* ctlz and cttz have a second optional argument that indicates whether 0 is
        poison or not. We pass false to match OCaml's behaviour. *)
-    | Iclz _ -> do_unary_intrinsic_extra_args "ctlz" [V.of_int ~typ:T.i1 0]
-    | Ictz _ -> do_unary_intrinsic_extra_args "cttz" [V.of_int ~typ:T.i1 0]
+    | Iclz -> do_unary_intrinsic_extra_args "ctlz" [V.of_int ~typ:T.i1 0]
+    | Ictz -> do_unary_intrinsic_extra_args "cttz" [V.of_int ~typ:T.i1 0]
     | Ipopcnt -> do_unary_intrinsic "ctpop"
   in
   store_into_reg t i.res.(0) res
@@ -1303,8 +1306,7 @@ let basic_op t (i : Cfg.basic Cfg.instruction) (op : Operation.t) =
     store_into_reg t i.res.(0) domain_id
   | Poll -> () (* CR yusumez: insert poll call *)
   | Stackoffset _ -> () (* Handled separately via [statepoint_id_attr] *)
-  | Spill | Reload | Dummy_use ->
-    not_implemented_basic ~msg:"spill / reload / dummy_use" i
+  | Spill | Reload -> not_implemented_basic ~msg:"spill / reload" i
   | Probe_is_enabled _ | Name_for_debugger _ -> not_implemented_basic i
 
 let emit_basic t (i : Cfg.basic Cfg.instruction) =
@@ -1887,7 +1889,6 @@ let define_auxiliary_functions t =
 
 let init ~output_prefix ~ppf_dump =
   fail_if_not ~msg:"stack checks not supported" "init" Config.no_stack_checks;
-  fail_if_not ~msg:"runtime5 required" "init" Config.runtime5;
   let llvmir_filename = output_prefix ^ ".ll" in
   current_compilation_unit := Some (create ~llvmir_filename ~ppf_dump)
 

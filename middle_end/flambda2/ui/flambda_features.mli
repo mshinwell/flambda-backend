@@ -67,6 +67,8 @@ val reaper_change_calling_conventions : unit -> bool
 
 val kind_checks : unit -> bool
 
+val match_in_match : unit -> bool
+
 val flat_float_array : unit -> bool
 
 val function_result_types : is_a_functor:bool -> bool
@@ -113,8 +115,6 @@ type pass = Oxcaml_flags.Flambda2.Dump.pass =
 
 val dump_fexpr : pass -> dump_target
 
-val dump_flexpect : unit -> dump_target
-
 val dump_slot_offsets : unit -> bool
 
 val dump_flow : unit -> bool
@@ -124,6 +124,8 @@ val dump_simplify : unit -> bool
 val dump_reaper : unit -> bool
 
 val freshen_when_printing : unit -> bool
+
+val erase_in_types_depth_variables : unit -> bool
 
 module Inlining : sig
   type round_or_default =
@@ -154,9 +156,15 @@ module Inlining : sig
 
   val large_function_size : round_or_default -> int
 
+  val small_functor_size : round_or_default -> int
+
+  val large_functor_size : round_or_default -> int
+
   val threshold : round_or_default -> float
 
   val speculative_inlining_only_if_arguments_useful : unit -> bool
+
+  val speculative_inlining_track_lifted_constants : unit -> bool
 end
 
 module Debug : sig
@@ -186,7 +194,7 @@ module Expert : sig
 
   val cont_lifting_budget : unit -> int
 
-  val cont_spec_budget : unit -> int
+  val cont_spec_threshold : unit -> float
 end
 
 val stack_allocation_enabled : unit -> bool

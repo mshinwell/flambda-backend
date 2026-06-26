@@ -70,10 +70,7 @@ let is_long n =
   if n > 0x3FFF_FFFF then raise (Error (Stack_frame_way_too_large n));
   n >= !Oxcaml_flags.long_frames_threshold
 
-let is_long_stack_index n =
-  let is_reg n = n land 1 = 1 in
-  (* allows negative reg offsets in runtime4 *)
-  if is_reg n && not Config.runtime5 then false else is_long n
+let is_long_stack_index n = is_long n
 
 let record_frame_descr ~label ~frame_size ~live_offset debuginfo =
   assert (frame_size land 3 = 0);
@@ -124,7 +121,8 @@ let emit_frames a =
     let n = Numbers.Int8.of_int_exn n in
     a.efa_i8 n
   in
-  let emit_i16 n =
+  let[@warning "-26"] emit_i16 n =
+    (* unused, but here for completeness *)
     let n = Numbers.Int16.of_int_exn n in
     a.efa_i16 n
   in
@@ -190,16 +188,9 @@ let emit_frames a =
     then (
       emit_u16 Oxcaml_flags.max_long_frames_threshold;
       a.efa_align 4);
-    let emit_signed_16_or_32 = if fd.fd_long then emit_i32 else emit_i16 in
     let emit_unsigned_16_or_32 = if fd.fd_long then emit_u32 else emit_u16 in
-    let emit_live_offset n =
-      (* On runtime 4, the live offsets can be negative. As such, we emit them
-         as signed integers (and truncate the upper bound to 0x7f...ff); on
-         runtime 5 they are always unsigned. *)
-      if Config.runtime5
-      then emit_unsigned_16_or_32 n
-      else emit_signed_16_or_32 n
-    in
+    (* The live offsets are always unsigned. *)
+    let emit_live_offset n = emit_unsigned_16_or_32 n in
     emit_unsigned_16_or_32 (fd.fd_frame_size + flags);
     emit_unsigned_16_or_32 (List.length fd.fd_live_offset);
     List.iter emit_live_offset fd.fd_live_offset;
@@ -379,6 +370,16 @@ let reset_debug_info () =
   file_pos_nums := [];
   file_pos_num_cnt := 1
 
+let with_snapshot ~f =
+  let saved_file_pos_nums = !file_pos_nums in
+  let saved_file_pos_num_cnt = !file_pos_num_cnt in
+  let saved_frame_descriptors = !frame_descriptors in
+  let result = f () in
+  file_pos_nums := saved_file_pos_nums;
+  file_pos_num_cnt := saved_file_pos_num_cnt;
+  frame_descriptors := saved_frame_descriptors;
+  result
+
 let get_file_num ~file_emitter file_name =
   try List.assoc file_name !file_pos_nums
   with Not_found ->
@@ -520,6 +521,11 @@ let report_error_doc ppf = function
 
 let report_error = Format_doc.compat report_error_doc
 
+let () =
+  Location.register_error_of_exn (function
+    | Error err -> Some (Location.error_of_printer_file report_error_doc err)
+    | _ -> None)
+
 type preproc_stack_check_result =
   { max_frame_size : int;
     contains_nontail_calls : bool
@@ -542,10 +548,10 @@ let preproc_stack_check ~fun_body ~frame_size ~trap_size =
     | Lcall_op (Lcall_ind | Lcall_imm _) -> loop i.next fs max_fs true
     | Lprologue | Lepilogue_open | Lepilogue_close
     | Lop
-        ( Move | Spill | Reload | Dummy_use | Opaque | Begin_region | End_region
-        | Dls_get | Tls_get | Domain_index | Poll | Pause | Const_int _
-        | Const_float32 _ | Const_float _ | Const_symbol _ | Const_vec128 _
-        | Const_vec256 _ | Const_vec512 _ | Load _
+        ( Move | Spill | Reload | Opaque | Begin_region | End_region | Dls_get
+        | Tls_get | Domain_index | Poll | Pause | Const_int _ | Const_float32 _
+        | Const_float _ | Const_symbol _ | Const_vec128 _ | Const_vec256 _
+        | Const_vec512 _ | Load _
         | Store (_, _, _)
         | Intop _ | Int128op _
         | Intop_imm (_, _)
@@ -559,7 +565,8 @@ let preproc_stack_check ~fun_body ~frame_size ~trap_size =
       loop i.next fs max_fs nontail_flag
     | Lstackcheck _ ->
       (* should not be already present *)
-      assert false
+      Misc.fatal_error
+        "Emitaux.preproc_stack_check: Lstackcheck already present"
   in
   loop fun_body frame_size frame_size false
 
@@ -633,6 +640,74 @@ let emit_elf_note ~section ~owner ~typ ~emit_desc =
   emit_desc ();
   D.define_label d;
   D.align ~fill:Zero ~bytes
+
+type emit_data_item_actions =
+  { global_maybe_protected : Asm_targets.Asm_symbol.t -> unit;
+    symbol_defined : string -> unit;
+    symbol_used : string -> unit
+  }
+
+let symbol_of_cmm_symbol (s : Cmm.symbol) : Asm_targets.Asm_symbol.t =
+  let visibility : Asm_targets.Asm_symbol.visibility =
+    match s.sym_global with Cmm.Global -> Global | Cmm.Local -> Local
+  in
+  Asm_targets.Asm_symbol.create ~visibility s.sym_name
+
+let emit_data_item actions (d : Cmm.data_item) =
+  let module D = Asm_targets.Asm_directives in
+  let module L = Asm_targets.Asm_label in
+  match d with
+  | Cdefine_symbol s -> (
+    let sym = symbol_of_cmm_symbol s in
+    match s.sym_global with
+    | Local -> D.define_label (L.create_label_for_local_symbol Data sym)
+    | Global ->
+      actions.global_maybe_protected sym;
+      actions.symbol_defined s.sym_name;
+      D.define_joint_label_and_symbol ~section:Data sym)
+  | Cint8 n -> D.int8 (Numbers.Int8.of_int_exn n)
+  | Cint16 n -> D.int16 (Numbers.Int16.of_int_exn n)
+  | Cint32 n -> D.int32 (Numbers.Int64.to_int32_exn (Int64.of_nativeint n))
+  (* CR mshinwell: Add [Targetint.of_nativeint] *)
+  | Cint n -> D.targetint (Targetint.of_int64 (Int64.of_nativeint n))
+  | Csingle f -> D.float32 f
+  | Cdouble f -> D.float64 f
+  (* SIMD vectors respect little-endian byte order *)
+  | Cvec128 { word0; word1 } ->
+    D.float64_from_bits word0;
+    D.float64_from_bits word1
+  | Cvec256 { word0; word1; word2; word3 } ->
+    D.float64_from_bits word0;
+    D.float64_from_bits word1;
+    D.float64_from_bits word2;
+    D.float64_from_bits word3
+  | Cvec512 { word0; word1; word2; word3; word4; word5; word6; word7 } ->
+    D.float64_from_bits word0;
+    D.float64_from_bits word1;
+    D.float64_from_bits word2;
+    D.float64_from_bits word3;
+    D.float64_from_bits word4;
+    D.float64_from_bits word5;
+    D.float64_from_bits word6;
+    D.float64_from_bits word7
+  | Csymbol_address s -> (
+    actions.symbol_used s.sym_name;
+    let sym = symbol_of_cmm_symbol s in
+    match s.sym_global with
+    | Global -> D.symbol sym
+    | Local -> D.label (L.create_label_for_local_symbol Data sym))
+  | Csymbol_offset (s, o) -> (
+    actions.symbol_used s.sym_name;
+    let sym = symbol_of_cmm_symbol s in
+    match s.sym_global with
+    | Global ->
+      D.symbol_plus_offset ~offset_in_bytes:(Targetint.of_int_exn o) sym
+    | Local ->
+      D.label_plus_offset ~offset_in_bytes:(Targetint.of_int_exn o)
+        (L.create_label_for_local_symbol Data sym))
+  | Cstring s -> D.string s
+  | Cskip n -> D.space ~bytes:n
+  | Calign n -> D.align ~fill:Zero ~bytes:n
 
 let reset () =
   reset_debug_info ();

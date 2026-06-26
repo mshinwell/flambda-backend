@@ -439,10 +439,11 @@ module Acc = struct
                   (Code_metadata.inline metadata)
                   (Code_metadata.cost_metrics metadata)
               with
-              | Attribute_inline | Small_function _ -> approx
+              | Attribute_inline | Small_function _ | Small_functor _ -> approx
               | Not_yet_decided | Never_inline_attribute | Stub | Recursive
-              | Function_body_too_large _ | Speculatively_inlinable _
-              | Functor _ | Jsir_inlining_disabled ->
+              | Function_body_too_large _ | Functor_body_too_large _
+              | Speculatively_inlinable _ | Speculatively_inlinable_functor _
+              | Jsir_inlining_disabled ->
                 Value_approximation.Closure_approximation
                   { code_id;
                     function_slot;
@@ -1099,7 +1100,7 @@ module Let_with_acc = struct
           |> Cost_metrics.from_size
         | Simple simple -> Code_size.simple simple |> Cost_metrics.from_size
         | Static_consts _consts -> Cost_metrics.zero
-        | Set_of_closures set_of_closures ->
+        | Set_of_closures (set_of_closures, _alloc_mode) ->
           let code_mapping = Acc.code_map acc in
           Cost_metrics.set_of_closures
             ~find_code_characteristics:(fun code_id ->

@@ -297,7 +297,7 @@ Error: This application of the functor "F" is ill-typed.
        These arguments:
          M N
        do not match these parameters:
-         functor (X : Empty) (Y : Empty) -> ...
+         (X : Empty) (Y : Empty) -> ...
        1. Module M matches the expected module type Empty
        2. Modules do not match:
             N : sig end @ local
@@ -492,9 +492,6 @@ module type S =
 |}]
 
 (* CR zqian: fix [make_aliases_absent]. *)
-(* CR lmaurer: Disabling this test until it is rewritten without a line number
-   in it. *)
-(*
 module type S = sig
     module type S = sig end
 
@@ -523,7 +520,7 @@ module type S = sig
     @@ portable
 end
 [%%expect{|
-Uncaught exception: File "typing/env.ml", line 2155, characters 13-19: Assertion failed
+>> Fatal error: Env.module_declaration_address
+Uncaught exception: Misc.Fatal_error
 
 |}]
-*)

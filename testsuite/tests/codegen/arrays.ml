@@ -7,9 +7,7 @@
 
  only-default-codegen;
  flags = " -O3 -I ocamlopt.opt";
- flags += " -cfg-prologue-shrink-wrap";
- flags += " -regalloc-param SPLIT_AROUND_LOOPS:on";
- flags += " -regalloc-param AFFINITY:on -regalloc irc";
+ flags += " -experimental-optimizations";
  expect.opt;
 *)
 
@@ -40,15 +38,14 @@ push:
   salq  $8, %rax
   shrq  $17, %rax
   cmpq  %rax, %r12
-  jae   .L117
+  jae   .L0
   leaq  -4(%rbx,%r12,4), %rdi
   call  caml_modify@PLT
-  movq  %r12, %rax
-  addq  $2, %rax
+  leaq  2(%r12), %rax
   addq  $8, %rsp
   ret
-.L117:
-  movq  camlTOP3__block33@GOTPCREL(%rip), %rax
+.L0:
+  movq  <hidden PC-relative offset>(%rip), %rax
   movq  48(%r14), %rsp
   popq  48(%r14)
   popq  %r11
@@ -125,19 +122,19 @@ poly_unsafe_get:
   movq  %rax, %rdi
   movzbq -8(%rdi), %rax
   cmpq  $254, %rax
-  jne   .L108
+  jne   .L1
   subq  $8, %rsp
   subq  $16, %r15
   cmpq  (%r14), %r15
-  jb    .L112
-.L114:
+  jb    <hidden GC jump pad>
+.L0:
   leaq  8(%r15), %rax
   movq  $1277, -8(%rax)
   vmovsd -4(%rdi,%rbx,4), %xmm0
   vmovsd %xmm0, (%rax)
   addq  $8, %rsp
   ret
-.L108:
+.L1:
   movq  -4(%rdi,%rbx,4), %rax
   ret
 |}]
@@ -149,12 +146,12 @@ poly_unsafe_set:
   movq  %rdi, %rsi
   movzbq -8(%rax), %rdi
   cmpq  $254, %rdi
-  jne   .L108
+  jne   .L0
   vmovsd (%rsi), %xmm0
   vmovsd %xmm0, -4(%rax,%rbx,4)
   movl  $1, %eax
   ret
-.L108:
+.L0:
   subq  $8, %rsp
   leaq  -4(%rax,%rbx,4), %rdi
   call  caml_modify@PLT
@@ -429,11 +426,11 @@ int_safe_get:
   salq  $8, %rdi
   shrq  $17, %rdi
   cmpq  %rdi, %rbx
-  jae   .L115
+  jae   .L0
   movq  -4(%rax,%rbx,4), %rax
   ret
-.L115:
-  movq  camlTOP38__block1142@GOTPCREL(%rip), %rax
+.L0:
+  movq  <hidden PC-relative offset>(%rip), %rax
   movq  48(%r14), %rsp
   popq  48(%r14)
   popq  %r11
@@ -450,14 +447,14 @@ ref_safe_set:
   salq  $8, %rdi
   shrq  $17, %rdi
   cmpq  %rdi, %rbx
-  jae   .L116
+  jae   .L0
   leaq  -4(%rax,%rbx,4), %rdi
   call  caml_modify@PLT
   movl  $1, %eax
   addq  $8, %rsp
   ret
-.L116:
-  movq  camlTOP39__block1184@GOTPCREL(%rip), %rax
+.L0:
+  movq  <hidden PC-relative offset>(%rip), %rax
   movq  48(%r14), %rsp
   popq  48(%r14)
   popq  %r11
@@ -477,27 +474,27 @@ poly_safe_get:
   salq  $8, %rax
   shrq  $17, %rax
   cmpq  %rax, %rbx
-  jae   .L123
+  jae   .L2
   movzbq -8(%rdi), %rax
   cmpq  $254, %rax
-  jne   .L116
+  jne   .L1
   subq  $8, %rsp
   subq  $16, %r15
   cmpq  (%r14), %r15
-  jb    .L126
-.L128:
+  jb    <hidden GC jump pad>
+.L0:
   leaq  8(%r15), %rax
   movq  $1277, -8(%rax)
   vmovsd -4(%rdi,%rbx,4), %xmm0
   vmovsd %xmm0, (%rax)
   addq  $8, %rsp
   ret
-.L116:
+.L1:
   movq  -4(%rdi,%rbx,4), %rax
   ret
-.L123:
+.L2:
   subq  $8, %rsp
-  movq  camlTOP40__block1227@GOTPCREL(%rip), %rax
+  movq  <hidden PC-relative offset>(%rip), %rax
   movq  48(%r14), %rsp
   popq  48(%r14)
   popq  %r11
@@ -513,24 +510,24 @@ poly_safe_set:
   salq  $8, %rdi
   shrq  $17, %rdi
   cmpq  %rdi, %rbx
-  jae   .L124
+  jae   .L1
   movzbq -8(%rax), %rdi
   cmpq  $254, %rdi
-  jne   .L116
+  jne   .L0
   vmovsd (%rsi), %xmm0
   vmovsd %xmm0, -4(%rax,%rbx,4)
   movl  $1, %eax
   ret
-.L116:
+.L0:
   subq  $8, %rsp
   leaq  -4(%rax,%rbx,4), %rdi
   call  caml_modify@PLT
   movl  $1, %eax
   addq  $8, %rsp
   ret
-.L124:
+.L1:
   subq  $8, %rsp
-  movq  camlTOP41__block1282@GOTPCREL(%rip), %rax
+  movq  <hidden PC-relative offset>(%rip), %rax
   movq  48(%r14), %rsp
   popq  48(%r14)
   popq  %r11
@@ -547,11 +544,11 @@ int64_safe_get:
   shrq  $18, %rdi
   salq  $1, %rdi
   cmpq  %rdi, %rbx
-  jae   .L116
+  jae   .L0
   movq  -4(%rax,%rbx,4), %rax
   ret
-.L116:
-  movq  camlTOP42__block1339@GOTPCREL(%rip), %rax
+.L0:
+  movq  <hidden PC-relative offset>(%rip), %rax
   movq  48(%r14), %rsp
   popq  48(%r14)
   popq  %r11
@@ -566,11 +563,11 @@ float_safe_get:
   salq  $8, %rdi
   shrq  $17, %rdi
   cmpq  %rdi, %rbx
-  jae   .L115
+  jae   .L0
   vmovsd -4(%rax,%rbx,4), %xmm0
   ret
-.L115:
-  movq  camlTOP43__block1380@GOTPCREL(%rip), %rax
+.L0:
+  movq  <hidden PC-relative offset>(%rip), %rax
   movq  48(%r14), %rsp
   popq  48(%r14)
   popq  %r11
@@ -585,11 +582,11 @@ float_safe_get_plain:
   salq  $8, %rdi
   shrq  $17, %rdi
   cmpq  %rdi, %rbx
-  jae   .L115
+  jae   .L0
   vmovsd -4(%rax,%rbx,4), %xmm0
   ret
-.L115:
-  movq  camlTOP44__block1421@GOTPCREL(%rip), %rax
+.L0:
+  movq  <hidden PC-relative offset>(%rip), %rax
   movq  48(%r14), %rsp
   popq  48(%r14)
   popq  %r11
@@ -609,13 +606,24 @@ int32_safe_get:
   subq  %rdi, %rsi
   salq  $1, %rsi
   cmpq  %rsi, %rbx
-  jae   .L120
+  jae   .L0
   movslq -2(%rax,%rbx,2), %rax
   ret
-.L120:
-  movq  camlTOP45__block1466@GOTPCREL(%rip), %rax
+.L0:
+  movq  <hidden PC-relative offset>(%rip), %rax
   movq  48(%r14), %rsp
   popq  48(%r14)
   popq  %r11
   jmp   *%r11
+|}]
+
+(* [float# box] gets optimized like [float] *)
+let float_u_box_unsafe_set (a : float# box array) (i : int) (v : float# box) =
+  Array.unsafe_set a i v
+[%%expect_asm X86_64{|
+float_u_box_unsafe_set:
+  vmovsd (%rdi), %xmm0
+  vmovsd %xmm0, -4(%rax,%rbx,4)
+  movl  $1, %eax
+  ret
 |}]

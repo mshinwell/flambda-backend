@@ -43,6 +43,11 @@ module type Oxcaml_options = sig
   val dvectorize : unit -> unit
   val cfg_peephole_optimize : unit -> unit
   val no_cfg_peephole_optimize : unit -> unit
+  val x86_peephole_optimize : unit -> unit
+  val no_x86_peephole_optimize : unit -> unit
+  val no_x86_peephole_remove_mov_to_dead_register : unit -> unit
+  val no_x86_peephole_remove_redundant_cmp : unit -> unit
+  val no_x86_peephole_combine_add_rsp : unit -> unit
   val cfg_stack_checks : unit -> unit
   val no_cfg_stack_checks : unit -> unit
   val cfg_stack_checks_threshold : int -> unit
@@ -61,11 +66,14 @@ module type Oxcaml_options = sig
   val no_cfg_value_propagation_float : unit -> unit
   val cfg_value_propagation_flow : unit -> unit
   val no_cfg_value_propagation_flow : unit -> unit
+  val experimental_optimizations : unit -> unit
   val reorder_blocks_random : int -> unit
   val basic_block_sections : unit -> unit
   val module_entry_functions_section : unit -> unit
   val dasm_comments : unit -> unit
   val dno_asm_comments : unit -> unit
+  val frametables_in_rodata : unit -> unit
+  val no_frametables_in_rodata : unit -> unit
   val heap_reduction_threshold : int -> unit
   val zero_alloc_check : string -> unit
   val zero_alloc_assert : string -> unit
@@ -77,6 +85,7 @@ module type Oxcaml_options = sig
   val no_zero_alloc_checker_details_extra : unit -> unit
   val zero_alloc_checker_join : int -> unit
   val function_layout : string -> unit
+  val name_mangling_scheme : string -> unit
   val disable_builtin_check : unit -> unit
   val disable_poll_insertion : unit -> unit
   val enable_poll_insertion : unit -> unit
@@ -132,6 +141,8 @@ module type Oxcaml_options = sig
   val reaper_max_unbox_size : int -> unit
   val reaper_change_calling_conventions : unit -> unit
   val no_reaper_change_calling_conventions : unit -> unit
+  val flambda2_match_in_match : unit -> unit
+  val no_flambda2_match_in_match : unit -> unit
   val flambda2_expert_fallback_inlining_heuristic : unit -> unit
   val no_flambda2_expert_fallback_inlining_heuristic : unit -> unit
   val flambda2_expert_inline_effects_in_cmm : unit -> unit
@@ -148,7 +159,7 @@ module type Oxcaml_options = sig
   val flambda2_expert_shorten_symbol_names : unit -> unit
   val no_flambda2_expert_shorten_symbol_names : unit -> unit
   val flambda2_expert_cont_lifting_budget : int -> unit
-  val flambda2_expert_cont_spec_budget : int -> unit
+  val flambda2_expert_cont_spec_threshold : float -> unit
   val flambda2_debug_concrete_types_only_on_canonicals : unit -> unit
   val no_flambda2_debug_concrete_types_only_on_canonicals : unit -> unit
   val flambda2_debug_keep_invalid_handlers : unit -> unit
@@ -163,9 +174,13 @@ module type Oxcaml_options = sig
   val flambda2_inline_poly_compare_cost : string -> unit
   val flambda2_inline_small_function_size : string -> unit
   val flambda2_inline_large_function_size : string -> unit
+  val flambda2_inline_small_functor_size : string -> unit
+  val flambda2_inline_large_functor_size : string -> unit
   val flambda2_inline_threshold : string -> unit
   val flambda2_speculative_inlining_only_if_arguments_useful : unit -> unit
   val no_flambda2_speculative_inlining_only_if_arguments_useful : unit -> unit
+  val flambda2_speculative_inlining_track_lifted_constants : unit -> unit
+  val no_flambda2_speculative_inlining_track_lifted_constants : unit -> unit
   val flambda2_inlining_report_bin : unit -> unit
   val flambda2_unicode : unit -> unit
   val flambda2_kind_checks : unit -> unit
@@ -174,7 +189,6 @@ module type Oxcaml_options = sig
   val dfexpr : unit -> unit
   val dfexpr_to : string -> unit
   val dfexpr_after : string -> unit
-  val dflexpect_to : string -> unit
   val dfexpr_annot : unit -> unit
   val dfexpr_annot_after : string -> unit
   val dslot_offsets : unit -> unit
@@ -184,6 +198,7 @@ module type Oxcaml_options = sig
   val dreaper : unit -> unit
   val use_cached_generic_functions : unit -> unit
   val cached_generic_functions_path : string -> unit
+  val x : string -> unit
 end
 
 (** Command line arguments required for ocamlopt.*)
@@ -238,4 +253,31 @@ module Extra_params : sig
   val read_param :
     Format.formatter -> Compenv.readenv_position -> string -> string -> bool
   (** [read_param ppf pos name value] returns whether the param was handled. *)
+end
+
+module Extra_options : sig
+  (** This module allows to define new [-X] options.
+
+      [-X] options can be passed on the command line as [-X name=value], and
+      from the [OCAMLPARAM] environment variable as [Xname=value].
+
+      {b Note}: [-X] options are intended for internal use only. They are not
+      documented in the output of [--help] and may be removed without notice. *)
+
+  val string : string -> string -> string -> unit -> string
+  (** [string __LOC__ name default] defines a new extra option which accepts
+      arbitrary strings. *)
+
+  val int : string -> string -> int -> unit -> int
+  (** [int __LOC__ name default] defines a new extra option which accepts only
+      integers. *)
+
+  val bool : string -> string -> unit -> bool
+  (** [bool __LOC__ name] defines a new extra option which accepts booleans
+      written as the integers '0' and '1'. *)
+
+  val symbol : string -> string -> 'a -> (string * 'a) list -> unit -> 'a
+  (** [symbol __LOC__ name default spec] defines a new extra option which
+      accepts only the strings in [spec] and associates them with the
+      corresponding value. *)
 end

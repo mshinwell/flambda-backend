@@ -47,26 +47,21 @@ end)
 
 let caml_symbol_prefix = "caml"
 
-(* CR ocaml 5 all-runtime5: Remove this_is_ocamlc and force_runtime4_symbols
-   once fully on runtime5 *)
-let this_is_ocamlc = ref false
-let force_runtime4_symbols = ref true
-
-let upstream_runtime5_symbol_separator =
+(* NB OCaml 5.4 uses [.] as a separator only on Linux and uses $ on other
+      systems. The mangling convention in OxCaml has not yet been changed
+      to match.4 merge. *)
+let upstream_symbol_separator =
   match Config.ccomp_type with
   | "msvc" -> '$' (* MASM does not allow for dots in symbol names *)
   | _ -> '.'
 
 let separator () =
-  if !this_is_ocamlc then
-    Misc.fatal_error "Didn't expect utils/symbol.ml to be used in ocamlc";
-  if Config.runtime5 && not !force_runtime4_symbols then
-    Printf.sprintf "%c" upstream_runtime5_symbol_separator
+  (* CR Keryan : There are some hardcoded symbols expecting OCaml 4
+     separators *)
+  if false then
+    Printf.sprintf "%c" upstream_symbol_separator
   else
     "__"
-
-let this_is_ocamlc () = this_is_ocamlc := true
-let force_runtime4_symbols () = force_runtime4_symbols := true
 
 let pack_separator = separator
 let member_separator = separator
@@ -109,6 +104,13 @@ let for_name compilation_unit name =
   let linkage_name =
     prefix ^ (member_separator ()) ^ name |> Linkage_name.of_string
   in
+  { compilation_unit;
+    linkage_name;
+    hash = Hashtbl.hash linkage_name; }
+
+let for_structured_mangling_path ~compilation_unit ~path ~suffix =
+  let name = Structured_mangling.mangle_ident compilation_unit path in
+  let linkage_name = name ^ suffix |> Linkage_name.of_string in
   { compilation_unit;
     linkage_name;
     hash = Hashtbl.hash linkage_name; }

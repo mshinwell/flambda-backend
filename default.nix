@@ -8,7 +8,6 @@
   multidomain ? false,
   ocamltest ? true,
   pollInsertion ? false,
-  runtime5 ? false,
   stackChecks ? false,
   warnError ? true,
   oxcamlClang ? false,
@@ -36,7 +35,6 @@ let
       (mkFlag framePointers "frame-pointers")
       (mkFlag multidomain "multidomain")
       (mkFlag pollInsertion "poll-insertion")
-      (mkFlag runtime5 "runtime5")
       (mkFlag stackChecks "stack-checks")
       (mkFlag warnError "warn-error")
       (mkFlag ocamltest "ocamltest")
@@ -73,6 +71,7 @@ let
   # Over time, we should probably define something like a "boot environment" and build
   # dune and the other dependencies with the patched system compiler.
   dune = pkgs.ocaml-ng.ocamlPackages_4_14.dune_3.overrideAttrs rec {
+    # This version should be the same as in tools/ci/local-opam/packages/oxcaml-ci-deps
     version = "3.20.2";
     src = pkgs.fetchurl {
       url = "https://github.com/ocaml/dune/releases/download/${version}/dune-${version}.tbz";
@@ -82,10 +81,10 @@ let
 
   ocamlformat = pkgs.ocaml-ng.ocamlPackages_4_14.ocamlformat.overrideAttrs (old: rec {
       name = "${old.pname}-${version}";
-      version = "0.28.1";
+      version = "0.29.0";
       src = pkgs.fetchurl {
         url = "https://github.com/ocaml-ppx/ocamlformat/releases/download/${version}/ocamlformat-${version}.tbz";
-        sha256 = "sha256-cL2gN9C+2WHtkb21GYsu7vVCREdQqLAV2AzLlLP/Qfs=";
+        sha256 = "sha256-2sd/CpV654K7S4abB7mAOocqNPjB6uiQG0LSG2I8nbU=";
       };
   });
 
@@ -147,6 +146,7 @@ let
         ncurses
         zlib
         libedit
+        xz # lzma for -DLLDB_ENABLE_LZMA=ON, lldb emits a warning otherwise
         swig
       ];
 
@@ -157,6 +157,7 @@ let
         "-DLLDB_ENABLE_PYTHON=ON"
         "-DLLDB_ENABLE_LIBEDIT=ON"
         "-DLLDB_ENABLE_CURSES=ON"
+        "-DLLDB_ENABLE_LZMA=ON"
         # Disable tests to avoid needing libc++
         "-DLLDB_INCLUDE_TESTS=OFF"
         "-DLLVM_INCLUDE_TESTS=OFF"
@@ -165,13 +166,19 @@ let
 
       sourceRoot = "source/llvm";
       enableParallelBuilding = true;
+
+      # Fix permission issue: version-header-fix.py overwrites lldb-defines.h
+      # during the build and needs the right permissions to do so.
+      postUnpack = ''
+        chmod u+w source/lldb/include/lldb/lldb-defines.h
+      '';
     }
 
   ;
 
-  lldb = makeLlvm {
+  lldb = makeLlvm rec {
     pname = "oxcaml-lldb";
-    version = "16.0.6-minus0";
+    version = "21.1.0+oxcaml0";
     projects = [
       "clang"
       "lldb"
@@ -179,8 +186,8 @@ let
     src = pkgs.fetchFromGitHub {
       owner = "ocaml-flambda";
       repo = "llvm-project";
-      tag = "oxcaml-lldb-16.0.6-minus0";
-      sha256 = "sha256-ZIbcC1wj2U9QYt3s1kOYPs+gtaCX+EXfMC3WiiF821E=";
+      tag = "oxcaml-lldb-${version}";
+      hash = "sha256-DrXQY/1MJCgSqHd4vHpUbdTVWbLZEXkDbUVRYOp3e6Y=";
     };
   };
 
@@ -290,7 +297,7 @@ stdenv.mkDerivation {
     { } // (if framePointers && !pkgs.stdenv.hostPlatform.isx86_64 then { broken = true; } else { });
 
   passthru = {
-    inherit ocaml_4_14_2 ocaml_5_4_0 ocamlformat;
+    inherit ocaml_4_14_2 ocaml_5_4_0 ocamlformat lldb;
   };
 
 }

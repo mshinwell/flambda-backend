@@ -48,7 +48,10 @@ type 'a close_program_result =
 
 type close_functions_result =
   | Lifted of (Symbol.t * Env.value_approximation) Function_slot.Lmap.t
-  | Dynamic of Set_of_closures.t * Env.value_approximation Function_slot.Map.t
+  | Dynamic of
+      Set_of_closures.t
+      * Alloc_mode.For_allocations.t
+      * Env.value_approximation Function_slot.Map.t
 
 let manufacture_symbol acc proposed_name =
   let acc, linkage_name =
@@ -225,6 +228,10 @@ let rec declare_const acc dbg (const : Lambda.structured_constant) =
               | Naked_vec512 _ ->
                 Misc.fatal_errorf
                   "Unboxed constants are not allowed inside of Const_block: %a"
+                  Printlambda.structured_constant const
+              | Poison _ ->
+                Misc.fatal_errorf
+                  "[declare_const] returned a poison constant for %a"
                   Printlambda.structured_constant const);
           acc, field)
         acc consts
@@ -284,7 +291,14 @@ let rec declare_const acc dbg (const : Lambda.structured_constant) =
           | Float_boxed _ -> unbox_float_constant arg)
         args
     in
-    let kind_shape = K.Mixed_block_shape.from_mixed_block_shape shape in
+    let block_shape : K.Scannable_block_shape.t =
+      match K.Scannable_block_shape.from_mixed_block_shape shape with
+      | Value_only ->
+        (* See Note [Constant all-value mixed records] in translcore.ml *)
+        Misc.fatal_error
+          "Const_mixed_block: from_mixed_block_shape returned Value_only"
+      | Mixed_record _ as block_shape -> block_shape
+    in
     let acc, fields =
       List.fold_left_map
         (fun acc c ->
@@ -293,9 +307,7 @@ let rec declare_const acc dbg (const : Lambda.structured_constant) =
         acc args
     in
     let const : SC.t =
-      SC.block
-        (Tag.Scannable.create_exn tag)
-        Immutable (Mixed_record kind_shape) fields
+      SC.block (Tag.Scannable.create_exn tag) Immutable block_shape fields
     in
     register_const acc dbg const "const_mixed_block"
   | Const_null -> acc, reg_width RWC.const_null, "null"
@@ -420,10 +432,9 @@ module Inlining = struct
         res
 
   let make_inlined_body acc ~callee ~called_code_id ~region_inlined_into ~params
-      ~args ~my_closure ~my_region ~my_ghost_region ~my_depth ~body
-      ~free_names_of_body ~exn_continuation ~return_continuation
-      ~apply_exn_continuation ~apply_return_continuation ~apply_depth ~apply_dbg
-      =
+      ~args ~my_closure ~my_alloc_mode ~my_depth ~body ~free_names_of_body
+      ~exn_continuation ~return_continuation ~apply_exn_continuation
+      ~apply_return_continuation ~apply_depth ~apply_dbg =
     let my_depth_duid = Flambda_debug_uid.none in
     let my_closure_duid = Flambda_debug_uid.none in
     let rec_info =
@@ -460,9 +471,9 @@ module Inlining = struct
       Inlining_helpers.make_inlined_body ~callee ~called_code_id
         ~region_inlined_into ~params ~args
         ~my_closure:(my_closure, my_closure_duid)
-        ~my_region ~my_ghost_region ~my_depth ~rec_info ~body:(acc, body)
-        ~exn_continuation ~return_continuation ~apply_exn_continuation
-        ~apply_return_continuation ~bind_params ~bind_depth ~apply_renaming
+        ~my_alloc_mode ~my_depth ~rec_info ~body:(acc, body) ~exn_continuation
+        ~return_continuation ~apply_exn_continuation ~apply_return_continuation
+        ~bind_params ~bind_depth ~apply_renaming
     in
     let inlined_debuginfo =
       Inlined_debuginfo.create ~called_code_id ~apply_dbg
@@ -520,8 +531,7 @@ module Inlining = struct
           ~body
           ~my_closure
           ~is_my_closure_used:_
-          ~my_region
-          ~my_ghost_region
+          ~my_alloc_mode
           ~my_depth
           ~free_names_of_body
         ->
@@ -536,9 +546,8 @@ module Inlining = struct
           make_inlined_body ~callee ~called_code_id:(Code.code_id code)
             ~region_inlined_into
             ~params:(Bound_parameters.vars_and_uids params)
-            ~args ~my_closure ~my_region ~my_ghost_region ~my_depth ~body
-            ~free_names_of_body ~exn_continuation ~return_continuation
-            ~apply_depth ~apply_dbg
+            ~args ~my_closure ~my_alloc_mode ~my_depth ~body ~free_names_of_body
+            ~exn_continuation ~return_continuation ~apply_depth ~apply_dbg
         in
         let acc = Acc.with_free_names Name_occurrences.empty acc in
         let acc = Acc.increment_metrics cost_metrics acc in
@@ -569,7 +578,7 @@ let rec unarize_const_sort_for_extern_repr (sort : Jkind.Sort.Const.t) =
   | Base base -> (
     match base with
     | Void -> []
-    | Value ->
+    | Scannable ->
       [{ kind = K.value; arg_transformer = None; return_transformer = None }]
     | Float64 ->
       [ { kind = K.naked_float;
@@ -929,10 +938,14 @@ let close_c_call0 acc env ~loc ~let_bound_ids_with_kinds
         let_bound_vars
     in
     let handler_params =
-      List.map
-        (fun (let_bound_var, let_bound_var_duid) ->
-          Variable.rename let_bound_var, let_bound_var_duid)
-        let_bound_vars
+      List.map2
+        (fun { kind; _ } (let_bound_var, let_bound_var_duid) ->
+          let user_visible =
+            if Variable.user_visible let_bound_var then Some () else None
+          in
+          let name = Variable.name let_bound_var in
+          Variable.create ?user_visible name kind, let_bound_var_duid)
+        unarized_results let_bound_vars
     in
     let body acc =
       let acc, body = keep_body acc in
@@ -1070,8 +1083,6 @@ let close_raise acc env ~raise_kind ~arg ~dbg exn_continuation =
 let close_effect_primitive acc env ~dbg exn_continuation
     (prim : Lambda.primitive) ~args ~let_bound_ids_with_kinds
     (k : Acc.t -> Named.t list -> Expr_with_acc.t) : Expr_with_acc.t =
-  if not Config.runtime5
-  then Misc.fatal_error "Effect primitives are only supported on runtime5";
   (* CR mshinwell: share with close_c_call, above *)
   let _env, let_bound_vars =
     List.fold_left_map
@@ -1144,6 +1155,21 @@ let close_effect_primitive acc env ~dbg exn_continuation
       C.effect_ (E.with_stack_bind ~valuec ~exnc ~effc ~dyn ~bind ~f ~arg)
     in
     close call_kind
+  | ( Pwith_stack_preemptible,
+      [[valuec]; [exnc]; [effc]; [handle_tick]; [f]; [arg]] ) ->
+    let call_kind =
+      C.effect_
+        (E.with_stack_preemptible ~valuec ~exnc ~effc ~handle_tick ~f ~arg)
+    in
+    close call_kind
+  | ( Pwith_stack_bind_preemptible,
+      [[valuec]; [exnc]; [effc]; [handle_tick]; [dyn]; [bind]; [f]; [arg]] ) ->
+    let call_kind =
+      C.effect_
+        (E.with_stack_bind_preemptible ~valuec ~exnc ~effc ~handle_tick ~dyn
+           ~bind ~f ~arg)
+    in
+    close call_kind
   | Presume, [[cont]; [f]; [arg]] ->
     let call_kind = C.effect_ (E.resume ~cont ~f ~arg) in
     close call_kind
@@ -1184,7 +1210,7 @@ let close_primitive acc env ~let_bound_ids_with_kinds named
     in
     close_c_call acc env ~loc ~let_bound_ids_with_kinds prim ~args
       exn_continuation dbg ~current_region ~current_ghost_region k
-  | Pgetglobal cu, [] ->
+  | Pgetglobal (cu, _), [] ->
     if Compilation_unit.equal cu (Env.current_unit env)
     then
       Misc.fatal_errorf_doc "Pgetglobal %a in the same unit"
@@ -1220,8 +1246,8 @@ let close_primitive acc env ~let_bound_ids_with_kinds named
           (* There should not be any way to reach this from Ocaml code. *)
           Misc.fatal_error
             "Non-zero tag on empty block allocation in [Closure_conversion]"
-        else begin
-          if Lambda.is_uniform_block_shape shape
+        else
+          begin if Lambda.is_uniform_block_shape shape
           then
             register_const0 acc
               (Static_const.block Tag.Scannable.zero Immutable Value_only [])
@@ -1229,7 +1255,7 @@ let close_primitive acc env ~let_bound_ids_with_kinds named
           else
             Misc.fatal_error
               "Unexpected empty mixed block in [Closure_conversion]"
-        end
+          end
       | Pmakefloatblock _ ->
         Misc.fatal_error "Unexpected empty float block in [Closure_conversion]"
       | Pmakeufloatblock _ ->
@@ -1259,26 +1285,27 @@ let close_primitive acc env ~let_bound_ids_with_kinds named
       | Pbigstring_load_32 _ | Pbigstring_load_f32 _ | Pbigstring_load_64 _
       | Pbigstring_load_vec _ | Pbigstring_set_8 _ | Pbigstring_set_16 _
       | Pbigstring_set_32 _ | Pbigstring_set_f32 _ | Pbigstring_set_64 _
-      | Pbigstring_set_vec _ | Pfloatarray_load_vec _ | Pfloat_array_load_vec _
-      | Pint_array_load_vec _ | Punboxed_float_array_load_vec _
-      | Punboxed_float32_array_load_vec _ | Puntagged_int8_array_load_vec _
-      | Puntagged_int16_array_load_vec _ | Punboxed_int32_array_load_vec _
-      | Punboxed_int64_array_load_vec _ | Punboxed_nativeint_array_load_vec _
-      | Pfloatarray_set_vec _ | Pfloat_array_set_vec _ | Pint_array_set_vec _
-      | Punboxed_float_array_set_vec _ | Punboxed_float32_array_set_vec _
-      | Puntagged_int8_array_set_vec _ | Puntagged_int16_array_set_vec _
-      | Punboxed_int32_array_set_vec _ | Punboxed_int64_array_set_vec _
-      | Punboxed_nativeint_array_set_vec _ | Pctconst _ | Pint_as_pointer _
-      | Popaque _ | Pprobe_is_enabled _ | Pobj_dup | Pobj_magic _
-      | Pmakelazyblock _ | Punbox_vector _ | Punbox_unit
+      | Pbigstring_set_vec _ | Pfloatarray_load_vec _ | Pint_array_load_vec _
+      | Punboxed_float_array_load_vec _ | Punboxed_float32_array_load_vec _
+      | Puntagged_int8_array_load_vec _ | Puntagged_int16_array_load_vec _
+      | Punboxed_int32_array_load_vec _ | Punboxed_int64_array_load_vec _
+      | Punboxed_nativeint_array_load_vec _ | Pfloatarray_set_vec _
+      | Pint_array_set_vec _ | Punboxed_float_array_set_vec _
+      | Punboxed_float32_array_set_vec _ | Puntagged_int8_array_set_vec _
+      | Puntagged_int16_array_set_vec _ | Punboxed_int32_array_set_vec _
+      | Punboxed_int64_array_set_vec _ | Punboxed_nativeint_array_set_vec _
+      | Pctconst _ | Pint_as_pointer _ | Popaque _ | Pprobe_is_enabled _
+      | Pobj_dup | Pobj_magic _ | Pmakelazyblock _ | Punbox_vector _
+      | Punbox_unit
       | Pbox_vector (_, _)
       | Pjoin_vec256 | Psplit_vec256 | Preinterpret_boxed_vector_as_tuple _
       | Preinterpret_tuple_as_boxed_vector _ | Pmake_unboxed_product _
       | Punboxed_product_field _ | Parray_element_size_in_bytes _
-      | Pget_header _ | Pwith_stack | Pwith_stack_bind | Pperform | Presume
-      | Preperform | Pmake_idx_field _ | Pmake_idx_mixed_field _
-      | Pmake_idx_array _ | Pidx_deepen _ | Pget_idx _ | Pset_idx _ | Pget_ptr _
-      | Pset_ptr _ | Patomic_exchange_field _ | Patomic_compare_exchange_field _
+      | Pget_header _ | Pwith_stack | Pwith_stack_bind | Pwith_stack_preemptible
+      | Pwith_stack_bind_preemptible | Pperform | Presume | Preperform
+      | Pmake_idx_field _ | Pmake_idx_mixed_field _ | Pmake_idx_array _
+      | Pidx_deepen _ | Pget_idx _ | Pset_idx _ | Pget_ptr _ | Pset_ptr _
+      | Patomic_exchange_field _ | Patomic_compare_exchange_field _
       | Patomic_compare_set_field _ | Patomic_fetch_add_field
       | Patomic_add_field | Patomic_sub_field | Patomic_land_field
       | Patomic_lor_field | Patomic_lxor_field | Pdls_get | Ptls_get
@@ -1290,7 +1317,9 @@ let close_primitive acc env ~let_bound_ids_with_kinds named
         assert false
     in
     k acc [Named.create_simple (Simple.symbol sym)]
-  | (Pperform | Pwith_stack | Pwith_stack_bind | Presume | Preperform), args ->
+  | ( ( Pperform | Pwith_stack | Pwith_stack_bind | Pwith_stack_preemptible
+      | Pwith_stack_bind_preemptible | Presume | Preperform ),
+      args ) ->
     let exn_continuation =
       match exn_continuation with
       | None ->
@@ -1533,11 +1562,28 @@ let close_let acc env let_bound_ids_with_kinds user_visible defining_expr
                         ~const:(fun cst ->
                           match Reg_width_const.descr cst with
                           | Naked_float f -> Or_variable.Const f
+                          | Poison (Naked_number Naked_float, _name) ->
+                            (* Unfortunately, we can't put poison in the static
+                               block. Use a signaling NaN instead, to cause
+                               traps if the value is ever used. *)
+                            Or_variable.Const
+                              (Numeric_types.Float_by_bit_pattern.of_bits
+                                 0x7FF0DEAD_DEADDEAD_L)
                           | Tagged_immediate _ | Naked_immediate _
                           | Naked_float32 _ | Naked_int8 _ | Naked_int16 _
                           | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _
                           | Naked_vec128 _ | Naked_vec256 _ | Naked_vec512 _
-                          | Null ->
+                          | Null
+                          | Poison
+                              ( ( Value
+                                | Naked_number
+                                    ( Naked_immediate | Naked_float32
+                                    | Naked_int8 | Naked_int16 | Naked_int32
+                                    | Naked_int64 | Naked_nativeint
+                                    | Naked_vec128 | Naked_vec256 | Naked_vec512
+                                      )
+                                | Region | Rec_info ),
+                                _ ) ->
                             Misc.fatal_errorf
                               "Binding of %a to %a contains the constant %a \
                                inside a float record, whereas only naked \
@@ -2434,10 +2480,15 @@ let make_unboxed_function_wrapper acc function_slot ~unarized_params:params
     | None -> make_body return_continuation
     | Some k -> make_return_wrapper (boxing_primitive k alloc_mode)
   in
+  let my_alloc_mode =
+    Alloc_mode.For_applications.from_lambda
+      (Function_decl.result_mode decl)
+      ~current_region:my_region ~current_ghost_region:my_ghost_region
+  in
   let wrapper_params_and_body =
     Function_params_and_body.create ~return_continuation ~exn_continuation
       params ~body ~free_names_of_body:(Known free_names_of_body) ~my_closure
-      ~my_region ~my_ghost_region ~my_depth
+      ~my_alloc_mode ~my_depth
   in
   let free_names_of_params_and_body =
     Name_occurrences.remove_continuation ~continuation:return_continuation
@@ -2562,24 +2613,24 @@ let close_one_function acc ~code_id ~external_env ~by_function_slot
 
      Note that free variables corresponding to predefined exception identifiers
      have been filtered out by [close_functions], above. *)
-  let (value_slots_to_bind : Value_slot.t Variable.Map.t), vars_for_idents =
+  let (value_slots_to_bind : (Variable.t * Value_slot.t) list), vars_for_idents
+      =
     Ident.Map.fold
       (fun id value_slot (value_slots_to_bind, vars_for_idents) ->
         let var =
           Variable.create_with_same_name_as_ident id
             (Value_slot.kind value_slot)
         in
-        ( Variable.Map.add var value_slot value_slots_to_bind,
+        ( (var, value_slot) :: value_slots_to_bind,
           Ident.Map.add id var vars_for_idents ))
-      value_slots_from_idents
-      (Variable.Map.empty, Ident.Map.empty)
+      value_slots_from_idents ([], Ident.Map.empty)
   in
   let coerce_to_deeper =
     Coercion.change_depth
       ~from:(Rec_info_expr.var my_depth)
       ~to_:(Rec_info_expr.var next_depth)
   in
-  if has_lifted_closure && not (Variable.Map.is_empty value_slots_to_bind)
+  if has_lifted_closure && not (List.is_empty value_slots_to_bind)
   then
     Misc.fatal_errorf
       "Variables found in closure when trying to lift %a in \
@@ -2590,7 +2641,7 @@ let close_one_function acc ~code_id ~external_env ~by_function_slot
   let closure_vars_to_bind, closure_env =
     if has_lifted_closure
     then (* No projection needed *)
-      Variable.Map.empty, closure_env
+      [], closure_env
     else
       List.fold_left
         (fun (to_bind, env) function_decl ->
@@ -2611,9 +2662,7 @@ let close_one_function acc ~code_id ~external_env ~by_function_slot
               let function_slot =
                 Ident.Map.find let_rec_ident function_slots_from_idents
               in
-              ( Variable.Map.add variable function_slot to_bind,
-                variable,
-                function_slot )
+              (variable, function_slot) :: to_bind, variable, function_slot
           in
           let simple = Simple.with_coercion (Simple.var var) coerce_to_deeper in
           let approx = Function_slot.Map.find function_slot approx_map in
@@ -2623,7 +2672,7 @@ let close_one_function acc ~code_id ~external_env ~by_function_slot
           in
           let env = Env.add_var_approximation env var approx in
           to_bind, env)
-        (Variable.Map.empty, closure_env)
+        ([], closure_env)
         (Function_decls.to_list function_declarations)
   in
   let closure_env =
@@ -2643,25 +2692,26 @@ let close_one_function acc ~code_id ~external_env ~by_function_slot
         env)
       unarized_params closure_env
   in
-  let closure_env, my_region =
-    match my_region with
-    | None -> closure_env, None
-    | Some my_region ->
+  let closure_env, my_region, my_ghost_region, my_alloc_mode =
+    match my_region, my_ghost_region with
+    | None, None -> closure_env, None, None, Alloc_mode.For_applications.heap
+    | Some _, None | None, Some _ ->
+      Misc.fatal_errorf
+        "In [close_one_function], only one of [my_region] and \
+         [my_ghost_region] is local"
+    | Some my_region, Some my_ghost_region ->
       let env, region =
         Env.add_var_like closure_env my_region Not_user_visible
           K.With_subkind.region
       in
-      env, Some region
-  in
-  let closure_env, my_ghost_region =
-    match my_ghost_region with
-    | None -> closure_env, None
-    | Some my_ghost_region ->
-      let env, region =
-        Env.add_var_like closure_env my_ghost_region Not_user_visible
+      let env, ghost_region =
+        Env.add_var_like env my_ghost_region Not_user_visible
           K.With_subkind.region
       in
-      env, Some region
+      ( env,
+        Some region,
+        Some ghost_region,
+        Alloc_mode.For_applications.local ~region ~ghost_region )
   in
   let closure_env = Env.with_depth closure_env my_depth in
   let closure_env, absolute_history, relative_history =
@@ -2712,8 +2762,8 @@ let close_one_function acc ~code_id ~external_env ~by_function_slot
          inserted at the point of use rather than at the top of the function. We
          should also check the behaviour of the backend w.r.t. CSE of
          projections from closures. *)
-      Variable.Map.fold
-        (fun var move_to (acc, body) ->
+      List.fold_left
+        (fun (acc, body) (var, move_to) ->
           let move : Flambda_primitive.unary_primitive =
             Project_function_slot { move_from = function_slot; move_to }
           in
@@ -2724,11 +2774,11 @@ let close_one_function acc ~code_id ~external_env ~by_function_slot
             Named.create_prim (Unary (move, my_closure')) Debuginfo.none
           in
           Let_with_acc.create acc (Bound_pattern.singleton var) named ~body)
-        closure_vars_to_bind (acc, body)
+        (acc, body) closure_vars_to_bind
     in
     let acc, body =
-      Variable.Map.fold
-        (fun var value_slot (acc, body) ->
+      List.fold_left
+        (fun (acc, body) (var, value_slot) ->
           let var = VB.create var Flambda_debug_uid.none Name_mode.normal in
           (* CR sspies: In the future, improve the debugging UIDs here if
              possible. *)
@@ -2741,7 +2791,7 @@ let close_one_function acc ~code_id ~external_env ~by_function_slot
               Debuginfo.none
           in
           Let_with_acc.create acc (Bound_pattern.singleton var) named ~body)
-        value_slots_to_bind (acc, body)
+        (acc, body) value_slots_to_bind
     in
     let next_depth_expr = Rec_info_expr.succ (Rec_info_expr.var my_depth) in
     let bound =
@@ -2804,8 +2854,8 @@ let close_one_function acc ~code_id ~external_env ~by_function_slot
   let params_and_body =
     Function_params_and_body.create ~return_continuation
       ~exn_continuation:(Exn_continuation.exn_handler exn_continuation)
-      main_code_unarized_params ~body ~my_closure ~my_region ~my_ghost_region
-      ~my_depth ~free_names_of_body:(Known free_names_of_body)
+      main_code_unarized_params ~body ~my_closure ~my_alloc_mode ~my_depth
+      ~free_names_of_body:(Known free_names_of_body)
   in
   let result_mode = Function_decl.result_mode decl in
   (match my_region with
@@ -3139,13 +3189,12 @@ let close_functions acc external_env ~current_region function_declarations =
           { code_id; function_slot; code; symbol = None })
       approximations
   in
-  let set_of_closures =
-    Set_of_closures.create ~value_slots
-      (Alloc_mode.For_allocations.from_lambda
-         (Function_decls.alloc_mode function_declarations)
-         ~current_region)
-      function_decls
+  let alloc_mode =
+    Alloc_mode.For_allocations.from_lambda
+      (Function_decls.alloc_mode function_declarations)
+      ~current_region
   in
+  let set_of_closures = Set_of_closures.create ~value_slots function_decls in
   let acc =
     Acc.add_set_of_closures_offsets ~is_phantom:false acc set_of_closures
   in
@@ -3170,7 +3219,7 @@ let close_functions acc external_env ~current_region function_declarations =
     let symbols = Function_slot.Lmap.map fst symbols_with_approx in
     let acc = Acc.add_lifted_set_of_closures ~symbols ~set_of_closures acc in
     acc, Lifted symbols_with_approx
-  else acc, Dynamic (set_of_closures, approximations)
+  else acc, Dynamic (set_of_closures, alloc_mode, approximations)
 
 let close_let_rec acc env ~function_declarations
     ~(body : Acc.t -> Env.t -> Expr_with_acc.t) ~current_region =
@@ -3244,7 +3293,7 @@ let close_let_rec acc env ~function_declarations
         symbols (acc, env)
     in
     body acc env
-  | Dynamic (set_of_closures, approximations) ->
+  | Dynamic (set_of_closures, alloc_mode, approximations) ->
     let generated_closures =
       Function_slot.Set.diff
         (Function_slot.Map.keys
@@ -3279,7 +3328,7 @@ let close_let_rec acc env ~function_declarations
         fun_vars_map env
     in
     let acc, body = body acc env in
-    let named = Named.create_set_of_closures set_of_closures in
+    let named = Named.create_set_of_closures ~alloc_mode set_of_closures in
     Let_with_acc.create acc
       (Bound_pattern.set_of_closures bound_vars)
       named ~body
@@ -3863,45 +3912,45 @@ let bind_static_consts_and_code acc body =
    determining [field_count]. *)
 let final_module_block_representation acc
     ~(module_repr : Lambda.module_representation) =
-  match module_repr with
-  | Module_value_only { field_count } ->
-    let block_access _pos : P.Block_access_kind.t =
-      Values
-        { tag = Known Tag.Scannable.zero;
-          size =
-            Known (Target_ocaml_int.of_int (Acc.machine_width acc) field_count);
-          field_kind = Any_value
-        }
-    in
-    ( K.Scannable_block_shape.Value_only,
-      field_count,
-      block_access,
-      fun _ -> K.value )
-  | Module_mixed (shape, _) ->
-    let shape =
-      K.Mixed_block_lambda_shape.of_mixed_block_elements shape
-        ~print_locality:(fun ppf () -> Format.fprintf ppf "()")
-    in
-    let flattened_reordered_shape =
-      K.Mixed_block_lambda_shape.flattened_reordered_shape shape
-    in
-    let field_count = Array.length flattened_reordered_shape in
-    let kind_shape = K.Mixed_block_shape.from_mixed_block_shape shape in
-    let field_kinds = K.Mixed_block_shape.field_kinds kind_shape in
-    let block_shape = K.Scannable_block_shape.Mixed_record kind_shape in
-    let block_access pos : P.Block_access_kind.t =
-      let field_kind =
-        Lambda_to_flambda_primitives_helpers.mixed_block_access_field_kind
+  let (block_shape : K.Scannable_block_shape.t), block_access, field_count =
+    match module_repr with
+    | Module_value_only { field_count } ->
+      let block_access _pos : P.Block_access_kind.t =
+        Values
+          { tag = Known Tag.Scannable.zero;
+            size =
+              Known
+                (Target_ocaml_int.of_int (Acc.machine_width acc) field_count);
+            field_kind = Any_value
+          }
+      in
+      Value_only, block_access, field_count
+    | Module_mixed (shape, _) ->
+      let shape =
+        K.Mixed_block_lambda_shape.of_mixed_block_elements shape
+          ~print_locality:(fun ppf () -> Format.fprintf ppf "()")
+      in
+      let flattened_reordered_shape =
+        K.Mixed_block_lambda_shape.flattened_reordered_shape shape
+      in
+      let block_shape = K.Scannable_block_shape.from_mixed_block_shape shape in
+      let field_count = Array.length flattened_reordered_shape in
+      let block_access pos : P.Block_access_kind.t =
+        Lambda_to_flambda_primitives_helpers
+        .block_access_kind_of_mixed_field_element
+          ~tag:(Known Tag.Scannable.zero) ~size:Unknown ~kind_shape:block_shape
           flattened_reordered_shape.(pos)
       in
-      Mixed
-        { tag = Known Tag.Scannable.zero;
-          size = Unknown;
-          field_kind;
-          shape = kind_shape
-        }
-    in
-    block_shape, field_count, block_access, fun pos -> field_kinds.(pos)
+      block_shape, block_access, field_count
+  in
+  let kind_of_field =
+    match block_shape with
+    | Value_only -> fun _ -> K.value
+    | Mixed_record shape ->
+      let field_kinds = K.Mixed_block_shape.field_kinds shape in
+      fun pos -> field_kinds.(pos)
+  in
+  block_shape, field_count, block_access, kind_of_field
 
 let wrap_final_module_block acc env ~program ~prog_return_cont
     ~(module_repr : Lambda.module_representation) ~return_cont ~module_symbol =

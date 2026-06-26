@@ -7,9 +7,7 @@
 
  only-default-codegen;
  flags = " -O3 -I ocamlopt.opt";
- flags += " -cfg-prologue-shrink-wrap";
- flags += " -regalloc-param SPLIT_AROUND_LOOPS:on";
- flags += " -regalloc-param AFFINITY:on -regalloc irc";
+ flags += " -experimental-optimizations";
  expect.opt;
 *)
 
@@ -26,6 +24,16 @@ clz_tagged:
   ret
 |}]
 
+(* CR ttebbi: The constant call should be folded. *)
+let clz_tagged_const () = Builtins.int_clz 6
+[%%expect_asm X86_64{|
+clz_tagged_const:
+  movl  $13, %eax
+  lzcnt %rax, %rax
+  leaq  1(%rax,%rax), %rax
+  ret
+|}]
+
 (* Count leading zeros - int64 *)
 
 let clz64 x = Builtins.int64_clz (Int64_u.to_int64 x)
@@ -36,10 +44,11 @@ clz64:
   ret
 |}]
 
-let clz64_nonzero x =
-  Builtins.int64_clz_nonzero (Int64_u.to_int64 x)
+(* CR ttebbi: The constant call should be folded. *)
+let clz64_const () = Builtins.int64_clz (Int64.of_int 6)
 [%%expect_asm X86_64{|
-clz64_nonzero:
+clz64_const:
+  movl  $6, %eax
   lzcnt %rax, %rax
   leaq  1(%rax,%rax), %rax
   ret
@@ -59,10 +68,11 @@ clz32:
   ret
 |}]
 
-let clz32_nonzero x =
-  Builtins.int32_clz_nonzero (Int32_u.to_int32 x)
+(* CR ttebbi: The constant call should be folded. *)
+let clz32_const () = Builtins.int32_clz (Int32.of_int 6)
 [%%expect_asm X86_64{|
-clz32_nonzero:
+clz32_const:
+  movl  $6, %eax
   movl  %eax, %eax
   lzcnt %rax, %rax
   addq  $-32, %rax
@@ -81,10 +91,11 @@ clz_native:
   ret
 |}]
 
-let clz_native_nonzero x =
-  Builtins.nativeint_clz_nonzero (Nativeint_u.to_nativeint x)
+(* CR ttebbi: The constant call should be folded. *)
+let clz_native_const () = Builtins.nativeint_clz (Nativeint.of_int 6)
 [%%expect_asm X86_64{|
-clz_native_nonzero:
+clz_native_const:
+  movl  $6, %eax
   lzcnt %rax, %rax
   leaq  1(%rax,%rax), %rax
   ret
@@ -105,6 +116,18 @@ ctz_int:
   ret
 |}]
 
+(* CR ttebbi: The constant call should be folded. *)
+let ctz_int_const () = Builtins.int_ctz 6
+[%%expect_asm X86_64{|
+ctz_int_const:
+  movl  $1, %eax
+  salq  $63, %rax
+  orq   $6, %rax
+  tzcnt %rax, %rax
+  leaq  1(%rax,%rax), %rax
+  ret
+|}]
+
 (* Count trailing zeros - int64 *)
 
 let ctz64 x = Builtins.int64_ctz (Int64_u.to_int64 x)
@@ -115,10 +138,11 @@ ctz64:
   ret
 |}]
 
-let ctz64_nonzero x =
-  Builtins.int64_ctz_nonzero (Int64_u.to_int64 x)
+(* CR ttebbi: The constant call should be folded. *)
+let ctz64_const () = Builtins.int64_ctz (Int64.of_int 6)
 [%%expect_asm X86_64{|
-ctz64_nonzero:
+ctz64_const:
+  movl  $6, %eax
   tzcnt %rax, %rax
   leaq  1(%rax,%rax), %rax
   ret
@@ -137,10 +161,12 @@ ctz32:
   ret
 |}]
 
-let ctz32_nonzero x =
-  Builtins.int32_ctz_nonzero (Int32_u.to_int32 x)
+(* CR ttebbi: The constant call should be folded. *)
+let ctz32_const () = Builtins.int32_ctz (Int32.of_int 6)
 [%%expect_asm X86_64{|
-ctz32_nonzero:
+ctz32_const:
+  movabsq $4294967296, %rax
+  orq   $6, %rax
   tzcnt %rax, %rax
   leaq  1(%rax,%rax), %rax
   ret
@@ -157,10 +183,11 @@ ctz_native:
   ret
 |}]
 
-let ctz_native_nonzero x =
-  Builtins.nativeint_ctz_nonzero (Nativeint_u.to_nativeint x)
+(* CR ttebbi: The constant call should be folded. *)
+let ctz_native_const () = Builtins.nativeint_ctz (Nativeint.of_int 6)
 [%%expect_asm X86_64{|
-ctz_native_nonzero:
+ctz_native_const:
+  movl  $6, %eax
   tzcnt %rax, %rax
   leaq  1(%rax,%rax), %rax
   ret
@@ -178,11 +205,32 @@ popcnt_tagged:
   ret
 |}]
 
+(* CR ttebbi: The constant call should be folded. *)
+let popcnt_tagged_const () = Builtins.int_popcnt 6
+[%%expect_asm X86_64{|
+popcnt_tagged_const:
+  movl  $13, %eax
+  popcnt %rax, %rax
+  decq  %rax
+  leaq  1(%rax,%rax), %rax
+  ret
+|}]
+
 (* Population count - int64 *)
 
 let popcnt64 x = Builtins.int64_popcnt (Int64_u.to_int64 x)
 [%%expect_asm X86_64{|
 popcnt64:
+  popcnt %rax, %rax
+  leaq  1(%rax,%rax), %rax
+  ret
+|}]
+
+(* CR ttebbi: The constant call should be folded. *)
+let popcnt64_const () = Builtins.int64_popcnt (Int64.of_int 6)
+[%%expect_asm X86_64{|
+popcnt64_const:
+  movl  $6, %eax
   popcnt %rax, %rax
   leaq  1(%rax,%rax), %rax
   ret
@@ -200,6 +248,17 @@ popcnt32:
   ret
 |}]
 
+(* CR ttebbi: The constant call should be folded. *)
+let popcnt32_const () = Builtins.int32_popcnt (Int32.of_int 6)
+[%%expect_asm X86_64{|
+popcnt32_const:
+  movl  $6, %eax
+  movl  %eax, %eax
+  popcnt %rax, %rax
+  leaq  1(%rax,%rax), %rax
+  ret
+|}]
+
 (* Population count - nativeint *)
 
 let popcnt_native x =
@@ -208,6 +267,212 @@ let popcnt_native x =
 popcnt_native:
   popcnt %rax, %rax
   leaq  1(%rax,%rax), %rax
+  ret
+|}]
+
+(* CR ttebbi: The constant call should be folded. *)
+let popcnt_native_const () =
+  Builtins.nativeint_popcnt (Nativeint.of_int 6)
+[%%expect_asm X86_64{|
+popcnt_native_const:
+  movl  $6, %eax
+  popcnt %rax, %rax
+  leaq  1(%rax,%rax), %rax
+  ret
+|}]
+
+(* Shift left - int64 *)
+
+let int64_shl x y =
+  Builtins.int64_shl (Int64_u.to_int64 x) (Int64_u.to_int64 y)
+  |> Int64_u.of_int64
+[%%expect_asm X86_64{|
+int64_shl:
+  movq  %rbx, %rcx
+  salq  %cl, %rax
+  ret
+|}]
+
+let int64_shl_const () =
+  Builtins.int64_shl 6L 2L |> Int64_u.of_int64
+[%%expect_asm X86_64{|
+int64_shl_const:
+  movl  $24, %eax
+  ret
+|}]
+
+(* Shift left - int32 *)
+
+let int32_shl x y =
+  Builtins.int32_shl (Int32_u.to_int32 x) (Int32_u.to_int32 y)
+  |> Int32_u.of_int32
+[%%expect_asm X86_64{|
+int32_shl:
+  movq  %rbx, %rcx
+  andl  $31, %ecx
+  salq  %cl, %rax
+  movslq %eax, %rax
+  ret
+|}]
+
+(* CR ttebbi: We are sign-extending a constant. *)
+let int32_shl_const () =
+  Builtins.int32_shl 6l 2l |> Int32_u.of_int32
+[%%expect_asm X86_64{|
+int32_shl_const:
+  movl  $24, %eax
+  movslq %eax, %rax
+  ret
+|}]
+
+(* Shift left - nativeint *)
+
+let nativeint_shl x y =
+  Builtins.nativeint_shl
+    (Nativeint_u.to_nativeint x) (Nativeint_u.to_nativeint y)
+  |> Nativeint_u.of_nativeint
+[%%expect_asm X86_64{|
+nativeint_shl:
+  movq  %rbx, %rcx
+  salq  %cl, %rax
+  ret
+|}]
+
+let nativeint_shl_const () =
+  Builtins.nativeint_shl 6n 2n |> Nativeint_u.of_nativeint
+[%%expect_asm X86_64{|
+nativeint_shl_const:
+  movl  $24, %eax
+  ret
+|}]
+
+(* Shift right arithmetic - int64 *)
+
+let int64_sar x y =
+  Builtins.int64_sar (Int64_u.to_int64 x) (Int64_u.to_int64 y)
+  |> Int64_u.of_int64
+[%%expect_asm X86_64{|
+int64_sar:
+  movq  %rbx, %rcx
+  sarq  %cl, %rax
+  ret
+|}]
+
+let int64_sar_const () =
+  Builtins.int64_sar 6L 2L |> Int64_u.of_int64
+[%%expect_asm X86_64{|
+int64_sar_const:
+  movl  $1, %eax
+  ret
+|}]
+
+(* Shift right arithmetic - int32 *)
+
+let int32_sar x y =
+  Builtins.int32_sar (Int32_u.to_int32 x) (Int32_u.to_int32 y)
+  |> Int32_u.of_int32
+[%%expect_asm X86_64{|
+int32_sar:
+  movq  %rbx, %rcx
+  andl  $31, %ecx
+  sarq  %cl, %rax
+  ret
+|}]
+
+let int32_sar_const () =
+  Builtins.int32_sar 6l 2l |> Int32_u.of_int32
+[%%expect_asm X86_64{|
+int32_sar_const:
+  movl  $1, %eax
+  ret
+|}]
+
+(* Shift right arithmetic - nativeint *)
+
+let nativeint_sar x y =
+  Builtins.nativeint_sar
+    (Nativeint_u.to_nativeint x) (Nativeint_u.to_nativeint y)
+  |> Nativeint_u.of_nativeint
+[%%expect_asm X86_64{|
+nativeint_sar:
+  movq  %rbx, %rcx
+  sarq  %cl, %rax
+  ret
+|}]
+
+let nativeint_sar_const () =
+  Builtins.nativeint_sar 6n 2n |> Nativeint_u.of_nativeint
+[%%expect_asm X86_64{|
+nativeint_sar_const:
+  movl  $1, %eax
+  ret
+|}]
+
+(* Shift right logical - int64 *)
+
+let int64_shr x y =
+  Builtins.int64_shr (Int64_u.to_int64 x) (Int64_u.to_int64 y)
+  |> Int64_u.of_int64
+[%%expect_asm X86_64{|
+int64_shr:
+  movq  %rbx, %rcx
+  shrq  %cl, %rax
+  ret
+|}]
+
+let int64_shr_const () =
+  Builtins.int64_shr 6L 2L |> Int64_u.of_int64
+[%%expect_asm X86_64{|
+int64_shr_const:
+  movl  $1, %eax
+  ret
+|}]
+
+(* Shift right logical - int32 *)
+
+let int32_shr x y =
+  Builtins.int32_shr (Int32_u.to_int32 x) (Int32_u.to_int32 y)
+  |> Int32_u.of_int32
+[%%expect_asm X86_64{|
+int32_shr:
+  movq  %rbx, %rcx
+  andl  $31, %ecx
+  movl  %eax, %eax
+  shrq  %cl, %rax
+  movslq %eax, %rax
+  ret
+|}]
+
+(* CR ttebbi: The constant call should be folded. *)
+let int32_shr_const () =
+  Builtins.int32_shr 6l 2l |> Int32_u.of_int32
+[%%expect_asm X86_64{|
+int32_shr_const:
+  movl  $6, %eax
+  movl  %eax, %eax
+  shrq  $2, %rax
+  movslq %eax, %rax
+  ret
+|}]
+
+(* Shift right logical - nativeint *)
+
+let nativeint_shr x y =
+  Builtins.nativeint_shr
+    (Nativeint_u.to_nativeint x) (Nativeint_u.to_nativeint y)
+  |> Nativeint_u.of_nativeint
+[%%expect_asm X86_64{|
+nativeint_shr:
+  movq  %rbx, %rcx
+  shrq  %cl, %rax
+  ret
+|}]
+
+let nativeint_shr_const () =
+  Builtins.nativeint_shr 6n 2n |> Nativeint_u.of_nativeint
+[%%expect_asm X86_64{|
+nativeint_shr_const:
+  movl  $1, %eax
   ret
 |}]
 
@@ -224,12 +489,36 @@ mulhi_signed:
   ret
 |}]
 
+(* CR ttebbi: The constant call should be folded. *)
+let mulhi_signed_const () =
+  Int64_u.of_int64 (Builtins.int64_mulhi_s 6L 2L)
+[%%expect_asm X86_64{|
+mulhi_signed_const:
+  movl  $2, %ebx
+  movl  $6, %eax
+  imulq %rbx
+  movq  %rdx, %rax
+  ret
+|}]
+
 let mulhi_unsigned x y =
   Int64_u.of_int64
     (Builtins.int64_mulhi_u
        (Int64_u.to_int64 x) (Int64_u.to_int64 y))
 [%%expect_asm X86_64{|
 mulhi_unsigned:
+  mulq  %rbx
+  movq  %rdx, %rax
+  ret
+|}]
+
+(* CR ttebbi: The constant call should be folded. *)
+let mulhi_unsigned_const () =
+  Int64_u.of_int64 (Builtins.int64_mulhi_u 6L 2L)
+[%%expect_asm X86_64{|
+mulhi_unsigned_const:
+  movl  $2, %ebx
+  movl  $6, %eax
   mulq  %rbx
   movq  %rdx, %rax
   ret
@@ -778,8 +1067,8 @@ ext_cas_int:
   movq  %rbx, %rax
   sarq  $1, %rdi
   sarq  $1, %rax
-  decq  %rsi
-  lock cmpxchgq %rdi, (%rsi)
+  leaq  -1(%rsi), %rbx
+  lock cmpxchgq %rdi, (%rbx)
   sete  %al
   movzbq %al, %rax
   salq  $1, %rax
@@ -796,8 +1085,8 @@ let ext_fetch_add_int64
 ext_fetch_add_int64:
   movq  %rax, %rdi
   movq  %rbx, %rax
-  decq  %rdi
-  lock xaddq %rax, (%rdi)
+  leaq  -1(%rdi), %rbx
+  lock xaddq %rax, (%rbx)
   ret
 |}]
 
@@ -823,8 +1112,8 @@ let ext_fetch_add_nativeint
 ext_fetch_add_nativeint:
   movq  %rax, %rdi
   movq  %rbx, %rax
-  decq  %rdi
-  lock xaddq %rax, (%rdi)
+  leaq  -1(%rdi), %rbx
+  lock xaddq %rax, (%rbx)
   ret
 |}]
 

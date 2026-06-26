@@ -142,7 +142,7 @@ let check_terminator_arity t label block =
   let args = term.arg in
   let res = term.res in
   let check ~expected_args ~expected_res =
-    let print_desc = Cfg.dump_terminator ~sep:"; " in
+    let print_desc = Printcfg.terminator_desc ~sep:"; " in
     check_arity t label print_desc term.desc "argument" expected_args args;
     check_arity t label print_desc term.desc "result" expected_res res
   in
@@ -235,10 +235,11 @@ let check_terminator_arity t label block =
 let check_basic_arity t label (instr : Cfg.basic Cfg.instruction) =
   let args = instr.arg in
   let res = instr.res in
-  let desc = Format.asprintf "%a" Cfg.dump_basic instr.desc in
+  let desc = Format.asprintf "%a" Printcfg.basic_desc instr.desc in
   let check ~expected_args ~expected_res =
-    check_arity t label Cfg.dump_basic instr.desc "argument" expected_args args;
-    check_arity t label Cfg.dump_basic instr.desc "result" expected_res res
+    check_arity t label Printcfg.basic_desc instr.desc "argument" expected_args
+      args;
+    check_arity t label Printcfg.basic_desc instr.desc "result" expected_res res
   in
   match instr.desc with
   | Reloadretaddr -> check ~expected_args:[0] ~expected_res:[0]
@@ -256,7 +257,6 @@ let check_basic_arity t label (instr : Cfg.basic Cfg.instruction) =
         report t "%a (instr %a): %s uses incompatible registers %a -> %a"
           Label.print label InstructionId.print instr.id desc Printreg.reg
           args.(0) Printreg.reg res.(0)
-    | Dummy_use -> check ~expected_args:[1] ~expected_res:[0]
     | Const_int _ | Const_float32 _ | Const_float _ | Const_symbol _
     | Const_vec128 _ | Const_vec256 _ | Const_vec512 _ ->
       check ~expected_args:[0] ~expected_res:[1]
@@ -432,8 +432,8 @@ let check_stack_offset t label (block : Cfg.basic_block) =
           report t
             "Wrong stack offset in block %s: the offset of [(id:%a) %a] \
              instruction is %d, but expected %d.\n"
-            (Label.to_string label) InstructionId.print basic.id Cfg.dump_basic
-            basic.desc basic.stack_offset cur_stack_offset;
+            (Label.to_string label) InstructionId.print basic.id
+            Printcfg.basic_desc basic.desc basic.stack_offset cur_stack_offset;
         match basic.desc with
         | Pushtrap { lbl_handler } ->
           let handler_block = Cfg.get_block_exn t.cfg lbl_handler in
@@ -443,7 +443,7 @@ let check_stack_offset t label (block : Cfg.basic_block) =
               "Wrong stack offset in block %s: the offset of [(id:%a) %a] \
                instruction is %d, the offset of block %s is %d.\n"
               (Label.to_string label) InstructionId.print basic.id
-              Cfg.dump_basic basic.desc cur_stack_offset
+              Printcfg.basic_desc basic.desc cur_stack_offset
               (Label.to_string lbl_handler)
               handler_block.stack_offset;
           cur_stack_offset + Proc.trap_size_in_bytes ()
@@ -457,7 +457,7 @@ let check_stack_offset t label (block : Cfg.basic_block) =
               "Negative stack offset in block %s: the offset after [(id:%a) \
                %a] instruction is %d\n"
               (Label.to_string label) InstructionId.print basic.id
-              Cfg.dump_basic basic.desc new_stack_offset;
+              Printcfg.basic_desc basic.desc new_stack_offset;
           new_stack_offset
         | Op (Stackoffset n) ->
           let new_stack_offset = cur_stack_offset + n in
@@ -467,10 +467,10 @@ let check_stack_offset t label (block : Cfg.basic_block) =
               "Negative stack offset in block %s: the offset after [(id:%a) \
                %a] instruction is %d\n"
               (Label.to_string label) InstructionId.print basic.id
-              Cfg.dump_basic basic.desc new_stack_offset;
+              Printcfg.basic_desc basic.desc new_stack_offset;
           new_stack_offset
         | Op
-            ( Move | Spill | Reload | Dummy_use | Const_int _ | Const_float _
+            ( Move | Spill | Reload | Const_int _ | Const_float _
             | Const_float32 _ | Const_symbol _ | Const_vec128 _ | Const_vec256 _
             | Const_vec512 _ | Load _ | Store _ | Intop _ | Int128op _
             | Intop_imm _ | Intop_atomic _ | Floatop _ | Csel _ | Static_cast _

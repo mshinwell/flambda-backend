@@ -59,6 +59,10 @@ type shape_format = Old_merlin | Debugging_shapes
 type gdwarf_fidelity =
   | Fidelity_low | Fidelity_medium | Fidelity_high
   | Fidelity_very_high | Fidelity_ultra_high | Fidelity_unlimited
+type visible_include =
+  { path : string;
+    cmx_guaranteed : bool;
+  }
 
 module Dwarf_config_defaults : sig
   val shape_reduce_depth : int option
@@ -77,7 +81,7 @@ val dllibs : string list ref
 val cmi_file : string option ref
 val compile_only : bool ref
 val output_name : string option ref
-val include_dirs : string list ref
+val include_dirs : visible_include list ref
 val hidden_include_dirs : string list ref
 val include_manifests : string list ref
 val hidden_include_manifests : string list ref
@@ -104,9 +108,12 @@ val set_gdwarf_fidelity : gdwarf_fidelity -> unit
 val unsafe : bool ref
 val use_linscan : bool ref
 val link_everything : bool ref
+val requires_metaprogramming : bool ref
+val uses_metaprogramming : bool ref
 val custom_runtime : bool ref
 val no_check_prims : bool ref
 val bytecode_compatible_32 : bool ref
+val thunkify_cu_init : bool ref
 val output_c_object : bool ref
 val output_complete_object : bool ref
 val output_complete_executable : bool ref
@@ -115,7 +122,11 @@ val classic : bool ref
 val nopervasives : bool ref
 val match_context_rows : int ref
 val safer_matching : bool ref
-val open_modules : string list ref
+type open_arg =
+  | Open of string
+  | Open_cmi of string
+
+val open_args : open_arg list ref
 val preprocessor : string option ref
 val all_ppx : string list ref
 val absname : bool ref
@@ -139,6 +150,7 @@ val use_prims : string ref
 val use_runtime : string ref
 val plugin : bool ref
 val principal : bool ref
+val print_variance : bool ref
 val real_paths : bool ref
 val recursive_types : bool ref
 val strict_sequence : bool ref
@@ -152,8 +164,9 @@ val make_package : bool ref
 val for_package : string option ref
 val error_size : int ref
 val float_const_prop : bool ref
-val transparent_modules : bool ref
+val no_alias_deps : bool ref
 val unique_ids : bool ref
+val canonical_ids : bool ref
 val locations : bool ref
 val parameters : string list ref
 val as_parameter : bool ref
@@ -165,6 +178,7 @@ val dump_typedtree : bool ref
 val dump_shape : bool ref
 val dump_tlambda : bool ref
 val dump_slambda : bool ref
+val dump_matchcomp : bool ref
 val dump_rawlambda : bool ref
 val dump_lambda : bool ref
 val dump_blambda : bool ref
@@ -237,6 +251,7 @@ val unbox_free_vars_of_closures : bool ref
 val unbox_specialised_args : bool ref
 val clambda_checks : bool ref
 val cmm_invariants : bool ref
+val parsetree_ghost_loc_invariant : bool ref
 val default_inline_max_depth : int
 val inline_max_depth : Int_arg_helper.parsed ref
 val remove_unused_arguments : bool ref
@@ -253,6 +268,10 @@ val supports_optimized_probes : bool
 
 val llvm_backend : bool ref
 
+(* Dedicated flag for the ikinds kind checker (enabled by default). *)
+val ikinds : bool ref
+val ikinds_debug : bool ref
+
 val all_passes : string list ref
 val dumped_pass : string -> bool
 val set_dumped_pass : string -> bool -> unit
@@ -260,6 +279,9 @@ val set_dumped_pass : string -> bool -> unit
 val dump_into_file : bool ref
 val dump_into_csv : bool ref
 val dump_dir : string option ref
+
+val keyword_edition: string option ref
+val parse_keyword_edition: string -> (int*int) option * string list
 
 (* Support for flags that can also be set from an environment variable *)
 type 'a env_reader = {
@@ -324,6 +346,7 @@ module Compiler_pass : sig
   val to_output_filename: t -> prefix:string -> string
   val of_input_filename: string -> t option
 end
+
 val stop_after : Compiler_pass.t option ref
 val should_stop_after : Compiler_pass.t -> bool
 val set_save_ir_after : Compiler_pass.t -> bool -> unit
@@ -345,6 +368,35 @@ module Register_allocator : sig
 end
 
 val is_flambda2 : unit -> bool
+
+module Dump_option : sig
+  type t =
+    | Source
+    | Parsetree
+    | Typedtree
+    | Shape
+    | Match_comp
+    | Raw_lambda
+    | Lambda
+    | Instr
+    | Raw_clambda
+    | Clambda
+    | Raw_flambda
+    | Flambda
+      (* Note: no support for [-dflambda-let <stamp>] for now. *)
+    | Cmm
+    | CSE
+    | Linear
+
+  val compare : t -> t -> int
+
+  val of_string : string -> t option
+  val to_string : t -> string
+
+  val flag : t -> bool ref
+
+  val available : t -> (unit, string) Result.t
+end
 
 val arg_spec : (string * Arg.spec * string) list ref
 

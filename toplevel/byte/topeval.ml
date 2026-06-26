@@ -69,7 +69,7 @@ let may_trace = ref false (* Global lock on tracing *)
 let load_lambda ppf tlam =
   if !Clflags.dump_debug_uid_tables then Type_shape.print_debug_uid_tables ppf;
   if !Clflags.dump_tlambda then fprintf ppf "%a@." Printlambda.lambda tlam;
-  let { Lambda.sval_comptime = _; sval_runtime = rawlam } =
+  let { Slambda.slv_comptime = _; slv_runtime = rawlam } =
     (* CR layout poly: If this toplevel value is static we should keep the
        comptime part in a separate table so we can use it in later expressions.
     *)
@@ -114,11 +114,11 @@ let load_lambda ppf tlam =
 (* Print the outcome of an evaluation *)
 
 let pr_item =
-  Printtyp.print_items
+  Out_type.print_items
     (fun env -> function
-      | Sig_value(id, {val_kind = Val_reg _; val_type}, _) ->
+      | Sig_value(id, {val_kind = Val_reg _; val_type; val_lpoly}, _) ->
           Some (outval_of_value env (getvalue (Translmod.toplevel_name id))
-                  val_type)
+                  val_lpoly val_type)
       | _ -> None
     )
 
@@ -129,17 +129,7 @@ let execute_phrase print_outcome ppf phr =
   | Ptop_def sstr ->
       let oldenv = !toplevel_env in
       let oldsig = !toplevel_sig in
-      Typecore.reset_delayed_checks ();
-      let (str, sg, sn, shape, newenv) =
-        Typemod.type_toplevel_phrase oldenv oldsig sstr
-      in
-      if !Clflags.dump_typedtree then Printtyped.implementation ppf str;
-      let sg' = Typemod.Signature_names.simplify newenv sn sg in
-      let modes = Includemod.modes_toplevel in
-      Includemod.check_implementation oldenv ~modes sg sg';
-      Typecore.force_delayed_checks ();
-      let shape = Shape_reduce.local_reduce Env.empty shape in
-      if !Clflags.dump_shape then Shape.print ppf shape;
+      let (str, sg', newenv) = typecheck_phrase ppf oldenv oldsig sstr in
       let lam = Translmod.transl_toplevel_definition str in
       Warnings.check_fatal ();
       begin try
@@ -156,8 +146,12 @@ let execute_phrase print_outcome ppf phr =
                   | _ ->
                       match find_eval_phrase str with
                       | Some (exp, _, _, _) ->
-                        let outv = outval_of_value newenv v exp.exp_type in
-                        let ty = Printtyp.tree_of_type_scheme exp.exp_type in
+                        let outv = outval_of_value newenv v
+                                     (Types.Lpoly.determined []) exp.exp_type in
+                        let ty =
+                          Out_type.prepare_for_printing [exp.exp_type];
+                          Out_type.tree_of_typexp Type_scheme exp.exp_type
+                        in
                         Ophr_eval (outv, ty)
                       | None -> Ophr_signature (pr_item oldenv sg'))
               else Ophr_signature []
@@ -166,7 +160,8 @@ let execute_phrase print_outcome ppf phr =
               toplevel_sig := oldsig;
               if exn = Out_of_memory then Gc.full_major();
               let outv =
-                outval_of_value !toplevel_env (Obj.repr exn) Predef.type_exn
+                outval_of_value !toplevel_env (Obj.repr exn)
+                  (Types.Lpoly.determined []) Predef.type_exn
               in
               Ophr_exception (exn, outv)
         in
@@ -319,11 +314,8 @@ and really_load_file recursive ppf name filename ic =
       end
   with Load_failed -> false
 
-external get_bytecode_sections : unit -> Symtable.bytecode_sections =
-  "caml_dynlink_get_bytecode_sections"
-
 let init () =
-  let crc_intfs = Symtable.init_toplevel ~get_bytecode_sections in
+  let crc_intfs = Symtable.init_toplevel () in
   Compmisc.init_path ();
   Env.import_crcs ~source:Sys.executable_name crc_intfs;
   ()

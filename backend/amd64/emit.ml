@@ -69,7 +69,8 @@ let invoke_expect_asm_callbacks () =
   asm_collected_for_expect_asm := [];
   List.iter (fun f -> f output) callbacks
 
-let record_for_expect_asm ~name ~debug_info ~asm_start =
+let record_for_expect_asm ~name ~debug_info ~fun_body_start ~fun_body_end
+    ~gc_jump_pads_start ~gc_jump_pads_end =
   if
     (not (List.is_empty !expect_asm_callbacks))
     && (not (String.ends_with ~suffix:"__entry" name))
@@ -89,7 +90,11 @@ let record_for_expect_asm ~name ~debug_info ~asm_start =
     in
     let output =
       X86_gas.format_asm_for_expect_asm ~name
-        ~body:(X86_proc.output_from asm_start)
+        ~body:
+          (X86_proc.output_range ~from_pos:fun_body_start ~to_pos:fun_body_end)
+        ~hidden_gc_jump_pads:
+          (X86_proc.output_range ~from_pos:gc_jump_pads_start
+             ~to_pos:gc_jump_pads_end)
     in
     asm_collected_for_expect_asm := output :: !asm_collected_for_expect_asm
 
@@ -779,7 +784,9 @@ let emit_jump_table t =
   done
 
 let emit_jump_tables () =
-  D.align ~fill:Zero ~bytes:4;
+  I.ud2 ();
+  (* data in text below *)
+  D.align ~fill:Nop ~bytes:4;
   List.iter emit_jump_table !jump_tables;
   jump_tables := []
 
@@ -817,7 +824,7 @@ let instr_for_intop = function
   | Ilsl -> I.sal
   | Ilsr -> I.shr
   | Iasr -> I.sar
-  | Idiv | Imod | Ipopcnt | Imulh _ | Iclz _ | Ictz _ | Icomp _ -> assert false
+  | Idiv | Imod | Ipopcnt | Imulh _ | Iclz | Ictz | Icomp _ -> assert false
 
 let instr_for_floatop (width : Cmm.float_width) op =
   let open Simd_instrs in
@@ -1074,8 +1081,18 @@ let movq src dst =
   match Arch.Extension.enabled AVX, is_regf src with
   | false, false -> I.simd movq_X_r64m64 [| src; dst |]
   | false, true -> I.simd movq_r64m64_X [| src; dst |]
-  | true, false -> I.simd vmovq_X_r64m64 [| src; dst |]
-  | true, true -> I.simd vmovq_r64m64_X [| src; dst |]
+  | true, false ->
+    (* Prefer the shorter XMM/m64 form when the source is memory: it allows the
+       2-byte VEX prefix (VEX.W=0, F3.0F.7E) instead of forcing the 3-byte form
+       (VEX.W=1, 66.0F.6E). *)
+    if is_mem src
+    then I.simd vmovq_X_Xm64 [| src; dst |]
+    else I.simd vmovq_X_r64m64 [| src; dst |]
+  | true, true ->
+    (* Symmetric shortening for stores to memory. *)
+    if is_mem dst
+    then I.simd vmovq_Xm64_X [| src; dst |]
+    else I.simd vmovq_r64m64_X [| src; dst |]
 
 let movss src dst =
   let open Simd_instrs in
@@ -1097,6 +1114,28 @@ let movsd src dst =
   | true, false, true -> I.simd vmovsd_m64_X [| src; dst |]
   | true, true, false -> I.simd vmovsd_X_m64 [| src; dst |]
 
+(* For an XMM-to-XMM register move, prefer the "load" form (reg operand is the
+   destination) when only the destination is a high vector register
+   (XMM8-XMM15). The load form encodes the high register in the VEX-compatible
+   REX.R bit, allowing a 2-byte VEX prefix; the store form would need REX.B and
+   force a 3-byte VEX. Both forms are semantically identical for reg-reg
+   moves. *)
+let regf_index = function X86_ast.XMM n | X86_ast.YMM n | X86_ast.ZMM n -> n
+
+let prefer_load_form (src : X86_ast.arg) (dst : X86_ast.arg) =
+  match src, dst with
+  | Regf s, Regf d ->
+    (* otherwise store form is already 2-byte *)
+    regf_index d > 7
+    (* otherwise EVEX is needed regardless *)
+    && regf_index d <= 15
+    (* otherwise load form needs 3-byte VEX *)
+    && regf_index s <= 7
+  | ( ( Imm _ | Sym _ | Reg8L _ | Reg8H _ | Reg16 _ | Reg32 _ | Reg64 _ | Regf _
+      | Mem _ | Mem64_RIP _ ),
+      _ ) ->
+    false
+
 let movpd ~unaligned src dst =
   let open Simd_instrs in
   match Arch.Extension.enabled AVX, is_mem src, unaligned with
@@ -1104,8 +1143,14 @@ let movpd ~unaligned src dst =
   | false, true, true -> I.simd movupd_X_Xm128 [| src; dst |]
   | false, false, false -> I.simd movapd_Xm128_X [| src; dst |]
   | false, false, true -> I.simd movupd_Xm128_X [| src; dst |]
-  | true, false, false -> I.simd vmovapd_Xm128_X [| src; dst |]
-  | true, false, true -> I.simd vmovupd_Xm128_X [| src; dst |]
+  | true, false, false ->
+    if prefer_load_form src dst
+    then I.simd vmovapd_X_Xm128 [| src; dst |]
+    else I.simd vmovapd_Xm128_X [| src; dst |]
+  | true, false, true ->
+    if prefer_load_form src dst
+    then I.simd vmovupd_X_Xm128 [| src; dst |]
+    else I.simd vmovupd_Xm128_X [| src; dst |]
   | true, true, false -> I.simd vmovapd_X_Xm128 [| src; dst |]
   | true, true, true -> I.simd vmovupd_X_Xm128 [| src; dst |]
 
@@ -1122,7 +1167,14 @@ let move (src : Reg.t) (dst : Reg.t) =
     (* Vec128 stack slots are aligned, domainstate slots are not. *)
     let unaligned = Reg.is_domainstate src || Reg.is_domainstate dst in
     if distinct then movpd ~unaligned (reg src) (reg dst)
-  | Vec256, Reg _, Vec256, (Reg _ | Stack _) ->
+  | Vec256, Reg _, Vec256, Reg _ ->
+    (* CR-soon mslater: align vec256/512 stack slots *)
+    if distinct
+    then
+      if prefer_load_form (reg src) (reg dst)
+      then I.simd vmovupd_Y_Ym256 [| reg src; reg dst |]
+      else I.simd vmovupd_Ym256_Y [| reg src; reg dst |]
+  | Vec256, Reg _, Vec256, Stack _ ->
     (* CR-soon mslater: align vec256/512 stack slots *)
     if distinct then I.simd vmovupd_Ym256_Y [| reg src; reg dst |]
   | Vec256, Stack _, Vec256, Reg _ ->
@@ -1610,7 +1662,7 @@ let emit_reinterpret_cast (cast : Cmm.reinterpret_cast) i =
     (* CR-soon mslater: align vec256/512 stack slots *)
     if distinct
     then
-      if Reg.is_stack i.arg.(0)
+      if Reg.is_stack i.arg.(0) || prefer_load_form (arg i 0) (res i 0)
       then I.simd vmovupd_Y_Ym256 [| arg i 0; res i 0 |]
       else I.simd vmovupd_Ym256_Y [| arg i 0; res i 0 |]
   | V128_of_vec Vec512 | V256_of_vec Vec512 | V512_of_vec _ ->
@@ -1903,6 +1955,12 @@ let emit_instr ~first ~last ~fallthrough i =
   | Lend -> ()
   | Lprologue ->
     assert !prologue_required;
+    (* Shrink-wrap can place prologues in non-entry blocks. A Lepilogue_close on
+       an adjacent path may have left the CFA offset in a wrong state. Since any
+       prologue block is reachable only when stack_offset = 0 (guaranteed by
+       can_place_prologues), the CFA is always rsp+8 here; reset it explicitly
+       before the relative adjustments below. *)
+    D.cfi_def_cfa_offset ~bytes:8;
     if fp
     then (
       I.push rbp;
@@ -1932,7 +1990,6 @@ let emit_instr ~first ~last ~fallthrough i =
     let n = if fp then n + 8 else n in
     if n <> 0 then D.cfi_adjust_cfa_offset ~bytes:n
   | Lop (Move | Spill | Reload) -> move i.arg.(0) i.res.(0)
-  | Lop Dummy_use -> ()
   | Lop (Const_int n) ->
     if Nativeint.equal n 0n
     then
@@ -2019,9 +2076,7 @@ let emit_instr ~first ~last ~fallthrough i =
       emit_jump func)
   | Lcall_op (Lextcall { func; alloc; stack_ofs; stack_align; _ }) ->
     add_used_symbol func;
-    if
-      stack_ofs > 0
-      && (Config.runtime5 || not (Cmm.equal_stack_align stack_align Align_16))
+    if stack_ofs > 0
     then (
       I.mov rsp r13;
       I.lea (mem64 QWORD stack_ofs (Scalar RSP)) r12;
@@ -2036,19 +2091,9 @@ let emit_instr ~first ~last ~fallthrough i =
     then (
       load_symbol_addr (Cmm.global_symbol func) rax;
       emit_call (Cmm.global_symbol "caml_c_call");
-      record_frame i.live (Dbg_other i.dbg);
-      if (not Config.runtime5) && not (is_win64 system)
-      then
-        (* In amd64.S, "caml_c_call" tail-calls the C function (in order to
-           produce nicer backtraces), so we need to restore r15 manually after
-           it returns (note that this increases code size).
-
-           In amd64nt.asm (used for Win64), "caml_c_call" invokes the C function
-           via a regular call, and restores r15 itself, thus avoiding the code
-           size increase. *)
-        I.mov (domain_field Domainstate.Domain_young_ptr) r15)
+      record_frame i.live (Dbg_other i.dbg))
     else
-      let switch_stacks = Config.runtime5 && not Config.no_stack_checks in
+      let switch_stacks = not Config.no_stack_checks in
       if switch_stacks
       then (
         I.mov rsp r13;
@@ -2056,7 +2101,7 @@ let emit_instr ~first ~last ~fallthrough i =
         D.cfi_def_cfa_register ~reg:"r13";
         (* NB: gdb has asserts on contiguous stacks that mean it will not unwind
            through this unless we were to tag this calling frame with
-           cfi_signal_frame in it's definition. *)
+           cfi_signal_frame in its definition. *)
         I.mov (domain_field Domainstate.Domain_c_stack) rsp);
       emit_call (Cmm.global_symbol func);
       if switch_stacks
@@ -2206,13 +2251,35 @@ let emit_instr ~first ~last ~fallthrough i =
     D.define_label lbl_after_poll
   | Lop Pause -> I.pause ()
   | Lop (Intop (Icomp cmp)) ->
-    I.cmp (arg i 1) (arg i 0);
-    I.set (cond cmp) al;
-    I.movzx al (res i 0)
+    if
+      Reg.is_reg i.res.(0)
+      && not
+           (Reg.equal_location i.res.(0).loc i.arg.(0).loc
+           || Reg.equal_location i.res.(0).loc i.arg.(1).loc)
+    then begin
+      I.xor (res32 i 0) (res32 i 0);
+      I.cmp (arg i 1) (arg i 0);
+      I.set (cond cmp) (res8 i 0)
+    end
+    else begin
+      I.cmp (arg i 1) (arg i 0);
+      I.set (cond cmp) al;
+      I.movzx al (res i 0)
+    end
   | Lop (Intop_imm (Icomp cmp, n)) ->
-    I.cmp (int n) (arg i 0);
-    I.set (cond cmp) al;
-    I.movzx al (res i 0)
+    if
+      Reg.is_reg i.res.(0)
+      && not (Reg.equal_location i.res.(0).loc i.arg.(0).loc)
+    then begin
+      I.xor (res32 i 0) (res32 i 0);
+      I.cmp (int n) (arg i 0);
+      I.set (cond cmp) (res8 i 0)
+    end
+    else begin
+      I.cmp (int n) (arg i 0);
+      I.set (cond cmp) al;
+      I.movzx al (res i 0)
+    end
   | Lop (Intop_imm (Iand, n))
     when n >= 0 && n <= 0xFFFF_FFFF && Reg.is_reg i.res.(0) ->
     I.and_ (int n) (res32 i 0)
@@ -2247,6 +2314,9 @@ let emit_instr ~first ~last ~fallthrough i =
   | Lop (Intop_imm (Iadd, n))
     when not (Reg.equal_location i.arg.(0).loc i.res.(0).loc) ->
     I.lea (mem64 NONE n (arg_idx i 0)) (res i 0)
+  | Lop (Intop_imm (Isub, n))
+    when not (Reg.equal_location i.arg.(0).loc i.res.(0).loc) ->
+    I.lea (mem64 NONE (-n) (arg_idx i 0)) (res i 0)
   | Lop (Intop_imm (Iadd, 1) | Intop_imm (Isub, -1)) -> I.inc (res i 0)
   | Lop (Intop_imm (Iadd, -1) | Intop_imm (Isub, 1)) -> I.dec (res i 0)
   | Lop (Intop_imm (op, n)) ->
@@ -2312,7 +2382,7 @@ let emit_instr ~first ~last ~fallthrough i =
   | Lop (Specific (Ibswap { bitwidth = Sixtyfour })) -> I.bswap (res i 0)
   | Lop (Specific Isextend32) -> I.movsxd (arg32 i 0) (res i 0)
   | Lop (Specific Izextend32) -> I.mov (arg32 i 0) (res32 i 0)
-  | Lop (Intop (Iclz { arg_is_non_zero })) ->
+  | Lop (Intop Iclz) ->
     (* CR-someday gyorsh: can we do it at selection? mshinwell: We need to
        address this and the similar CRs below. My feeling is that we should try
        to do this earlier, based on previous experience with similar things, but
@@ -2320,12 +2390,6 @@ let emit_instr ~first ~last ~fallthrough i =
        situation is fine for now. *)
     if Arch.Extension.enabled LZCNT
     then I.simd lzcnt_r64_r64m64 [| arg i 0; res i 0 |]
-    else if arg_is_non_zero
-    then (
-      (* No need to handle that bsr is undefined on 0 input. *)
-      I.bsr (arg i 0) (res i 0);
-      (* We need (63 - result_of_bsr), which can be done with xor. *)
-      I.xor (int 63) (res i 0))
     else
       let lbl_z = L.create Text in
       let lbl_nz = L.create Text in
@@ -2336,14 +2400,10 @@ let emit_instr ~first ~last ~fallthrough i =
       D.define_label lbl_z;
       I.mov (int 64) (res i 0);
       D.define_label lbl_nz
-  | Lop (Intop (Ictz { arg_is_non_zero })) ->
+  | Lop (Intop Ictz) ->
     (* CR-someday gyorsh: can we do it at selection? *)
     if Arch.Extension.enabled BMI
     then I.simd tzcnt_r64_r64m64 [| arg i 0; res i 0 |]
-    else if arg_is_non_zero
-    then
-      (* No need to handle that bsf is undefined on 0 input. *)
-      I.bsf (arg i 0) (res i 0)
     else
       let lbl_nz = L.create Text in
       I.bsf (arg i 0) (res i 0);
@@ -2442,7 +2502,8 @@ let emit_instr ~first ~last ~fallthrough i =
     Probe_emission.add_probe ~probe_label ~probe_insn:i ~probe_name:name
       ~probe_enabled_at_init:enabled_at_init
       ~probe_handler_code_sym:handler_code_sym ~stack_offset:!stack_offset
-      ~num_stack_slots:(Stack_class.Tbl.copy num_stack_slots);
+      ~num_stack_slots:(Stack_class.Tbl.copy num_stack_slots)
+      ~contains_calls:!contains_calls;
     D.define_label (label_to_asm_label ~section:Text probe_label);
     I.nop ();
     (* for uprobes and usdt probes as well *)
@@ -2467,15 +2528,9 @@ let emit_instr ~first ~last ~fallthrough i =
     I.cmp (int 0) (res16 i 0);
     I.set (cond Cne) (res8 i 0);
     I.movzx (res8 i 0) (res i 0)
-  | Lop Dls_get ->
-    if Config.runtime5
-    then I.mov (domain_field Domainstate.Domain_dls_state) (res i 0)
-    else Misc.fatal_error "Dls is not supported in runtime4."
+  | Lop Dls_get -> I.mov (domain_field Domainstate.Domain_dls_state) (res i 0)
   | Lop Tls_get -> I.mov (domain_field Domainstate.Domain_tls_state) (res i 0)
-  | Lop Domain_index ->
-    if Config.runtime5
-    then I.mov (domain_field Domainstate.Domain_id) (res i 0)
-    else I.xor (res32 i 0) (res32 i 0)
+  | Lop Domain_index -> I.mov (domain_field Domainstate.Domain_id) (res i 0)
   | Lreloadretaddr -> ()
   | Lreturn -> I.ret ()
   | Llabel { label = lbl; section_name } ->
@@ -2559,9 +2614,7 @@ let emit_instr ~first ~last ~fallthrough i =
     | Lambda.Raise_regular ->
       I.mov (int 0) (domain_field Domainstate.Domain_backtrace_pos);
       call_raise "caml_raise_exn"
-    | Lambda.Raise_reraise ->
-      call_raise
-        (if Config.runtime5 then "caml_reraise_exn" else "caml_raise_exn")
+    | Lambda.Raise_reraise -> call_raise "caml_reraise_exn"
     | Lambda.Raise_notrace ->
       I.mov (domain_field Domainstate.Domain_exn_handler) rsp;
       I.pop (domain_field Domainstate.Domain_exn_handler);
@@ -2653,17 +2706,17 @@ let fundecl fundecl =
   emit_debug_info fundecl.fun_dbg;
   D.cfi_startproc ();
   D.comment ("LLVM-MCA-BEGIN " ^ !function_name);
-  if
-    Config.runtime5
-    && (not Config.no_stack_checks)
-    && String.equal !Clflags.runtime_variant "d"
+  if (not Config.no_stack_checks) && String.equal !Clflags.runtime_variant "d"
   then emit_call (Cmm.global_symbol "caml_assert_stack_invariants");
   let fun_body_start = current_output_pos () in
   emit_all ~first:true ~fallthrough:true fundecl.fun_body;
-  record_for_expect_asm ~name:fundecl.fun_name ~debug_info:fundecl.fun_dbg
-    ~asm_start:fun_body_start;
+  X86_proc.peephole_optimize_from fun_body_start;
+  let fun_body_end = current_output_pos () in
   List.iter emit_call_gc !call_gc_sites;
   List.iter emit_local_realloc !local_realloc_sites;
+  record_for_expect_asm ~name:fundecl.fun_name ~debug_info:fundecl.fun_dbg
+    ~fun_body_start ~fun_body_end ~gc_jump_pads_start:fun_body_end
+    ~gc_jump_pads_end:(current_output_pos ());
   emit_call_safety_errors ();
   emit_stack_realloc ();
   (if !frame_required
@@ -2684,68 +2737,16 @@ let fundecl fundecl =
 
 (* Emission of data *)
 
-(* CR sspies: Share the [emit_item] code with the Arm backend in emitaux. *)
-let emit_item : Cmm.data_item -> unit = function
-  | Cdefine_symbol s -> (
-    let sym =
-      S.create ~visibility:(visibility_of_cmm_global s.sym_global) s.sym_name
-    in
-    match s.sym_global with
-    | Local -> D.define_label (L.create_string_unchecked Data (S.encode sym))
-    | Global ->
-      global_maybe_protected sym;
-      add_def_symbol s.sym_name;
-      (* Following the same convention as for function symbols above, we emit
-         both a label and a linker symbol for [sym]. *)
-      D.define_joint_label_and_symbol ~section:Data sym)
-  | Cint8 n -> D.int8 (Numbers.Int8.of_int_exn n)
-  | Cint16 n -> D.int16 (Numbers.Int16.of_int_exn n)
-  | Cint32 n -> D.int32 (Numbers.Int64.to_int32_exn (Int64.of_nativeint n))
-  (* CR mshinwell: Add [Targetint.of_nativeint] *)
-  | Cint n -> D.targetint (Targetint.of_int64 (Int64.of_nativeint n))
-  | Csingle f -> D.float32 f
-  | Cdouble f -> D.float64 f
-  (* SIMD vectors respect little-endian byte order *)
-  | Cvec128 { word0; word1 } ->
-    (* Least significant *)
-    D.float64_from_bits word0;
-    D.float64_from_bits word1
-  | Cvec256 { word0; word1; word2; word3 } ->
-    (* Least significant *)
-    D.float64_from_bits word0;
-    D.float64_from_bits word1;
-    D.float64_from_bits word2;
-    D.float64_from_bits word3
-  | Cvec512 { word0; word1; word2; word3; word4; word5; word6; word7 } ->
-    (* Least significant *)
-    D.float64_from_bits word0;
-    D.float64_from_bits word1;
-    D.float64_from_bits word2;
-    D.float64_from_bits word3;
-    D.float64_from_bits word4;
-    D.float64_from_bits word5;
-    D.float64_from_bits word6;
-    D.float64_from_bits word7
-  | Csymbol_address s -> (
-    add_used_symbol s.sym_name;
-    match emit_cmm_symbol s with
-    | `Symbol s -> D.symbol s
-    | `Label l -> D.label l)
-  | Csymbol_offset (s, o) -> (
-    add_used_symbol s.sym_name;
-    match emit_cmm_symbol s with
-    | `Symbol s ->
-      D.symbol_plus_offset s ~offset_in_bytes:(Targetint.of_int_exn o)
-    | `Label l ->
-      D.label_plus_offset l ~offset_in_bytes:(Targetint.of_int_exn o))
-  | Cstring s -> D.string s
-  | Cskip n -> D.space ~bytes:n
-  | Calign n -> D.align ~fill:Zero ~bytes:n
+let emit_data_item_actions : Emitaux.emit_data_item_actions =
+  { global_maybe_protected;
+    symbol_defined = add_def_symbol;
+    symbol_used = add_used_symbol
+  }
 
 let data l =
   D.data ();
   D.align ~fill:Zero ~bytes:8;
-  List.iter emit_item l
+  List.iter (Emitaux.emit_data_item emit_data_item_actions) l
 
 (* Beginning / end of an assembly file *)
 
@@ -2977,10 +2978,7 @@ let emit_probe_handler_wrapper (p : Probe_emission.probe) =
   let padding = if wrapper_frame_size k mod 16 = 0 then 0 else 8 in
   let n = k + padding in
   (* Allocate stack space *)
-  if
-    Config.runtime5
-    && (not Config.no_stack_checks)
-    && n >= Stack_check.stack_threshold_size
+  if (not Config.no_stack_checks) && n >= Stack_check.stack_threshold_size
   then
     emit_stack_check ~size_in_bytes:n ~save_registers:true
       ~save_simd:(must_save_simd_regs p.probe_insn.live);
@@ -3106,18 +3104,16 @@ let end_assembly () =
   (* PR#6329 *)
   emit_global_label ~section:Data "data_end";
   D.int64 0L;
-  D.text ();
-  (* We align to 8 bytes before the frame table. Perhaps somewhat
-     counterintuitively, we use [~fill:Zero] even though we are now in the text
-     section. The reason is that the additional padding will never be executed,
-     so there is no need to pad it with nops in the X86 binary emitter. *)
-  (* CR sspies: We should just determine the filling based on the current
-     section for the binary emitter and then remove the argument [fill]. This is
-     the only place, where it does not seem to match the current section, and it
-     seems it does not matter whether we pad with zeros or nops here. *)
-  D.align ~fill:Zero ~bytes:8;
+  let frametable_section : Asm_targets.Asm_section.t =
+    if !Oxcaml_flags.frametables_in_rodata then Read_only_data else Text
+  in
+  D.switch_to_section frametable_section;
+  I.ud2 ();
+  D.align
+    ~fill:(if !Oxcaml_flags.frametables_in_rodata then Zero else Nop)
+    ~bytes:8;
   (* PR#7591 *)
-  emit_global_label ~section:Text "frametable";
+  emit_global_label ~section:frametable_section "frametable";
   (* CR sspies: Share the [emit_frames] code with the Arm backend. *)
   emit_frames
     { efa_code_label =
@@ -3135,23 +3131,23 @@ let end_assembly () =
       efa_u16 = (fun n -> D.uint16 n);
       efa_u32 = (fun n -> D.uint32 n);
       efa_word = (fun n -> D.targetint (Targetint.of_int_exn n));
-      efa_align = (fun n -> D.align ~fill:Zero ~bytes:n);
+      efa_align = (fun n -> D.align ~fill:Nop ~bytes:n);
       efa_label_rel =
         (fun lbl ofs ->
-          let lbl = label_to_asm_label ~section:Text lbl in
+          let lbl = label_to_asm_label ~section:frametable_section lbl in
           let ofs = Targetint.of_int32 ofs in
           D.between_this_and_label_offset_32bit_expr ~upper:lbl
             ~offset_upper:ofs);
       efa_def_label =
         (fun l ->
-          let lbl = label_to_asm_label ~section:Text l in
+          let lbl = label_to_asm_label ~section:frametable_section l in
           D.define_label lbl);
       efa_string = (fun s -> D.string (s ^ "\000"))
     };
   let frametable_sym = S.create_global (Cmm_helpers.make_symbol "frametable") in
   D.size frametable_sym;
   D.data ();
-  Probe_emission.emit_probe_notes ~slot_offset ~add_def_symbol;
+  Probe_emission.emit_probe_notes ~add_def_symbol;
   emit_trap_notes ();
   D.mark_stack_non_executable ();
   (* Note that [mark_stack_non_executable] switches the section on Linux. *)

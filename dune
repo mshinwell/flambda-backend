@@ -39,8 +39,6 @@
     -warn-error
     +A))))
 
-(include dune.runtime_selection)
-
 (copy_files# utils/*.ml{,i})
 
 (copy_files# parsing/*.ml{,i})
@@ -76,6 +74,8 @@
 (copy_files# backend/llvm/*.ml{,i})
 
 (copy_files# backend/peephole/*.ml{,i})
+
+(copy_files# backend/x86_peephole/*.ml{,i})
 
 (copy_files# backend/regalloc/*.ml{,i})
 
@@ -138,7 +138,6 @@
  (modules_without_implementation
   annot
   value_rec_types
-  asttypes
   cmo_format
   cmj_format
   outcometree
@@ -182,6 +181,7 @@
   diffing
   diffing_with_keys
   unit_info
+  linkdeps
   language_extension_kernel
   language_extension
   zero_alloc_utils
@@ -234,6 +234,8 @@
   printtyped
   ctype
   printtyp
+  rawprinttyp
+  gprinttyp
   includeclass
   mtype
   envaux
@@ -247,8 +249,13 @@
   untypeast
   includemod
   includemod_errorprinter
+  errortrace_report
   typemode
   jkind_axis
+  ldd_intf
+  ldd
+  axis_lattice
+  ikind
   typetexp
   patterns
   printpat
@@ -270,6 +277,8 @@
   typedecl_properties
   typedecl_separability
   cmt2annot
+  out_type
+  data_types
   ; manual update: mli only files
   annot
   outcometree
@@ -284,11 +293,13 @@
   printlambda
   runtimedef
   runtimetags
+  structured_mangling
   tmc
   simplif
   slambda_fracture
   slambda
   slambdaeval
+  slambdaident
   switch
   value_rec_compiler
   translmode
@@ -314,6 +325,7 @@
   main_args
   compenv
   compmisc
+  opt_fuel
   makedepend
   compile_common
   instantiator
@@ -615,6 +627,10 @@
   x86_dsl
   x86_gas
   x86_masm
+  x86_peephole_optimize
+  x86_peephole_rules
+  x86_peephole_utils
+  x86_section
   x86_proc
   jit_backend
   zero_alloc_checker
@@ -622,8 +638,10 @@
   ;; backend/cfg
   cfg
   cfg_available_regs
+  cfg_colours
   cfg_edge
   cfg_intf
+  cfg_quick_hash
   cfg_reducibility
   cfg_to_linear
   cfg_with_layout
@@ -644,6 +662,7 @@
   cfg_merge_blocks
   extra_debug
   label
+  printcfg
   linear_utils
   simplify_terminator
   vectorize
@@ -1002,6 +1021,17 @@
   (glob_files
    backend/asm_targets/.asm_targets.objs/byte/*.{cmi,cmo,cmt,cmti})
   (glob_files_rec backend/asm_targets/.asm_targets.objs/native/*.cmx)
+  (glob_files
+   backend/binary_emitter_intf/.binary_emitter_intf.objs/byte/*.{cmi,cmo,cmt,cmti})
+  (glob_files
+   backend/binary_emitter_intf/.binary_emitter_intf.objs/native/*.cmx)
+  (glob_files
+   backend/arm64/ast/.arm64_ast.objs/byte/*.{cmi,cmo,cmt,cmti})
+  (glob_files backend/arm64/ast/.arm64_ast.objs/native/*.cmx)
+  (glob_files
+   backend/arm64/binary_emitter/.arm64_binary_emitter.objs/byte/*.{cmi,cmo,cmt,cmti})
+  (glob_files
+   backend/arm64/binary_emitter/.arm64_binary_emitter.objs/native/*.cmx)
   (glob_files middle_end/flambda2/.flambda2objs/byte/flambda2.{cmi,cmt})
   (glob_files
    middle_end/flambda2/to_cmm/.flambda2_to_cmm.objs/byte/flambda2_to_cmm{,__To_cmm}.{cmi,cmt})

@@ -37,6 +37,10 @@ let keyword_table =
     "available", KWD_AVAILABLE;
     "boxed", KWD_BOXED;
     "ccall", KWD_CCALL;
+    "mcall", KWD_MCALL;
+    "self", KWD_SELF;
+    "public", KWD_PUBLIC;
+    "cached", KWD_CACHED;
     "closure", KWD_CLOSURE;
     "code", KWD_CODE;
     "cont", KWD_CONT;
@@ -76,6 +80,7 @@ let keyword_table =
     "notrace", KWD_NOTRACE;
     "null", KWD_NULL;
     "of", KWD_OF;
+    "poison", KWD_POISON;
     "pop", KWD_POP;
     "push", KWD_PUSH;
     "rec", KWD_REC;
@@ -86,6 +91,7 @@ let keyword_table =
     "set_of_closures", KWD_SET_OF_CLOSURES;
     "size", KWD_SIZE;
     "succ", KWD_SUCC;
+    "stub", KWD_STUB;
     "switch", KWD_SWITCH;
     "tagged", KWD_TAGGED;
     "tailrec", KWD_TAILREC;
@@ -101,7 +107,14 @@ let keyword_table =
     (* Constructors for static constants *)
     "Block", STATIC_CONST_BLOCK;
     "Value_array", STATIC_CONST_VALUE_ARRAY;
+    "Int_array", STATIC_CONST_INT_ARRAY;
+    "Int8_array", STATIC_CONST_INT8_ARRAY;
+    "Int16_array", STATIC_CONST_INT16_ARRAY;
+    "Int32_array", STATIC_CONST_INT32_ARRAY;
+    "Int64_array", STATIC_CONST_INT64_ARRAY;
+    "Nativeint_array", STATIC_CONST_NATIVEINT_ARRAY;
     "Float_array", STATIC_CONST_FLOAT_ARRAY;
+    "Float32_array", STATIC_CONST_FLOAT32_ARRAY;
     "Float_block", STATIC_CONST_FLOAT_BLOCK;
     "Empty_array", STATIC_CONST_EMPTY_ARRAY;
 ]
@@ -208,7 +221,6 @@ rule token = parse
   | "~"  { TILDE }
   | "&"  { AMP }
   | "^"  { CARET }
-  | "===>" { BIGARROW }
   | identstart identchar* as ident
          { ident_or_keyword ident }
   | quoted_ident as ident

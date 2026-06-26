@@ -24,8 +24,6 @@ module TE = Flambda2_types.Typing_env
 type resolver =
   Compilation_unit.t -> Flambda2_types.Typing_env.Serializable.t option
 
-type get_imported_names = unit -> Name.Set.t
-
 type get_imported_code = unit -> Exported_code.t
 
 module Disable_inlining_reason = struct
@@ -91,10 +89,17 @@ type t =
            generate a fresh [Lifted_cont_param] when we execute
            [define_variable]. Note that this set will always be a subset of the
            head of the defined_variables_by_scope field. *)
-    cost_of_lifting_continuations_out_of_current_one : int
+    cost_of_lifting_continuations_out_of_current_one : int;
         (* This cost is the number of parameters that would have to be created
            if we lifted all continuations that are defined in the current
            continuation's handler. *)
+    has_seen_a_non_liftable_continuation : bool
+        (* This flag is used to mark as non-liftable any continuation that is
+           bound after a non-liftable continuation, since any continuation bound
+           after a non-liftable continuation may refer to it.
+
+           CR gbury: we may not need to do this if we had free_names on handlers
+           that we have not explored yet. *)
   }
 
 let [@ocamlformat "disable"] print ppf { round; machine_width; typing_env;
@@ -107,7 +112,7 @@ let [@ocamlformat "disable"] print ppf { round; machine_width; typing_env;
                 get_imported_code = _; inlining_history_tracker = _;
                 loopify_state; replay_history; specialization_cost; defined_variables_by_scope;
                 lifted = _; cost_of_lifting_continuations_out_of_current_one;
-                join_analysis;
+                has_seen_a_non_liftable_continuation; join_analysis;
               } =
   Format.fprintf ppf "@[<hov 1>(\
       @[<hov 1>(round@ %d)@]@ \
@@ -131,7 +136,8 @@ let [@ocamlformat "disable"] print ppf { round; machine_width; typing_env;
       @[<hov 1>(specialization_cost@ %a)@]@ \
       @[<hov 1>(join_analysis@ %a)@]@ \
       @[<hov 1>(defined_variables_by_scope@ %a)@]@ \
-      @[<hov 1>(cost_of_lifting_continuation_out_of_current_one %d)@]\
+      @[<hov 1>(cost_of_lifting_continuation_out_of_current_one %d)@]@ \
+      @[<hov 1>(has_seen_a_non_liftable_continuation %b)@]\
       )@]"
     round
     Target_system.Machine_width.print machine_width
@@ -156,6 +162,7 @@ let [@ocamlformat "disable"] print ppf { round; machine_width; typing_env;
       ~none:(fun ppf () -> Format.fprintf ppf "()")) join_analysis
     (Format.pp_print_list ~pp_sep:Format.pp_print_space Lifted_cont_params.print) defined_variables_by_scope
     cost_of_lifting_continuations_out_of_current_one
+    has_seen_a_non_liftable_continuation
 
 let define_continuations ~can_be_lifted t conts =
   let replay_history =
@@ -208,11 +215,10 @@ let define_extra_variable t var kind =
   (define_variable0 [@inlined hint]) ~extra:true t var kind
 
 let create ~round ~machine_width ~(resolver : resolver)
-    ~(get_imported_names : get_imported_names)
     ~(get_imported_code : get_imported_code) ~propagating_float_consts
     ~unit_toplevel_exn_continuation ~unit_toplevel_return_continuation
     ~toplevel_my_region ~toplevel_my_ghost_region =
-  let typing_env = TE.create ~machine_width ~resolver ~get_imported_names in
+  let typing_env = TE.create ~machine_width ~resolver in
   let t =
     { round;
       machine_width;
@@ -235,10 +241,11 @@ let create ~round ~machine_width ~(resolver : resolver)
         Inlining_history.Tracker.empty (Compilation_unit.get_current_exn ());
       loopify_state = Loopify_state.do_not_loopify;
       replay_history = Replay_history.first_pass;
-      specialization_cost = Specialization_cost.can_specialize;
+      specialization_cost = Specialization_cost.cannot_specialize At_toplevel;
       defined_variables_by_scope = [Lifted_cont_params.empty];
       lifted = Variable.Set.empty;
       cost_of_lifting_continuations_out_of_current_one = 0;
+      has_seen_a_non_liftable_continuation = false;
       join_analysis = None
     }
   in
@@ -324,6 +331,7 @@ let enter_set_of_closures
       defined_variables_by_scope = _;
       lifted = _;
       cost_of_lifting_continuations_out_of_current_one = _;
+      has_seen_a_non_liftable_continuation = _;
       join_analysis = _
     } ~in_stub =
   let disable_inlining : Disable_inlining.t =
@@ -349,11 +357,12 @@ let enter_set_of_closures
     inlining_history_tracker;
     loopify_state = Loopify_state.do_not_loopify;
     replay_history = Replay_history.first_pass;
-    specialization_cost = Specialization_cost.can_specialize;
+    specialization_cost = Specialization_cost.cannot_specialize At_toplevel;
     join_analysis = None;
     defined_variables_by_scope = [Lifted_cont_params.empty];
     lifted = Variable.Set.empty;
-    cost_of_lifting_continuations_out_of_current_one = 0
+    cost_of_lifting_continuations_out_of_current_one = 0;
+    has_seen_a_non_liftable_continuation = false
   }
 
 let define_symbol t sym kind =
@@ -699,7 +708,13 @@ let enter_continuation_handler lifted_params t =
     lifted;
     defined_variables_by_scope = lifted_params :: t.defined_variables_by_scope;
     cost_of_lifting_continuations_out_of_current_one = 0;
-    specialization_cost = Specialization_cost.can_specialize
+    (* we only do shallow lifting : thus the question of whether a continuation
+       k' can be lifted out of the handler of a continuation k, does not depend
+       on whether k has been lifted or not (or was liftable or not). Therefore
+       we reset the `has_seen_a_non_liftable_continuation` when we enter a new
+       continuation handler *)
+    has_seen_a_non_liftable_continuation = false;
+    specialization_cost = Specialization_cost.can_specialize ()
   }
 
 let variables_defined_in_current_continuation t =
@@ -719,9 +734,23 @@ let add_lifting_cost cost t =
         t.cost_of_lifting_continuations_out_of_current_one + cost
     }
 
+let has_seen_a_non_liftable_continuation t =
+  t.has_seen_a_non_liftable_continuation
+
+let set_has_seen_a_non_liftable_continuation t =
+  if t.has_seen_a_non_liftable_continuation
+  then t
+  else { t with has_seen_a_non_liftable_continuation = true }
+
 let must_inline t = Replay_history.must_inline t.replay_history
 
 let replay_history t = t.replay_history
+
+let record_inlining_decision ~apply decision t =
+  { t with
+    replay_history =
+      Replay_history.record_inlining_decision ~apply decision t.replay_history
+  }
 
 let map_specialization_cost ~f t =
   let specialization_cost = f t.specialization_cost in
@@ -759,6 +788,8 @@ let denv_for_lifted_continuation ~denv_for_join ~denv =
     lifted = denv_for_join.lifted;
     cost_of_lifting_continuations_out_of_current_one =
       denv_for_join.cost_of_lifting_continuations_out_of_current_one;
+    has_seen_a_non_liftable_continuation =
+      denv_for_join.has_seen_a_non_liftable_continuation;
     (* For the following fields, both denvs should have the same value of these
        fields *)
     round = denv.round;

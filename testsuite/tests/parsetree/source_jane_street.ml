@@ -108,21 +108,6 @@ type t = ..
 type t += K : ('a : float64). 'a ignore -> t
 |}]
 
-(* CR layouts v2.8: re-enable this. Internal ticket 5118. *)
-(*
-module M : sig
-  kind_abbrev_ k = immediate
-end = struct
-  kind_abbrev_ k = immediate
-end
-
-[%%expect{|
->> Fatal error: kind_abbrev not supported!
-Uncaught exception: Misc.Fatal_error
-
-|}]
-*)
-
 type t1 : any
 type t2 : any mod separable
 type t3 : value_or_null
@@ -138,7 +123,7 @@ type t12 : bits64
 
 [%%expect{|
 type t1 : any
-type t2 : any mod separable
+type t2 : any separable
 type t3 : value_or_null
 type t4
 type t5 : void
@@ -177,6 +162,12 @@ type t16 : value non_pointer
 type t17 : value & value non_pointer
 |}]
 
+type ('a : value mod external_ stateless many unyielding non_float) t18 =
+  ('a : value mod immutable global aliased)
+[%%expect{|
+type ('a : value mod everything non_float) t18 = 'a
+|}]
+
 type t = #(int * float#)
 
 let f xs = match xs with
@@ -197,6 +188,17 @@ module M :
   sig type 'a t = 'a or_null = Null | This of 'a [@@or_null_reexport] end @@
   stateless
 val x : unit -> #('a M.t * string M.t) = <fun>
+|}]
+
+module Or_null_names = struct
+  type 'a t = Nope | Yep of 'a [@@or_null]
+end
+let y () = #( Or_null_names.Nope, Or_null_names.Yep "hi" )
+
+[%%expect{|
+module Or_null_names : sig type 'a t = Nope | Yep of 'a [@@or_null] end @@
+  stateless
+val y : unit -> #('a Or_null_names.t * string Or_null_names.t) = <fun>
 |}]
 
 external id : ('a : any). 'a -> 'a = "%identity" [@@layout_poly]
@@ -423,27 +425,20 @@ let g () =
 Line 5, characters 52-54:
 5 |   let local_ f a b : (int -> int) @ once portable = 42 in
                                                         ^^
-Error: This expression has type "int" but an expression was expected of type
+Error: The constant "42" has type "int" but an expression was expected of type
          "int -> int"
 |}]
 
 (* expressions *)
 let g () = exclave_ local_
-  let f = (() : _ @ unique once) in
-  let f x y @ local unique = exclave_ local_ (x + y : _ @ once unique) in
-  local_ (() : _ @ unique once);;
+  let _f = (() : _ @ unique once) in
+  let _f = (() : @ unique once) in
+  let _f x y @ local unique = exclave_ local_ (x + y : _ @ once unique) in
+  let _f x y @ local unique = exclave_ local_ (x + y : @ once unique) in
+  local_ (() : _ @ unique once);
+  local_ (() : @ unique once);;
 
 [%%expect{|
-Line 2, characters 6-7:
-2 |   let f = (() : _ @ unique once) in
-          ^
-Warning 26 [unused-var]: unused variable f.
-
-Line 3, characters 6-7:
-3 |   let f x y @ local unique = exclave_ local_ (x + y : _ @ once unique) in
-          ^
-Warning 26 [unused-var]: unused variable f.
-
 val g : unit -> unit @ local once = <fun>
 |}]
 
@@ -497,9 +492,9 @@ type t =
 type fn = local_ int @ portable contended -> local_ int @ portable contended ;;
 type nested_fn = (local_ int @ portable once -> local_ int @ portable once) @ portable once -> local_ int @ portable once;;
 type ('a, 'b) labeled_fn =
-  a:local_ unique_ 'a @ portable contended -> ?b:local_ once_ 'b @ portable contended ->  local_ 'a @ contended portable-> (int -> local_ 'b @ unique once) @ portable;;
+  a:local_ 'a @ unique portable contended -> ?b:local_ 'b @ once portable contended ->  local_ 'a @ contended portable-> (int -> local_ 'b @ unique once) @ portable;;
 type typvar_fn =
-  a:local_ unique_ ('a 'b. 'a) @ portable contended -> unit
+  a:local_ ('a 'b. 'a) @ unique portable contended -> unit
 
 [%%expect{|
 type fn = int @ local portable contended -> int @ local portable contended
@@ -933,7 +928,7 @@ let f x =
   | _ -> assert false;;
 
 [%%expect{|
-val f : ('a : value_or_null mod separable). 'a iarray -> 'a iarray = <fun>
+val f : ('a : value_maybe_null). 'a iarray -> 'a iarray = <fun>
 |}]
 
 (******************)
@@ -1013,7 +1008,7 @@ val f : (x:int * int) -> int = <fun>
 type xy = (x:int * y:int)
 
 (* Reordering and partial matches *)
-let lt = (~x:1, ~y:2, ~x:3, 4)
+let lt = (~x:1, ~y:2, ~x2:3, 4)
 
 let matches =
   let (~x, .. ) = lt in
@@ -1025,7 +1020,7 @@ let matches =
 
 [%%expect{|
 type xy = x:int * y:int
-val lt : x:int * y:int * x:int * int = (~x:1, ~y:2, ~x:3, 4)
+val lt : x:int * y:int * x2:int * int = (~x:1, ~y:2, ~x2:3, 4)
 val matches : int = 1
 val matches : int * int = (1, 2)
 |}]
@@ -1319,8 +1314,8 @@ Error: This value is "local" because it is borrowed.
        However, the highlighted expression is expected to be "global".
 |}]
 
-(***************)
-(* Modal kinds *)
+(*************************************)
+(* Modal kinds and kind declarations *)
 
 (* supported *)
 type 'a list : immutable_data with 'a
@@ -1366,6 +1361,15 @@ module M :
     kind_ data = value mod many
     kind_ abstract
   end @@ stateless
+|}]
+
+module type S = sig kind_ k end
+module type S1 = S with kind_ k = value mod portable
+module type S2 = S with kind_ k := value mod global
+[%%expect{|
+module type S = sig kind_ k end
+module type S1 = sig kind_ k = value mod portable end
+module type S2 = sig end
 |}]
 
 (* not yet supported *)
@@ -1488,7 +1492,7 @@ let f (x : bool) = (x : int)[@error_message "custom message"]
 Line 1, characters 20-21:
 1 | let f (x : bool) = (x : int)[@error_message "custom message"]
                         ^
-Error: This expression has type "bool" but an expression was expected of type
+Error: The value "x" has type "bool" but an expression was expected of type
          "int"
        custom message
 |}]
@@ -1499,11 +1503,11 @@ let f (v : float#) : ((_ : value)[@error_message "need a value"]) = v
 Line 1, characters 68-69:
 1 | let f (v : float#) : ((_ : value)[@error_message "need a value"]) = v
                                                                         ^
-Error: This expression has type "float#" but an expression was expected of type
+Error: The value "v" has type "float#" but an expression was expected of type
          "('a : value)"
        The layout of float# is float64
          because it is the unboxed version of the primitive type float.
-       But the layout of float# must be a sublayout of value
+       But the layout of float# must be a value layout
          because of the annotation on the wildcard _ at line 1, characters 22-33.
          need a value
 |}]
@@ -1569,7 +1573,8 @@ Line 2, characters 19-43:
 2 |     (a, b) as t -> overwrite_ t with (b, _)
                        ^^^^^^^^^^^^^^^^^^^^^^^^
 Alert Translcore: Overwrite not implemented.
-Uncaught exception: File "parsing/location.ml", line 1136, characters 2-8: Assertion failed
+>> Fatal error: Location.todo_overwrite_not_implemented
+Uncaught exception: Misc.Fatal_error
 
 |}]
 
@@ -1687,48 +1692,67 @@ val f : ((repr_ 'a) (repr_ 'b). 'a -> 'b -> unit) -> unit = <fun>
 
 let poly_ id : 'a. 'a -> 'a = fun x -> x
 [%%expect{|
-Line 1, characters 0-40:
+Line 1, characters 10-12:
 1 | let poly_ id : 'a. 'a -> 'a = fun x -> x
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Error: The "let poly_" annotation is not yet implemented.
+              ^^
+Error: This binding has no layout variables, so "poly_" has no effect.
+       Consider using a regular "let" instead.
+|}]
+
+let poly_ id = fun x -> x
+[%%expect{|
+>> Fatal error: layout: unexpected genvar
+Uncaught exception: Misc.Fatal_error
+
 |}]
 
 let poly_ const : 'a 'b. 'a -> 'b -> 'a = fun x _ -> x
 [%%expect{|
-Line 1, characters 0-54:
+Line 1, characters 10-15:
 1 | let poly_ const : 'a 'b. 'a -> 'b -> 'a = fun x _ -> x
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Error: The "let poly_" annotation is not yet implemented.
+              ^^^^^
+Error: This binding has no layout variables, so "poly_" has no effect.
+       Consider using a regular "let" instead.
 |}]
 
 module type S_poly = sig
   val poly_ f : 'a. 'a -> 'a
-  val poly_ g : 'a 'b. 'a -> 'b -> 'a
+  val poly_ g : 'a 'b. 'a -> 'b -> 'c -> 'a
+  val poly_ h : 'a -> 'b -> 'a
 end
 [%%expect{|
-Line 2, characters 2-28:
+Line 2, characters 16-28:
 2 |   val poly_ f : 'a. 'a -> 'a
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^
-Error: The "val poly_" annotation is not yet implemented.
+                    ^^^^^^^^^^^^
+Warning 219: This value description has no layout-polymorphic type variables,
+  so "poly_" has no effect. Consider using a regular "val" instead.
+
+module type S_poly =
+  sig
+    val f : 'a -> 'a
+    val g : layout_ l. 'a 'b ('c : l). 'a -> 'b -> 'c -> 'a
+    val h : layout_ l l0. ('a : l) ('b : l0). 'a -> 'b -> 'a
+  end
 |}]
 
 let poly_ f : 'a. 'a -> 'a = fun x -> x
 and poly_ g : 'a 'b. 'a -> 'b -> 'a = fun x _ -> x
 [%%expect{|
-Line 1, characters 0-39:
-1 | let poly_ f : 'a. 'a -> 'a = fun x -> x
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Error: The "let poly_" annotation is not yet implemented.
+Line 2, characters 10-11:
+2 | and poly_ g : 'a 'b. 'a -> 'b -> 'a = fun x _ -> x
+              ^
+Error: This binding has no layout variables, so "poly_" has no effect.
+       Consider using a regular "let" instead.
 |}]
 
 (* Mixed poly and non-poly in mutually recursive bindings *)
 let poly_ f : 'a. 'a -> 'a = fun x -> x
 and g = fun x -> x
 [%%expect{|
-Line 1, characters 0-39:
-1 | let poly_ f : 'a. 'a -> 'a = fun x -> x
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Error: The "let poly_" annotation is not yet implemented.
+Line 2, characters 0-18:
+2 | and g = fun x -> x
+    ^^^^^^^^^^^^^^^^^^
+Error: All bindings in a "let" must be either all "poly_" or all non-"poly_"
 |}]
 
 let h = fun x -> x
@@ -1737,7 +1761,7 @@ and poly_ k : 'a. 'a -> 'a = fun x -> x
 Line 2, characters 0-39:
 2 | and poly_ k : 'a. 'a -> 'a = fun x -> x
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Error: The "let poly_" annotation is not yet implemented.
+Error: All bindings in a "let" must be either all "poly_" or all non-"poly_"
 |}]
 
 let m = fun x -> x
@@ -1747,7 +1771,7 @@ and p = fun x -> x
 Line 2, characters 0-39:
 2 | and poly_ n : 'a. 'a -> 'a = fun x -> x
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Error: The "let poly_" annotation is not yet implemented.
+Error: All bindings in a "let" must be either all "poly_" or all non-"poly_"
 |}]
 
 module type S = sig

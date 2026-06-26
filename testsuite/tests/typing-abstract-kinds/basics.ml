@@ -1,8 +1,10 @@
 (* TEST
+   flags = "-no-ikinds";
    expect;
 *)
 
-(* Basic tests for abstract kinds. No with-kind substutitions yet. *)
+(* Basic tests for abstract kinds. [with kind_] substitutions are tested in
+   [with_constraints.ml]. *)
 
 (****************************************************)
 (* Test: Abstract kinds allowed in sigs and structs *)
@@ -318,10 +320,12 @@ type t : Spicy.value = string
 Line 1, characters 0-29:
 1 | type t : Spicy.value = string
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Error: The layout of type "string" is value
+Error: The layout of type "string" is value non_float
          because it is the primitive type string.
        But the layout of type "string" must be a sublayout of float64 & float64
          because of the definition of t at line 1, characters 0-29.
+       Note: The kinds mutable_data, immutable_data, and sync_data have
+       the layout value non_float.
 |}]
 
 (***********************************)
@@ -775,32 +779,39 @@ type t1 : k
 Line 3, characters 10-12:
 3 | type s1 = t1 array
               ^^
-Error: This type "t1" should be an instance of type "('a : any mod separable)"
+Error: This type "t1" should be an instance of type "('a : any separable)"
        The kind of t1 is k
          because of the definition of t1 at line 2, characters 0-11.
-       But the kind of t1 must be a subkind of any mod separable
+       But the kind of t1 must be a subkind of any separable
          because it's the type argument to the array type.
 |}]
 
+(* CR layouts-scannable: support scannable axes on abstract kinds *)
 type t2 : k mod separable
 type s2 = t2 array
 [%%expect{|
-type t2 : k mod separable
-type s2 = t2 array
+Line 1, characters 16-25:
+1 | type t2 : k mod separable
+                    ^^^^^^^^^
+Error: Abstract kinds with kind modifiers are not yet supported.
 |}]
 
 type ('a : k mod separable) s3 = 'a array
 [%%expect{|
-type ('a : k mod separable) s3 = 'a array
+Line 1, characters 17-26:
+1 | type ('a : k mod separable) s3 = 'a array
+                     ^^^^^^^^^
+Error: Abstract kinds with kind modifiers are not yet supported.
 |}]
 
 kind_ k' = k mod separable
 type t4 : k'
 type s4 = t4 array
 [%%expect{|
-kind_ k' = k mod separable
-type t4 : k mod separable
-type s4 = t4 array
+Line 1, characters 17-26:
+1 | kind_ k' = k mod separable
+                     ^^^^^^^^^
+Error: Abstract kinds with kind modifiers are not yet supported.
 |}]
 
 (******************************)
@@ -1251,8 +1262,7 @@ Lines 13-14, characters 24-19:
 13 | ........................match x with
 14 |   | M1.Int -> "int"
 Warning 8 [partial-match]: this pattern-matching is not exhaustive.
-Here is an example of a case that is not matched:
-K
+  Here is an example of a case that is not matched: "K"
 
 val f1 : int M1.t -> string = <fun>
 |}]
@@ -1619,10 +1629,10 @@ Error: The kind "Visible_local_mty_a.X.k" is cyclic:
 (************************************************************)
 (* Test: Asymmetric GADT refinement of abstract-kind equalities *)
 (* Upshot: GADT pattern matching refines the kinds of abstract types,
-   but it does currently *not* refine the kind variables. 
-   Doing so in the future would be safe, but we would have to be 
+   but it does currently *not* refine the kind variables.
+   Doing so in the future would be safe, but we would have to be
    very careful in combination with the above hidden recursive cycles:
-   if GADT matching refined kind variables, we could expose the 
+   if GADT matching refined kind variables, we could expose the
    hidden cycles, and the typechecker could then go into an infinite
    loop if it is not carefully rewritten to handle cycles.
    This is probably doable (after all, it works for rectypes),
@@ -1758,4 +1768,94 @@ Error: This type "Branch_kinds_extra.t2'" should be an instance of type
        But the kind of Branch_kinds_extra.t2' must be a subkind of
            Branch_kinds_extra.k1
          because of the definition of branch_needs_k1_extra at line 1, characters 0-55.
+|}]
+
+(***************************************************)
+(* Test: Include and open bring kinds into scope *)
+
+module K = struct
+  kind_ k_open = any
+end
+[%%expect{|
+module K : sig kind_ k_open = any end
+|}]
+
+module Include_abstract_kind = struct
+  include K
+  type ('a : k_open) t
+end
+[%%expect{|
+module Include_abstract_kind : sig kind_ k_open = any type ('a : any) t end
+|}]
+
+module Open_abstract_kind_test = struct
+  open K
+  type ('a : k_open) t
+end
+[%%expect{|
+module Open_abstract_kind_test : sig type ('a : any) t end
+|}]
+
+(*******************************************)
+(* Test: Regression test for bug in nondep *)
+
+(* Multiple applications of a functor whose result mentions the parameter's
+   abstract kind shouldn't affect each other. *)
+
+type ('a : any) id : value
+
+module F (X : sig kind_ ka end) : sig
+  val mk : ('a : X.ka). 'a id -> 'a id
+end = struct
+  let mk x = x
+end
+[%%expect{|
+type ('a : any) id
+module F :
+  functor (X : sig kind_ ka end) ->
+    sig val mk : ('a : X.ka). 'a id -> 'a id end
+|}]
+
+module _ = F (struct kind_ ka = value_or_null end)
+module M = F (struct kind_ ka = any end)
+[%%expect{|
+module M : sig val mk : ('a : any). 'a id -> 'a id end
+|}]
+
+let foo : ('a : any). 'a id -> 'a id = M.mk
+[%%expect{|
+val foo : ('a : any). 'a id -> 'a id = <fun>
+|}]
+
+(************************************************************)
+(* Test: Sharing a mutable cell across functor applications *)
+
+let cell = ref (None : (_ : any) id option)
+
+(* When G is applied to an anonymous argument, nondep will copy the weak type
+   variable in its output, but this test confirms that the subsequent inclusion
+   check unifies it back with the original. *)
+module G (X : sig kind_ ka end) = struct
+  let c = (cell : (_ : X.ka) id option ref)
+end
+
+module A = G (struct kind_ ka = value end)
+module B = G (struct kind_ ka = value end)
+[%%expect{|
+val cell : '_weak1 id option ref = {contents = None}
+module G :
+  functor (X : sig kind_ ka end) -> sig val c : '_weak1 id option ref end
+module A : sig val c : '_weak1 id option ref end
+module B : sig val c : '_weak1 id option ref end
+|}]
+
+let () = A.c := (None : int id option)
+let () = B.c := (None : bool id option)
+[%%expect{|
+Line 2, characters 16-39:
+2 | let () = B.c := (None : bool id option)
+                    ^^^^^^^^^^^^^^^^^^^^^^^
+Error: This expression has type "bool id option"
+       but an expression was expected of type "int id option"
+       Type "bool" is not compatible with type "int"
 |}]

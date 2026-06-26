@@ -49,27 +49,27 @@ end
 Line 2, characters 22-28:
 2 |     val x : string @@ global local unique aliased once many uncontended contended
                           ^^^^^^
-Warning 213: This locality is overriden by local later.
+Warning 213: This locality is overridden by local later.
 
 Line 2, characters 50-54:
 2 |     val x : string @@ global local unique aliased once many uncontended contended
                                                       ^^^^
-Warning 213: This linearity is overriden by many later.
+Warning 213: This linearity is overridden by many later.
 
 Line 3, characters 6-14:
 3 |       portable nonportable
           ^^^^^^^^
-Warning 213: This portability is overriden by nonportable later.
+Warning 213: This portability is overridden by nonportable later.
 
 Line 2, characters 35-41:
 2 |     val x : string @@ global local unique aliased once many uncontended contended
                                        ^^^^^^
-Warning 213: This uniqueness is overriden by aliased later.
+Warning 213: This uniqueness is overridden by aliased later.
 
 Line 2, characters 60-71:
 2 |     val x : string @@ global local unique aliased once many uncontended contended
                                                                 ^^^^^^^^^^^
-Warning 213: This contention is overriden by contended later.
+Warning 213: This contention is overridden by contended later.
 
 module type S = sig val x : string @@ many aliased contended end
 |}]
@@ -150,6 +150,7 @@ module Module_type_of_error = struct
     let x = fun x -> ignore !y; x
   end
 end
+(* CR layouts v2.8: fix principal case. Internal ticket 5111 *)
 [%%expect{|
 Lines 8-12, characters 33-5:
  8 | .................................struct
@@ -239,6 +240,7 @@ end
 issue. See
 https://github.com/oxcaml/oxcaml/pull/3922#discussion_r2059000469
 *)
+(* CR layouts v2.8: fix principal case. Internal ticket 5111 *)
 [%%expect{|
 module Module_type_nested :
   sig
@@ -308,6 +310,7 @@ module Inclusion_fail = struct
     end
 end
 (* For this to type check, M has to be at [contended] *)
+(* CR layouts v2.8: fix principal case. Internal ticket 5111 *)
 [%%expect{|
 module Inclusion_fail :
   sig module M : sig val x : string ref end @@ contended end @@ stateless
@@ -320,6 +323,7 @@ module Inclusion_fail = struct
       let x @ contended = ref "hello"
   end
 end
+(* CR layouts v2.8: fix principal case. Internal ticket 5111 *)
 [%%expect{|
 Lines 4-6, characters 22-5:
 4 | ......................struct
@@ -406,6 +410,7 @@ module Inclusion_match = struct
     end
     let () = uncontended_use M.x
 end
+(* CR layouts v2.8: fix principal case. Internal ticket 5111 *)
 [%%expect{|
 module Inclusion_match : sig module M : sig val x : int ref end end @@
   stateless
@@ -801,6 +806,9 @@ Line 1, characters 26-57:
 1 | let f (x : (module S')) = (x : (module S') :> (module S))
                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Error: Type "(module S')" is not a subtype of "(module S)"
+       Modules do not match: S' is not included in S
+       Modalities on foo do not match:
+       The second is global and the first is not.
 |}]
 
 (* module equality/substitution inclusion check doesn't look at modes of modules

@@ -81,7 +81,7 @@ and let_expr =
 and named =
   | Simple of Simple.t
   | Prim of Flambda_primitive.t * Debuginfo.t
-  | Set_of_closures of Set_of_closures.t
+  | Set_of_closures of Set_of_closures.t * Alloc_mode.For_allocations.t
   | Static_consts of static_const_group
   | Rec_info of Rec_info_expr.t
 
@@ -175,9 +175,14 @@ and apply_renaming_named (named : named) renaming : named =
   | Prim (prim, dbg) ->
     let prim' = Flambda_primitive.apply_renaming prim renaming in
     if prim == prim' then named else Prim (prim', dbg)
-  | Set_of_closures set ->
+  | Set_of_closures (set, alloc_mode) ->
     let set' = Set_of_closures.apply_renaming set renaming in
-    if set == set' then named else Set_of_closures set'
+    let alloc_mode' =
+      Alloc_mode.For_allocations.apply_renaming alloc_mode renaming
+    in
+    if set == set' && alloc_mode == alloc_mode'
+    then named
+    else Set_of_closures (set', alloc_mode')
   | Static_consts consts ->
     let consts' = apply_renaming_static_const_group consts renaming in
     if consts == consts' then named else Static_consts consts'
@@ -391,7 +396,10 @@ and ids_for_export_named t =
   match t with
   | Simple simple -> Ids_for_export.from_simple simple
   | Prim (prim, _dbg) -> Flambda_primitive.ids_for_export prim
-  | Set_of_closures set -> Set_of_closures.ids_for_export set
+  | Set_of_closures (set, alloc_mode) ->
+    Ids_for_export.union
+      (Set_of_closures.ids_for_export set)
+      (Alloc_mode.For_allocations.ids_for_export alloc_mode)
   | Static_consts consts -> ids_for_export_static_const_group consts
   | Rec_info rec_info_expr -> Rec_info_expr.ids_for_export rec_info_expr
 
@@ -887,7 +895,12 @@ and print_named ppf (t : named) =
   | Prim (prim, dbg) ->
     fprintf ppf "@[<hov 1>(%a%t%a%t)@]" Flambda_primitive.print prim
       Flambda_colours.debuginfo print_or_elide_debuginfo dbg Flambda_colours.pop
-  | Set_of_closures set_of_closures -> Set_of_closures.print ppf set_of_closures
+  | Set_of_closures (set_of_closures, alloc_mode) ->
+    Set_of_closures.print_with_extra_fields
+      (fun ppf ->
+        Format.fprintf ppf "@[<hov 1>(alloc_mode@ %a)@]@ "
+          Alloc_mode.For_allocations.print alloc_mode)
+      ppf set_of_closures
   | Static_consts consts -> print_static_const_group ppf consts
   | Rec_info rec_info_expr -> Rec_info_expr.print ppf rec_info_expr
 
@@ -1013,7 +1026,7 @@ module Function_params_and_body = struct
   type t = function_params_and_body
 
   let create ~return_continuation ~exn_continuation params ~body
-      ~free_names_of_body ~my_closure ~my_region ~my_ghost_region ~my_depth =
+      ~free_names_of_body ~my_closure ~my_alloc_mode ~my_depth =
     Bound_parameters.check_no_duplicates params;
     let is_my_closure_used =
       Or_unknown.map free_names_of_body ~f:(fun free_names_of_body ->
@@ -1022,7 +1035,7 @@ module Function_params_and_body = struct
     let base : Base.t = { expr = body; free_names = free_names_of_body } in
     let bound_for_function =
       Bound_for_function.create ~return_continuation ~exn_continuation ~params
-        ~my_closure ~my_region ~my_ghost_region ~my_depth
+        ~my_closure ~my_alloc_mode ~my_depth
     in
     let abst = A.create bound_for_function base in
     { abst; is_my_closure_used }
@@ -1037,8 +1050,8 @@ module Function_params_and_body = struct
       ~return_continuation:(BFF.return_continuation bff)
       ~exn_continuation:(BFF.exn_continuation bff) (BFF.params bff) ~body:expr
       ~my_closure:(BFF.my_closure bff) ~is_my_closure_used:t.is_my_closure_used
-      ~my_region:(BFF.my_region bff) ~my_ghost_region:(BFF.my_ghost_region bff)
-      ~my_depth:(BFF.my_depth bff) ~free_names_of_body:free_names
+      ~my_alloc_mode:(BFF.my_alloc_mode bff) ~my_depth:(BFF.my_depth bff)
+      ~free_names_of_body:free_names
 
   let pattern_match_pair t1 t2 ~f =
     A.pattern_match_pair t1.abst t2.abst
@@ -1055,9 +1068,7 @@ module Function_params_and_body = struct
           (Bound_for_function.params bound_for_function)
           ~body1 ~body2
           ~my_closure:(Bound_for_function.my_closure bound_for_function)
-          ~my_region:(Bound_for_function.my_region bound_for_function)
-          ~my_ghost_region:
-            (Bound_for_function.my_ghost_region bound_for_function)
+          ~my_alloc_mode:(Bound_for_function.my_alloc_mode bound_for_function)
           ~my_depth:(Bound_for_function.my_depth bound_for_function))
 
   let apply_renaming = apply_renaming_function_params_and_body
@@ -1380,7 +1391,8 @@ module Named = struct
 
   let create_prim prim dbg = Prim (prim, dbg)
 
-  let create_set_of_closures set_of_closures = Set_of_closures set_of_closures
+  let create_set_of_closures ~alloc_mode set_of_closures =
+    Set_of_closures (set_of_closures, alloc_mode)
 
   let create_static_consts consts = Static_consts consts
 
@@ -1390,7 +1402,10 @@ module Named = struct
     match t with
     | Simple simple -> Simple.free_names simple
     | Prim (prim, _dbg) -> Flambda_primitive.free_names prim
-    | Set_of_closures set -> Set_of_closures.free_names set
+    | Set_of_closures (set, alloc_mode) ->
+      Name_occurrences.union
+        (Set_of_closures.free_names set)
+        (Alloc_mode.For_allocations.free_names alloc_mode)
     | Static_consts consts -> Static_const_group.free_names consts
     | Rec_info rec_info_expr -> Rec_info_expr.free_names rec_info_expr
 
@@ -1468,7 +1483,7 @@ module Named = struct
 
   let fold_code_and_sets_of_closures t ~init ~f_code ~f_set =
     match t with
-    | Set_of_closures s -> f_set init s
+    | Set_of_closures (s, _alloc_mode) -> f_set init s
     | Rec_info _ | Simple _ | Prim _ -> init
     | Static_consts group ->
       Static_const_group.to_list group

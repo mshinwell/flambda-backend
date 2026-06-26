@@ -249,13 +249,13 @@ let basic (map : spilled_map) (instr : Cfg.basic Cfg.instruction) =
   | Op (Intop (Icomp _)) -> binary_operation map instr Result_cannot_be_on_stack
   | Op (Intop_imm (Icomp _, _)) ->
     may_use_stack_operand_for_only_argument map instr ~has_result:true
-  | Op (Intop Iadd) | Op (Intop_imm (Iadd, _)) ->
+  | Op (Intop Iadd) | Op (Intop_imm ((Iadd | Isub), _)) ->
     (* Conservatively assume it will be turned into a `lea` instruction, and ask
        for everything to be in registers. *)
     May_still_have_spilled_registers
   | Op (Intop (Ilsl | Ilsr | Iasr)) ->
     may_use_stack_operand_for_result map instr ~num_args:2
-  | Op (Intop_imm ((Isub | Iand | Ior | Ixor | Ilsl | Ilsr | Iasr), _)) ->
+  | Op (Intop_imm ((Iand | Ior | Ixor | Ilsl | Ilsr | Iasr), _)) ->
     may_use_stack_operand_for_result map instr ~num_args:1
   | Op (Csel _) (* CR gyorsh: optimize *)
   | Op (Specific (Ilfence | Isfence | Imfence))
@@ -263,10 +263,10 @@ let basic (map : spilled_map) (instr : Cfg.basic Cfg.instruction) =
   | Op (Int128op (Iadd128 | Isub128 | Imul64 _))
   | Op (Intop_imm ((Imulh _ | Imul | Idiv | Imod), _))
   | Op (Specific (Irdtsc | Irdpmc))
-  | Op (Intop (Ipopcnt | Iclz _ | Ictz _))
+  | Op (Intop (Ipopcnt | Iclz | Ictz))
   | Op (Intop_atomic _)
   | Op
-      ( Move | Spill | Reload | Dummy_use
+      ( Move | Spill | Reload
       | Floatop (_, (Inegf | Iabsf | Icompf _))
       | Const_float _ | Const_float32 _ | Const_vec128 _ | Const_vec256 _
       | Const_vec512 _ | Stackoffset _ | Load _ | Store _ | Name_for_debugger _
@@ -283,7 +283,7 @@ let basic (map : spilled_map) (instr : Cfg.basic Cfg.instruction) =
   | Reloadretaddr | Pushtrap _ | Poptrap _ | Prologue | Epilogue ->
     (* no rewrite *)
     May_still_have_spilled_registers
-  | Op (Intop_imm ((Ipopcnt | Iclz _ | Ictz _), _))
+  | Op (Intop_imm ((Ipopcnt | Iclz | Ictz), _))
   | Stack_check _
   | Op (Specific (Illvm_intrinsic _)) ->
     (* should not happen *)

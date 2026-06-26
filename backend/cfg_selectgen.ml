@@ -72,7 +72,7 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
         (* The remaining operations are simple if their args are *)
       | Cload _ | Caddi | Csubi | Cmuli | Cmulhi _ | Cdivi | Cmodi | Caddi128
       | Csubi128 | Cmuli64 _ | Cand | Cor | Cxor | Clsl | Clsr | Casr | Ccmpi _
-      | Caddv | Cadda | Cnegf _ | Cclz _ | Cctz _ | Cpopcnt | Cbswap _ | Ccsel _
+      | Caddv | Cadda | Cnegf _ | Cclz | Cctz | Cpopcnt | Cbswap _ | Ccsel _
       | Cabsf _ | Caddf _ | Csubf _ | Cmulf _ | Cdivf _ | Cpackf32
       | Creinterpret_cast _ | Cstatic_cast _ | Ctuple_field _ | Ccmpf _
       | Cdls_get | Ctls_get | Cdomain_index ->
@@ -129,9 +129,9 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
         | Cprobe_is_enabled _ -> EC.coeffect_only Arbitrary
         | Ctuple_field _ | Caddi | Csubi | Cmuli | Cmulhi _ | Cdivi | Cmodi
         | Caddi128 | Csubi128 | Cmuli64 _ | Cand | Cor | Cxor | Cbswap _
-        | Ccsel _ | Cclz _ | Cctz _ | Cpopcnt | Clsl | Clsr | Casr | Ccmpi _
-        | Caddv | Cadda | Cnegf _ | Cabsf _ | Caddf _ | Csubf _ | Cmulf _
-        | Cdivf _ | Cpackf32 | Creinterpret_cast _ | Cstatic_cast _ | Ccmpf _ ->
+        | Ccsel _ | Cclz | Cctz | Cpopcnt | Clsl | Clsr | Casr | Ccmpi _ | Caddv
+        | Cadda | Cnegf _ | Cabsf _ | Caddf _ | Csubf _ | Cmulf _ | Cdivf _
+        | Cpackf32 | Creinterpret_cast _ | Cstatic_cast _ | Ccmpf _ ->
           EC.none
       in
       EC.join from_op (EC.join_list_map args effects_of)
@@ -356,10 +356,8 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
     | Clsl -> select_arith Ilsl args
     | Clsr -> select_arith Ilsr args
     | Casr -> select_arith Iasr args
-    | Cclz { arg_is_non_zero } ->
-      SU.basic_op (Intop (Iclz { arg_is_non_zero })), args
-    | Cctz { arg_is_non_zero } ->
-      SU.basic_op (Intop (Ictz { arg_is_non_zero })), args
+    | Cclz -> SU.basic_op (Intop Iclz), args
+    | Cctz -> SU.basic_op (Intop Ictz), args
     | Cpopcnt -> SU.basic_op (Intop Ipopcnt), args
     | Ccmpi comp -> select_arith_comp comp args
     | Caddv -> select_arith_comm Iadd args
@@ -1007,10 +1005,10 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
         add_naming_op_for_bound_name sub_cfg rd;
         Ok (insert_op_debug env sub_cfg op dbg r1 rd)
       | Basic basic ->
-        Misc.fatal_errorf "unexpected basic (%a)" Cfg.dump_basic basic
+        Misc.fatal_errorf "unexpected basic (%a)" Printcfg.basic_desc basic
       | Terminator term ->
         Misc.fatal_errorf "unexpected terminator (%a)"
-          (Cfg.dump_terminator ~sep:"")
+          (Printcfg.terminator_desc ~sep:"")
           term)
 
   and emit_expr_ifthenelse env sub_cfg bound_name econd _ifso_dbg eif
@@ -1193,7 +1191,10 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
         Array.iter
           (fun reg ->
             match reg.Reg.typ with
-            | Addr -> assert false
+            | Addr ->
+              Misc.fatal_error
+                "Cfg_selectgen.emit_expr_exit: unexpected machtype_component \
+                 Addr in Ccatch register"
             | Valx2 -> Misc.fatal_error "Unexpected machtype_component Valx2"
             | Val | Int | Float | Vec128 | Vec256 | Vec512 | Float32 -> ())
           src;
@@ -1270,8 +1271,8 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
             loc_res;
           Sub_cfg.add_never_block sub_cfg ~label:label_after;
           SU.set_traps_for_raise env;
-          SU.insert env sub_cfg (Op (Stackoffset (-stack_ofs))) [||] [||];
-          insert_return env sub_cfg (Ok loc_res) (SU.pop_all_traps env))
+          SU.insert_move_results env sub_cfg loc_res rd stack_ofs;
+          insert_return env sub_cfg (Ok rd) (SU.pop_all_traps env))
       | Terminator (Call { op = Direct func; label_after } as term) ->
         let** r1 = emit_tuple env sub_cfg new_args in
         let rd = Reg.createv ty in
@@ -1299,8 +1300,8 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
           SU.insert_debug' env sub_cfg term dbg loc_arg loc_res;
           Sub_cfg.add_never_block sub_cfg ~label:label_after;
           SU.set_traps_for_raise env;
-          SU.insert env sub_cfg (Op (Stackoffset (-stack_ofs))) [||] [||];
-          insert_return env sub_cfg (Ok loc_res) (SU.pop_all_traps env))
+          SU.insert_move_results env sub_cfg loc_res rd stack_ofs;
+          insert_return env sub_cfg (Ok rd) (SU.pop_all_traps env))
       | _ -> Misc.fatal_error "Cfg_selectgen.emit_tail")
 
   and emit_tail_ifthenelse env sub_cfg econd (_ifso_dbg : Debuginfo.t) eif

@@ -57,10 +57,12 @@ let current_unit =
     ui_arg_descr = None;
     ui_imports_cmi = [];
     ui_imports_cmx = [];
-    ui_quoted_globals = [];
+    ui_quoted_cmi = [];
+    ui_quoted_cmx = [];
     ui_format = ();
     ui_generic_fns = { curry_fun = []; apply_fun = []; send_fun = [] };
     ui_force_link = false;
+    ui_requires_metaprogramming = false;
     ui_zero_alloc_info = Zero_alloc_info.create ();
     ui_export_info = None;
     ui_external_symbols = [];
@@ -70,17 +72,20 @@ let reset unit_info =
   let compilation_unit = Unit_info.modname unit_info in
   Infos_table.clear global_infos_table;
   Zero_alloc_info.reset cached_zero_alloc_info;
-  Env.set_unit_name (Some unit_info);
+  Env.set_current_unit unit_info;
   current_unit.ui_unit <- compilation_unit;
   current_unit.ui_defines <- [compilation_unit];
   current_unit.ui_arg_descr <- None;
   current_unit.ui_imports_cmi <- [];
   current_unit.ui_imports_cmx <- [];
-  current_unit.ui_quoted_globals <- [];
+  current_unit.ui_quoted_cmi <- [];
+  current_unit.ui_quoted_cmx <- [];
   current_unit.ui_format <- ();
   current_unit.ui_generic_fns <-
     { curry_fun = []; apply_fun = []; send_fun = [] };
   current_unit.ui_force_link <- !Clflags.link_everything;
+  current_unit.ui_requires_metaprogramming <-
+    !Clflags.requires_metaprogramming;
   Zero_alloc_info.reset current_unit.ui_zero_alloc_info;
   Hashtbl.clear exported_constants;
   current_unit.ui_export_info <- None;
@@ -120,11 +125,13 @@ let read_unit_info filename =
       ui_arg_descr = uir.uir_arg_descr;
       ui_imports_cmi = uir.uir_imports_cmi |> Array.to_list;
       ui_imports_cmx = uir.uir_imports_cmx |> Array.to_list;
-      ui_quoted_globals = uir.uir_quoted_globals |> Array.to_list;
+      ui_quoted_cmi = uir.uir_quoted_cmi |> Array.to_list;
+      ui_quoted_cmx = uir.uir_quoted_cmx |> Array.to_list;
       ui_generic_fns = uir.uir_generic_fns;
       ui_export_info = export_info;
       ui_zero_alloc_info = Zero_alloc_info.of_raw uir.uir_zero_alloc_info;
       ui_force_link = uir.uir_force_link;
+      ui_requires_metaprogramming = uir.uir_requires_metaprogramming;
       ui_external_symbols = uir.uir_external_symbols |> Array.to_list;
     }
     in
@@ -135,12 +142,16 @@ let read_unit_info filename =
 
 let read_library_info filename =
   let ic = open_in_bin filename in
-  let buffer = really_input_string ic (String.length cmxa_magic_number) in
-  if buffer <> cmxa_magic_number then
-    raise(Error(Not_a_unit_info filename));
-  let infos = (input_value ic : library_infos) in
-  close_in ic;
-  infos
+  try
+    let buffer = really_input_string ic (String.length cmxa_magic_number) in
+    if buffer <> cmxa_magic_number then
+      raise(Error(Not_a_unit_info filename));
+    let infos = (input_value ic : library_infos) in
+    close_in ic;
+    infos
+  with End_of_file | Failure _ ->
+    close_in ic;
+    raise(Error(Corrupted_unit_info(filename)))
 
 
 (* Read and cache info on global identifiers *)
@@ -279,12 +290,14 @@ let write_unit_info info filename =
     uir_arg_descr = info.ui_arg_descr;
     uir_imports_cmi = Array.of_list info.ui_imports_cmi;
     uir_imports_cmx = Array.of_list info.ui_imports_cmx;
-    uir_quoted_globals = Array.of_list info.ui_quoted_globals;
+    uir_quoted_cmi = Array.of_list info.ui_quoted_cmi;
+    uir_quoted_cmx = Array.of_list info.ui_quoted_cmx;
     uir_format = info.ui_format;
     uir_generic_fns = info.ui_generic_fns;
     uir_export_info = raw_export_info;
     uir_zero_alloc_info = Zero_alloc_info.to_raw info.ui_zero_alloc_info;
     uir_force_link = info.ui_force_link;
+    uir_requires_metaprogramming = info.ui_requires_metaprogramming;
     uir_section_toc = toc;
     uir_sections_length = total_length;
     uir_external_symbols = Array.of_list info.ui_external_symbols;
@@ -299,7 +312,10 @@ let write_unit_info info filename =
 
 let save_unit_info filename ~main_module_block_format ~arg_descr =
   current_unit.ui_imports_cmi <- Env.imports();
-  current_unit.ui_quoted_globals <- Env.quoted_globals();
+  let quoted_intfs = Env.quoted_intfs () in
+  let quoted_intfs_and_deps = Env.loaded_transitive_dependencies quoted_intfs in
+  current_unit.ui_quoted_cmi <- CU.Name.Set.to_list quoted_intfs_and_deps;
+  current_unit.ui_quoted_cmx <- CU.Set.to_list (Env.quoted_impls ());
   (* We could have [set_main_module_block_format] and [set_arg_descr] instead
      of passing these in as arguments but, unlike most of the state that this
      module keeps track of, they're not values that get accumulated over time,
@@ -329,7 +345,7 @@ let report_error_doc ppf = function
         Location.Doc.quoted_filename filename
   | Corrupted_unit_info filename ->
       fprintf ppf "Corrupted compilation unit description@ %a"
-        Location.Doc.quoted_filename filename
+       Location.Doc.quoted_filename filename
   | Illegal_renaming(name, modname, filename) ->
       fprintf ppf "%a@ contains the description for unit\
                    @ %a when %a was expected"

@@ -150,8 +150,7 @@ let bind_list name args fn =
 
 let caml_black = Nativeint.shift_left (Nativeint.of_int 3) 8
 
-let caml_local =
-  Nativeint.shift_left (Nativeint.of_int (if Config.runtime5 then 3 else 2)) 8
+let caml_local = Nativeint.shift_left (Nativeint.of_int 3) 8
 
 (* cf. runtime/caml/gc.h *)
 
@@ -683,17 +682,21 @@ let max_signed_bit_length =
   check_equal_int_1 "max_signed_bit_length" max_signed_bit_length
     max_signed_bit_length'
 
-let ignore_low_bit_int = function
+let rec ignore_low_bit_int = function
   | Cop
       ( Caddi,
         [(Cop (Clsl, [_; Cconst_int (n, _)], _) as c); Cconst_int (1, _)],
         _ )
     when n > 0 && is_defined_shift n ->
-    c
-  | Cop (Cor, [c; Cconst_int (1, _)], _) -> c
+    ignore_low_bit_int c
+  | Cop (Cor, [c; Cconst_int (1, _)], _) -> ignore_low_bit_int c
+  | Cop (Clsl, [Cop (Clsr, [c; Cconst_int (1, _)], _); Cconst_int (1, _)], _) ->
+    ignore_low_bit_int c
+  | Cop (Clsl, [Cop (Casr, [c; Cconst_int (1, _)], _); Cconst_int (1, _)], _) ->
+    ignore_low_bit_int c
   | c -> c
 
-let ignore_low_bit_int' arg =
+let rec ignore_low_bit_int' arg =
   let open P.Default_variables in
   P.run arg
     [ ( Guarded
@@ -704,8 +707,13 @@ let ignore_low_bit_int' arg =
                   Const_int_fixed 1 );
             guard = (fun env -> env#.n > 0 && is_defined_shift env#.n)
           }
-      => fun env -> env#.c );
-      (Binop (Or, Any c, Const_int_fixed 1) => fun env -> env#.c) ]
+      => fun env -> ignore_low_bit_int' env#.c );
+      ( Binop (Or, Any c, Const_int_fixed 1) => fun env ->
+        ignore_low_bit_int' env#.c );
+      ( Binop (Lsl, Binop (Lsr, Any c, Const_int_fixed 1), Const_int_fixed 1)
+      => fun env -> ignore_low_bit_int' env#.c );
+      ( Binop (Lsl, Binop (Asr, Any c, Const_int_fixed 1), Const_int_fixed 1)
+      => fun env -> ignore_low_bit_int' env#.c ) ]
 
 let ignore_low_bit_int =
   check_equal_1 "ignore_low_bit_int" ignore_low_bit_int ignore_low_bit_int'
@@ -752,6 +760,9 @@ let rec or_const e n dbg =
   | n ->
     map_tail1 e ~f:(fun e ->
         let[@local] default () =
+          let e =
+            if Nativeint.logand n 1n = 1n then ignore_low_bit_int e else e
+          in
           (* prefer putting constants on the right *)
           Cop (Cor, [e; natint_const_untagged dbg n], dbg)
         in
@@ -775,6 +786,9 @@ let rec and_const e n dbg =
         | Some e -> natint_const_untagged dbg (Nativeint.logand e n)
         | None -> (
           let[@local] default () =
+            let e =
+              if Nativeint.logand n 1n = 0n then ignore_low_bit_int e else e
+            in
             (* prefer putting constants on the right *)
             Cop (Cand, [e; natint_const_untagged dbg n], dbg)
           in
@@ -981,17 +995,20 @@ let rec low_bits ~bits ~dbg x =
       let low_bits = Nativeint.pred (Nativeint.shift_left 1n bits) in
       Nativeint.equal low_bits (Nativeint.logand mask low_bits)
     in
-    (* Ignore sign and zero extensions which do not affect the low bits *)
     map_tail
       (function
         | Cop
             ( (Casr | Clsr),
               [Cop (Clsl, [x; Cconst_int (left, _)], _); Cconst_int (right, _)],
               _ )
-          when 0 <= right && right <= left && left <= unused_bits ->
-          (* these sign-extensions can be replaced with a left shift since we
-             don't care about the high bits that it changed *)
-          low_bits ~bits (lsl_const0 x (left - right) dbg) ~dbg
+          when 0 <= left && 0 <= right && max left right <= unused_bits ->
+          (* Replacing a first left then right shift pattern with a single shift
+             leaves the highest `max left right` bits in a different state. It
+             doesn't matter if we use a logical or arithmetic right shift in the
+             end because the topmost bits are wrong anyway. *)
+          if left >= right
+          then low_bits ~bits (lsl_const0 x (left - right) dbg) ~dbg
+          else low_bits ~bits ~dbg (asr_const x (right - left) dbg)
         | x -> (
           match get_const_bitmask x with
           | Some (x, bitmask) when does_mask_keep_low_bits bitmask ->
@@ -1055,16 +1072,30 @@ let mk_not dbg cmm =
 let mk_compare_ints_untagged dbg a1 a2 =
   bind "int_cmp" a2 (fun a2 ->
       bind "int_cmp" a1 (fun a1 ->
-          let op1 = Cop (Ccmpi Cgt, [a1; a2], dbg) in
-          let op2 = Cop (Ccmpi Clt, [a1; a2], dbg) in
-          sub_int op1 op2 dbg))
+          (* Three-way compare via csel(a1>=a2, a1>a2, -1):
+
+             a1 < a2 => csel(0, _, -1) = -1
+
+             a1 = a2 => csel(1, 0, _) = 0
+
+             a1 > a2 => csel(1, 1, _) = 1
+
+             Compared to (a1 > a2) - (a1 < a2), this encoding uses one fewer
+             instruction and has good latency without resorting to tricks. *)
+          let cond = Cop (Ccmpi Cge, [a1; a2], dbg) in
+          let ifso = Cop (Ccmpi Cgt, [a1; a2], dbg) in
+          let ifnot = Cconst_int (-1, dbg) in
+          Cop (Ccsel typ_int, [cond; ifso; ifnot], dbg)))
 
 let mk_unsigned_compare_ints_untagged dbg a1 a2 =
   bind "uint_cmp" a2 (fun a2 ->
       bind "uint_cmp" a1 (fun a1 ->
-          let op1 = Cop (Ccmpi Cugt, [a1; a2], dbg) in
-          let op2 = Cop (Ccmpi Cult, [a1; a2], dbg) in
-          sub_int op1 op2 dbg))
+          (* Same encoding as [mk_compare_ints_untagged] but with unsigned
+             comparisons. *)
+          let cond = Cop (Ccmpi Cuge, [a1; a2], dbg) in
+          let ifso = Cop (Ccmpi Cugt, [a1; a2], dbg) in
+          let ifnot = Cconst_int (-1, dbg) in
+          Cop (Ccsel typ_int, [cond; ifso; ifnot], dbg)))
 
 let mk_compare_ints dbg a1 a2 =
   match a1, a2 with
@@ -1590,19 +1621,11 @@ let get_header_masked ptr dbg =
 let tag_offset = if big_endian then -1 else -size_int
 
 let get_tag ptr dbg =
-  if Proc.word_addressed
-  then
-    (* If byte loads are slow *)
-    Cop (Cand, [get_header ptr dbg; Cconst_int (255, dbg)], dbg)
-  else
-    (* If byte loads are efficient *)
-    (* Same comment as [get_header] above *)
-    Cop
-      ( (if Config.runtime5
-         then mk_load_immut Byte_unsigned
-         else mk_load_mut Byte_unsigned),
-        [Cop (Cadda, [ptr; Cconst_int (tag_offset, dbg)], dbg)],
-        dbg )
+  (* Same comment as [get_header] above *)
+  Cop
+    ( mk_load_immut Byte_unsigned,
+      [Cop (Cadda, [ptr; Cconst_int (tag_offset, dbg)], dbg)],
+      dbg )
 
 let get_size ptr dbg = lsr_const (get_header_masked ptr dbg) 10 dbg
 
@@ -4102,8 +4125,7 @@ let assignment_kind (ptr : Lambda.immediate_or_pointer)
     assert Config.stack_allocation;
     Caml_modify_local
   | Heap_initialization, Pointer -> Caml_initialize
-  | Root_initialization, Pointer ->
-    if Config.runtime5 then Caml_initialize else Simple Initialization
+  | Root_initialization, Pointer -> Caml_initialize
   | Assignment _, Immediate -> Simple Assignment
   | Heap_initialization, Immediate | Root_initialization, Immediate ->
     Simple Initialization
@@ -4271,6 +4293,16 @@ let make_symbol ?compilation_unit name =
     | None -> Compilation_unit.get_current_exn ()
     | Some compilation_unit -> compilation_unit
   in
+  (* CR sspies: [make_symbol] always uses flat name mangling. Structured
+     mangling can currently only be enabled for functions with a code id. It
+     could, in principle, also be used for other symbols such as module entry
+     points, frame tables, etc. If desired, structured mangling for these can be
+     enabled here BUT this requires additional changes, since other parts of the
+     compiler currently hardcode the symbol names and some symbols should use C
+     linkage names to be referenced from the runtime (e.g., frame tables and GC
+     roots). [make_symbol] is called, for example, for [code_begin], [code_end],
+     [data_begin], [data_end], [entry], [frametable], [gc_roots], and
+     [jump_tables]. *)
   Symbol.for_name compilation_unit name
   |> Symbol.linkage_name |> Linkage_name.to_string
 
@@ -4702,11 +4734,9 @@ let float_of_float32 = unary (Cstatic_cast Float_of_float32)
 let lsl_int_caml_raw ~dbg arg1 arg2 =
   incr_int (lsl_int (decr_int arg1 dbg) arg2 dbg) dbg
 
-let lsr_int_caml_raw ~dbg arg1 arg2 =
-  Cop (Cor, [lsr_int arg1 arg2 dbg; Cconst_int (1, dbg)], dbg)
+let lsr_int_caml_raw ~dbg arg1 arg2 = or_const (lsr_int arg1 arg2 dbg) 1n dbg
 
-let asr_int_caml_raw ~dbg arg1 arg2 =
-  Cop (Cor, [asr_int arg1 arg2 dbg; Cconst_int (1, dbg)], dbg)
+let asr_int_caml_raw ~dbg arg1 arg2 = or_const (asr_int arg1 arg2 dbg) 1n dbg
 
 let eq ~dbg x y =
   match x, y with
@@ -5403,6 +5433,51 @@ let with_stack_bind ~dbg ~valuec ~exnc ~effc ~dyn ~bind ~f ~arg =
                 ty_args = [XInt; XInt; XInt; XInt; XInt]
               },
             [valuec; exnc; effc; dyn; bind],
+            dbg );
+        f;
+        arg ],
+      dbg )
+
+let with_stack_preemptible ~dbg ~valuec ~exnc ~effc ~handle_tick ~f ~arg =
+  let sym = Cmm.global_symbol "caml_runstack" in
+  Cop
+    ( Capply { result_type = typ_val; region = Rc_normal; callees = Some [sym] },
+      [ Cconst_symbol (Cmm.global_symbol "caml_runstack", dbg);
+        Cop
+          ( Cextcall
+              { func = "caml_alloc_stack_preemptible";
+                ty = typ_val;
+                alloc = true;
+                builtin = false;
+                returns = true;
+                effects = Arbitrary_effects;
+                coeffects = Has_coeffects;
+                ty_args = [XInt; XInt; XInt; XInt]
+              },
+            [valuec; exnc; effc; handle_tick],
+            dbg );
+        f;
+        arg ],
+      dbg )
+
+let with_stack_bind_preemptible ~dbg ~valuec ~exnc ~effc ~handle_tick ~dyn ~bind
+    ~f ~arg =
+  let sym = Cmm.global_symbol "caml_runstack" in
+  Cop
+    ( Capply { result_type = typ_val; region = Rc_normal; callees = Some [sym] },
+      [ Cconst_symbol (Cmm.global_symbol "caml_runstack", dbg);
+        Cop
+          ( Cextcall
+              { func = "caml_alloc_stack_bind_preemptible";
+                ty = typ_val;
+                alloc = true;
+                builtin = false;
+                returns = true;
+                effects = Arbitrary_effects;
+                coeffects = Has_coeffects;
+                ty_args = [XInt; XInt; XInt; XInt; XInt; XInt]
+              },
+            [valuec; exnc; effc; handle_tick; dyn; bind],
             dbg );
         f;
         arg ],

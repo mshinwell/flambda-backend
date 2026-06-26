@@ -48,7 +48,9 @@ let cmm_invariants ppf fd_cmm =
 let cfg_invariants ppf cfg =
   let print_fundecl ppf c =
     if !Oxcaml_flags.dump_cfg
-    then Cfg_with_layout.dump ppf c ~msg:"*** Cfg invariant check failed"
+    then
+      Format.fprintf ppf "*** Cfg invariant check failed\n%a"
+        Printcfg.cfg_with_layout c
     else Format.fprintf ppf "%s" (Cfg_with_layout.cfg c).fun_name
   in
   if !Oxcaml_flags.cfg_invariants && Cfg_invariants.run ppf cfg
@@ -62,8 +64,7 @@ let pass_dump_linear_if ppf flag message phrase =
   phrase
 
 let pass_dump_cfg_if ppf flag message c =
-  if !flag
-  then fprintf ppf "*** %s@.%a@." message (Cfg_with_layout.dump ~msg:"") c;
+  if !flag then fprintf ppf "*** %s@.%a@." message Printcfg.cfg_with_layout c;
   c
 
 let should_vectorize () =
@@ -355,7 +356,13 @@ let register_allocator_gi cfg_with_infos =
     cfg_with_infos
 
 let register_allocator_irc cfg_with_infos =
-  cfg_with_infos_profile ~accumulate:true "cfg_irc" Regalloc_irc.run
+  (* CR-soon xclerc for xclerc: we are mis-attributing the time to IRC even when
+     we switch to linscan *)
+  cfg_with_infos_profile ~accumulate:true "cfg_irc"
+    (fun cfg_with_infos ->
+      match Regalloc_irc.run cfg_with_infos with
+      | Some res -> res
+      | None -> Regalloc_ls.run cfg_with_infos)
     cfg_with_infos
 
 let register_allocator_ls cfg_with_infos =
@@ -733,8 +740,9 @@ let compile_implementation_linear unix output_prefix ~progname ~ppf_dump =
       linear_gen_implementation ~ppf_dump unix progname)
 
 (* Error report *)
+module Style = Misc.Style
 
-let fprintf = Format_doc.fprintf
+let fprintf, dprintf = Format_doc.fprintf, Format_doc.dprintf
 
 let report_error_doc ppf = function
   | Assembler_error file ->
@@ -746,15 +754,17 @@ let report_error_doc ppf = function
   | Mismatched_for_pack saved ->
     let msg prefix =
       if Compilation_unit.Prefix.is_empty prefix
-      then "without -for-pack"
-      else "with -for-pack " ^ Compilation_unit.Prefix.to_string prefix
+      then dprintf "without %a" Style.inline_code "-for-pack"
+      else
+        dprintf "with %a" Style.inline_code
+          ("-for-pack " ^ Compilation_unit.Prefix.to_string prefix)
     in
-    fprintf ppf "This input file cannot be compiled %s: it was generated %s."
+    fprintf ppf "This input file cannot be compiled %t: it was generated %t."
       (msg (Compilation_unit.Prefix.from_clflags ()))
       (msg saved)
   | Asm_generation (fn, err) ->
-    fprintf ppf "Error producing assembly code for %s: %a" fn
-      Emitaux.report_error_doc err
+    fprintf ppf "Error producing assembly code for function %a: %a"
+      Style.inline_code fn Emitaux.report_error_doc err
 
 let () =
   Location.register_error_of_exn (function

@@ -127,7 +127,9 @@ let is_safe_basic : Cfg.basic Cfg.instruction -> bool =
 let is_safe_terminator : Cfg.terminator Cfg.instruction -> bool =
  fun term ->
   match term.desc with
-  | Never -> assert false
+  | Never ->
+    Misc.fatal_error
+      "Cfg_polling.is_safe_terminator: unexpected Never terminator"
   | Always _ | Parity_test _ | Truth_test _ | Float_test _ | Int_test _
   | Switch _ ->
     false
@@ -191,10 +193,10 @@ module Polls_before_prtc_transfer = struct
       else Ok Always_polls
     | Op (Alloc _) -> Ok Always_polls
     | Op
-        ( Move | Spill | Reload | Dummy_use | Opaque | Begin_region | End_region
-        | Dls_get | Tls_get | Domain_index | Pause | Const_int _
-        | Const_float32 _ | Const_float _ | Const_symbol _ | Const_vec128 _
-        | Const_vec256 _ | Const_vec512 _ | Stackoffset _ | Load _
+        ( Move | Spill | Reload | Opaque | Begin_region | End_region | Dls_get
+        | Tls_get | Domain_index | Pause | Const_int _ | Const_float32 _
+        | Const_float _ | Const_symbol _ | Const_vec128 _ | Const_vec256 _
+        | Const_vec512 _ | Stackoffset _ | Load _
         | Store (_, _, _)
         | Intop _ | Int128op _
         | Intop_imm (_, _)
@@ -215,7 +217,8 @@ module Polls_before_prtc_transfer = struct
    fun dom ~exn term
        { future_funcnames; optimistic_prologue_poll_instr_id = _ } ->
     match term.desc with
-    | Never -> assert false
+    | Never ->
+      Misc.fatal_error "Cfg_polling.terminator: unexpected Never terminator"
     | Always _ | Parity_test _ | Truth_test _ | Float_test _ | Int_test _
     | Switch _ ->
       Ok dom
@@ -340,7 +343,6 @@ let instr_cfg_with_layout :
           let instrs = DLL.of_list [poll] in
           let inserted_blocks =
             Cfg_with_layout.insert_block cfg_with_layout instrs ~after ~before
-              ~next_instruction_id
           in
           (* All the inserted blocks are safe since they contain a poll
              instruction *)
@@ -358,13 +360,12 @@ let add_poll_or_alloc_basic :
   match instr.desc with
   | Op op -> (
     match op with
-    | Move | Spill | Reload | Dummy_use | Const_int _ | Const_float32 _
-    | Const_float _ | Const_symbol _ | Const_vec128 _ | Const_vec256 _
-    | Const_vec512 _ | Stackoffset _ | Load _ | Store _ | Intop _ | Int128op _
-    | Intop_imm _ | Intop_atomic _ | Floatop _ | Csel _ | Reinterpret_cast _
-    | Static_cast _ | Probe_is_enabled _ | Opaque | Begin_region | End_region
-    | Specific _ | Name_for_debugger _ | Dls_get | Tls_get | Domain_index
-    | Pause ->
+    | Move | Spill | Reload | Const_int _ | Const_float32 _ | Const_float _
+    | Const_symbol _ | Const_vec128 _ | Const_vec256 _ | Const_vec512 _
+    | Stackoffset _ | Load _ | Store _ | Intop _ | Int128op _ | Intop_imm _
+    | Intop_atomic _ | Floatop _ | Csel _ | Reinterpret_cast _ | Static_cast _
+    | Probe_is_enabled _ | Opaque | Begin_region | End_region | Specific _
+    | Name_for_debugger _ | Dls_get | Tls_get | Domain_index | Pause ->
       points
     | Poll -> (Poll, instr.dbg) :: points
     | Alloc _ -> (Alloc, instr.dbg) :: points)
@@ -376,7 +377,9 @@ let add_calls_terminator :
     Cfg.terminator Cfg.instruction -> polling_points -> polling_points =
  fun term points ->
   match term.desc with
-  | Never -> assert false
+  | Never ->
+    Misc.fatal_error
+      "Cfg_polling.add_calls_terminator: unexpected Never terminator"
   | Always _ | Parity_test _ | Truth_test _ | Float_test _ | Int_test _
   | Switch _ | Return | Raise _ ->
     points

@@ -54,14 +54,27 @@ let cse_depth () =
 let join_depth () =
   !Oxcaml_flags.Flambda2.join_depth |> with_default ~f:(fun d -> d.join_depth)
 
+let match_in_match () =
+  !Oxcaml_flags.Flambda2.match_in_match
+  |> with_default ~f:(fun d -> d.match_in_match)
+
 type join_algorithm = Oxcaml_flags.join_algorithm =
   | Binary
   | N_way
   | Checked
 
 let join_algorithm () =
-  !Oxcaml_flags.Flambda2.join_algorithm
-  |> with_default ~f:(fun d -> d.join_algorithm)
+  if match_in_match ()
+  then (
+    (match !Oxcaml_flags.Flambda2.join_algorithm with
+    | Set (Binary | Checked) ->
+      Misc.fatal_errorf
+        "The match-in-match optimization requires the N-way join algorithm"
+    | Set N_way | Default -> ());
+    Oxcaml_flags.N_way)
+  else
+    !Oxcaml_flags.Flambda2.join_algorithm
+    |> with_default ~f:(fun d -> d.join_algorithm)
 
 let use_n_way_join () =
   match join_algorithm () with
@@ -168,8 +181,6 @@ let dump_fexpr pass =
     !Oxcaml_flags.Flambda2.Dump.fexpr
   | (Last_pass | This_pass _), _ -> Nowhere
 
-let dump_flexpect () = !Oxcaml_flags.Flambda2.Dump.flexpect
-
 let dump_slot_offsets () = !Oxcaml_flags.Flambda2.Dump.slot_offsets
 
 let dump_flow () = !Oxcaml_flags.Flambda2.Dump.flow
@@ -179,6 +190,10 @@ let dump_simplify () = !Oxcaml_flags.Flambda2.Dump.simplify
 let dump_reaper () = !Oxcaml_flags.Flambda2.Dump.reaper
 
 let freshen_when_printing () = !Oxcaml_flags.Flambda2.Dump.freshen
+
+let erase_in_types_depth_variables =
+  Oxcaml_args.Extra_options.bool __LOC__
+    "flambda2-erase-in-types-depth-variables"
 
 module Inlining = struct
   module I = Oxcaml_flags.Flambda2.Inlining
@@ -253,6 +268,16 @@ module Inlining = struct
     | Round round -> IH.get ~key:round !I.large_function_size
     | Default opt_level -> (default_for_opt_level opt_level).large_function_size
 
+  let small_functor_size round_or_default =
+    match round_or_default with
+    | Round round -> IH.get ~key:round !I.small_functor_size
+    | Default opt_level -> (default_for_opt_level opt_level).small_functor_size
+
+  let large_functor_size round_or_default =
+    match round_or_default with
+    | Round round -> IH.get ~key:round !I.large_functor_size
+    | Default opt_level -> (default_for_opt_level opt_level).large_functor_size
+
   let threshold round_or_default =
     match round_or_default with
     | Round round -> FH.get ~key:round !I.threshold
@@ -261,6 +286,9 @@ module Inlining = struct
   let speculative_inlining_only_if_arguments_useful () =
     !Oxcaml_flags.Flambda2.Inlining
      .speculative_inlining_only_if_arguments_useful
+
+  let speculative_inlining_track_lifted_constants () =
+    !Oxcaml_flags.Flambda2.Inlining.speculative_inlining_track_lifted_constants
 end
 
 module Debug = struct
@@ -322,9 +350,9 @@ module Expert = struct
     !Oxcaml_flags.Flambda2.Expert.cont_lifting_budget
     |> with_default ~f:(fun d -> d.cont_lifting_budget)
 
-  let cont_spec_budget () =
-    !Oxcaml_flags.Flambda2.Expert.cont_spec_budget
-    |> with_default ~f:(fun d -> d.cont_spec_budget)
+  let cont_spec_threshold () =
+    !Oxcaml_flags.Flambda2.Expert.cont_spec_threshold
+    |> with_default ~f:(fun d -> d.cont_spec_threshold)
 end
 
 let stack_allocation_enabled () = Config.stack_allocation

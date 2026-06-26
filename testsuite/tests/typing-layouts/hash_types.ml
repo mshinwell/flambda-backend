@@ -199,6 +199,13 @@ type r = { f : float#; si : #(string * int64); }
 type u = r#
 |}]
 
+type ('a : float64) t = { i : 'a ; j : 'a }
+type floatu_t : float64 & float64 = float# t#
+[%%expect{|
+type ('a : float64) t = { i : 'a; j : 'a; }
+type floatu_t = float# t#
+|}]
+
 (* But not float, mixed float/float#, or [@@unboxed] records *)
 type r = { f : float ; f2 : float }
 type bad = r#
@@ -210,7 +217,7 @@ Line 2, characters 11-13:
 Error: The type "r" has no unboxed version.
 Hint: Float records don't get unboxed versions.
 |}]
-type r = { f : float ; f2 : float# }
+type r = { f : float ; f2 : float# } [@@flatten_floats]
 type bad = r#
 [%%expect{|
 type r = { f : float; f2 : float#; }
@@ -218,7 +225,7 @@ Line 2, characters 11-13:
 2 | type bad = r#
                ^^
 Error: The type "r" has no unboxed version.
-Hint: Float records don't get unboxed versions.
+Hint: Records with [@@flatten_floats] don't get unboxed versions.
 |}]
 type r = { i : int } [@@unboxed]
 type bad = r#
@@ -231,11 +238,12 @@ Error: The type "r" has no unboxed version.
 Hint: [@@unboxed] records don't get unboxed versions.
 |}]
 type ('a : float64) t = { i : 'a ; j : 'a }
+[@@represent_as_float_array]
 type floatu_t : float64 & float64 = float t#
 [%%expect{|
 type ('a : float64) t = { i : 'a; j : 'a; }
-Line 2, characters 42-44:
-2 | type floatu_t : float64 & float64 = float t#
+Line 3, characters 42-44:
+3 | type floatu_t : float64 & float64 = float t#
                                               ^^
 Error: The type "t" has no unboxed version.
 Hint: Float records don't get unboxed versions.
@@ -261,7 +269,7 @@ type r2 = { i : int; s : string; }
 Line 3, characters 34-35:
 3 | let bad_id : r# -> r2# = fun x -> x
                                       ^
-Error: This expression has type "r#" but an expression was expected of type "r2#"
+Error: The value "x" has type "r#" but an expression was expected of type "r2#"
 |}]
 
 (* Mutable fields imply modalities *)
@@ -318,7 +326,7 @@ let bad : itu -> int32# = fun x -> x
 Line 1, characters 35-36:
 1 | let bad : itu -> int32# = fun x -> x
                                        ^
-Error: This expression has type "itu" = "float/2#"
+Error: The value "x" has type "itu" = "float/2#"
        but an expression was expected of type "int32#"
        Line 1, characters 0-20:
          Definition of type "float/1"
@@ -478,7 +486,6 @@ and r = { x : int; y : float#; }
 and u = r#
 |}]
 
-(* CR layouts v7.2: improve this error message *)
 type s_bad = r# t
 and r = {x:int; y:bool}
 [%%expect{|
@@ -486,12 +493,14 @@ Line 2, characters 0-23:
 2 | and r = {x:int; y:bool}
     ^^^^^^^^^^^^^^^^^^^^^^^
 Error:
-       The kind of r# is value_or_null & float64
+       The layout of r# is value non_pointer & value non_pointer
          because it is an unboxed record.
-       But the kind of r# must be a subkind of value & float64
+       But the layout of r# must be a sublayout of value & float64
          because of the definition of t at line 1, characters 0-29.
+       Note: The layout of immediate is value non_pointer.
 |}]
 
+(* CR layouts-scannable: improve this error message (internal ticket 6111) *)
 type s_bad = q t
 and r = {x:int; y:bool}
 and q = r#
@@ -500,10 +509,11 @@ Line 3, characters 0-10:
 3 | and q = r#
     ^^^^^^^^^^
 Error:
-       The kind of q is value_or_null & float64
+       The layout of q is value non_pointer & value non_pointer
          because it is an unboxed record.
-       But the kind of q must be a subkind of value & float64
+       But the layout of q must be a sublayout of value & float64
          because of the definition of t at line 1, characters 0-29.
+       Note: The layout of immediate is value non_pointer.
 |}]
 
 module rec M : sig
@@ -747,7 +757,7 @@ Error: In this "with" constraint, the new definition of "t"
          type t
        The layout of the first is float64
          because it is the unboxed version of the primitive type float.
-       But the layout of the first must be a sublayout of value
+       But the layout of the first must be a value layout
          because of the definition of t at line 2, characters 2-8.
 |}]
 
@@ -1075,8 +1085,8 @@ module F : functor (M : sig type t = float end) -> sig type u = M.t# end
 Line 4, characters 13-23:
 4 | module Bad = F(FloatId)
                  ^^^^^^^^^^
-Error: In the signature of this functor application:
-       The type "FloatId.t" has no unboxed version.
+Error: In the signature of this functor application: The type "FloatId.t"
+       has no unboxed version.
 |}]
 
 (* ..and module substitution... *)
@@ -1094,8 +1104,8 @@ Lines 1-6, characters 18-32:
 4 |   end
 5 |   type u = Float.t#
 6 | end with module Float := FloatId
-Error: In this instantiated signature:
-       The type "FloatId.t" has no unboxed version.
+Error: In this instantiated signature: The type "FloatId.t"
+       has no unboxed version.
 |}]
 
 (* ..and module type substitution. *)
@@ -1203,8 +1213,8 @@ module G :
 Line 10, characters 13-44:
 10 | module Bad = G(struct type t = float id end)
                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Error: In the signature of this functor application:
-       The type "N.t" has no unboxed version.
+Error: In the signature of this functor application: The type "N.t"
+       has no unboxed version.
 |}]
 
 (* Chain of two aliases that lose unboxed versions *)
@@ -1220,8 +1230,8 @@ module F :
 Line 5, characters 13-23:
 5 | module Bad = F(FloatId)
                  ^^^^^^^^^^
-Error: In the signature of this functor application:
-       The type "s" has no unboxed version.
+Error: In the signature of this functor application: The type "s"
+       has no unboxed version.
 |}]
 
 (* Mutually recursive aliases that lose unboxed versions *)
@@ -1237,8 +1247,8 @@ module F :
 Line 5, characters 13-23:
 5 | module Bad = F(FloatId)
                  ^^^^^^^^^^
-Error: In the signature of this functor application:
-       The type "s" has no unboxed version.
+Error: In the signature of this functor application: The type "s"
+       has no unboxed version.
 |}]
 
 (* Make sure our check isn't too restrictive. We allow a module with a

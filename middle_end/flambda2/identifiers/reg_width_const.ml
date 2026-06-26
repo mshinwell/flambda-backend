@@ -31,6 +31,7 @@ let of_descr (descr : Descr.t) =
   | Naked_vec256 v -> naked_vec256 v
   | Naked_vec512 v -> naked_vec512 v
   | Null -> const_null
+  | Poison (kind, name) -> const_poison kind name
 
 let is_null t = equal t const_null
 
@@ -39,7 +40,7 @@ let is_naked_immediate t =
   | Naked_immediate i -> Some i
   | Tagged_immediate _ | Naked_float _ | Naked_float32 _ | Naked_int8 _
   | Naked_int16 _ | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _
-  | Naked_vec128 _ | Naked_vec256 _ | Naked_vec512 _ | Null ->
+  | Naked_vec128 _ | Naked_vec256 _ | Naked_vec512 _ | Null | Poison _ ->
     None
 
 let is_tagged_immediate t =
@@ -47,7 +48,96 @@ let is_tagged_immediate t =
   | Tagged_immediate i -> Some i
   | Naked_immediate _ | Naked_float _ | Naked_float32 _ | Naked_int8 _
   | Naked_int16 _ | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _
-  | Naked_vec128 _ | Naked_vec256 _ | Naked_vec512 _ | Null ->
+  | Naked_vec128 _ | Naked_vec256 _ | Naked_vec512 _ | Null | Poison _ ->
+    None
+
+let is_naked_float32 t =
+  match descr t with
+  | Naked_float32 f -> Some f
+  | Naked_float _ | Naked_immediate _ | Tagged_immediate _ | Naked_int8 _
+  | Naked_int16 _ | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _
+  | Naked_vec128 _ | Naked_vec256 _ | Naked_vec512 _ | Null | Poison _ ->
+    None
+
+let is_naked_float t =
+  match descr t with
+  | Naked_float f -> Some f
+  | Naked_float32 _ | Naked_immediate _ | Tagged_immediate _ | Naked_int8 _
+  | Naked_int16 _ | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _
+  | Naked_vec128 _ | Naked_vec256 _ | Naked_vec512 _ | Null | Poison _ ->
+    None
+
+let is_naked_int8 t =
+  match descr t with
+  | Naked_int8 i -> Some i
+  | Naked_float _ | Naked_float32 _ | Naked_immediate _ | Tagged_immediate _
+  | Naked_int16 _ | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _
+  | Naked_vec128 _ | Naked_vec256 _ | Naked_vec512 _ | Null | Poison _ ->
+    None
+
+let is_naked_int16 t =
+  match descr t with
+  | Naked_int16 i -> Some i
+  | Naked_float _ | Naked_float32 _ | Naked_immediate _ | Tagged_immediate _
+  | Naked_int8 _ | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _
+  | Naked_vec128 _ | Naked_vec256 _ | Naked_vec512 _ | Null | Poison _ ->
+    None
+
+let is_naked_int32 t =
+  match descr t with
+  | Naked_int32 i -> Some i
+  | Naked_float _ | Naked_float32 _ | Naked_immediate _ | Tagged_immediate _
+  | Naked_int8 _ | Naked_int16 _ | Naked_int64 _ | Naked_nativeint _
+  | Naked_vec128 _ | Naked_vec256 _ | Naked_vec512 _ | Null | Poison _ ->
+    None
+
+let is_naked_int64 t =
+  match descr t with
+  | Naked_int64 i -> Some i
+  | Naked_float _ | Naked_float32 _ | Naked_immediate _ | Tagged_immediate _
+  | Naked_int8 _ | Naked_int16 _ | Naked_int32 _ | Naked_nativeint _
+  | Naked_vec128 _ | Naked_vec256 _ | Naked_vec512 _ | Null | Poison _ ->
+    None
+
+let is_naked_nativeint t =
+  match descr t with
+  | Naked_nativeint i -> Some i
+  | Naked_float _ | Naked_float32 _ | Naked_immediate _ | Tagged_immediate _
+  | Naked_int8 _ | Naked_int16 _ | Naked_int32 _ | Naked_int64 _
+  | Naked_vec128 _ | Naked_vec256 _ | Naked_vec512 _ | Null | Poison _ ->
+    None
+
+let is_naked_vec128 t =
+  match descr t with
+  | Naked_vec128 v -> Some v
+  | Naked_float _ | Naked_float32 _ | Naked_immediate _ | Tagged_immediate _
+  | Naked_int8 _ | Naked_int16 _ | Naked_int32 _ | Naked_int64 _
+  | Naked_nativeint _ | Naked_vec256 _ | Naked_vec512 _ | Null | Poison _ ->
+    None
+
+let is_naked_vec256 t =
+  match descr t with
+  | Naked_vec256 v -> Some v
+  | Naked_float _ | Naked_float32 _ | Naked_immediate _ | Tagged_immediate _
+  | Naked_int8 _ | Naked_int16 _ | Naked_int32 _ | Naked_int64 _
+  | Naked_nativeint _ | Naked_vec128 _ | Naked_vec512 _ | Null | Poison _ ->
+    None
+
+let is_naked_vec512 t =
+  match descr t with
+  | Naked_vec512 v -> Some v
+  | Naked_float _ | Naked_float32 _ | Naked_immediate _ | Tagged_immediate _
+  | Naked_int8 _ | Naked_int16 _ | Naked_int32 _ | Naked_int64 _
+  | Naked_nativeint _ | Naked_vec128 _ | Naked_vec256 _ | Null | Poison _ ->
+    None
+
+let is_poison t =
+  match descr t with
+  | Poison (kind, name) -> Some (kind, name)
+  | Naked_immediate _ | Tagged_immediate _ | Naked_float32 _ | Naked_float _
+  | Naked_int8 _ | Naked_int16 _ | Naked_int32 _ | Naked_int64 _
+  | Naked_nativeint _ | Naked_vec128 _ | Naked_vec256 _ | Naked_vec512 _ | Null
+    ->
     None
 
 let kind t =
@@ -64,6 +154,7 @@ let kind t =
   | Naked_vec128 _ -> Flambda_kind.naked_vec128
   | Naked_vec256 _ -> Flambda_kind.naked_vec256
   | Naked_vec512 _ -> Flambda_kind.naked_vec512
+  | Poison (kind, _) -> kind
 
 let of_int_of_kind machine_width (kind : Flambda_kind.t) i =
   match kind with

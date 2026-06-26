@@ -54,6 +54,18 @@ let typ_vec512 = [| Vec512 |]
 
 let typ_int128 = [| Int; Int |]
 
+let string_of_machtype_component (comp : machtype_component) =
+  match comp with
+  | Val -> "Val"
+  | Addr -> "Addr"
+  | Int -> "Int"
+  | Float -> "Float"
+  | Vec128 -> "Vec128"
+  | Vec256 -> "Vec256"
+  | Vec512 -> "Vec512"
+  | Float32 -> "Float32"
+  | Valx2 -> "Valx2"
+
 (** [machtype_component]s are partially ordered as follows:
 
     {v
@@ -95,9 +107,11 @@ let lub_component comp1 comp2 =
   | (Vec128 | Vec256 | Vec512), (Float | Float32 | Vec256 | Vec512)
   | Float32, Float
   | Float, Float32 ->
-    Printf.eprintf "%d %d\n%!" (Obj.magic comp1) (Obj.magic comp2);
     (* Float unboxing code must be sure to avoid this case. *)
-    assert false
+    Misc.fatal_errorf
+      "Cmm.lub_component: unexpected machtype_component combination (%s, %s)"
+      (string_of_machtype_component comp1)
+      (string_of_machtype_component comp2)
   | Valx2, _ | _, Valx2 ->
     Misc.fatal_errorf "Unexpected machtype_component Valx2"
 
@@ -123,8 +137,10 @@ let ge_component comp1 comp2 =
   | (Vec128 | Vec256 | Vec512), (Float | Float32 | Vec256 | Vec512)
   | Float32, Float
   | Float, Float32 ->
-    Printf.eprintf "GE: %d %d\n%!" (Obj.magic comp1) (Obj.magic comp2);
-    assert false
+    Misc.fatal_errorf
+      "Cmm.ge_component: unexpected machtype_component combination (%s, %s)"
+      (string_of_machtype_component comp1)
+      (string_of_machtype_component comp2)
   | Valx2, _ | _, Valx2 ->
     Misc.fatal_error "Unexpected machtype_component Valx2"
 
@@ -558,8 +574,8 @@ type operation =
   | Casr
   | Cbswap of { bitwidth : bswap_bitwidth }
   | Ccsel of machtype
-  | Cclz of { arg_is_non_zero : bool }
-  | Cctz of { arg_is_non_zero : bool }
+  | Cclz
+  | Cctz
   | Cpopcnt
   | Cprefetch of
       { is_write : bool;
@@ -767,9 +783,9 @@ let iter_shallow_tail f = function
         | Ctls_get | Cdomain_index | Cpoll | Cpause | Capply _ | Cextcall _
         | Cload _
         | Cstore (_, _)
-        | Cmulhi _ | Cbswap _ | Ccsel _ | Cclz _ | Cctz _ | Cprefetch _
-        | Catomic _ | Ccmpi _ | Cnegf _ | Cabsf _ | Caddf _ | Csubf _ | Cmulf _
-        | Cdivf _ | Creinterpret_cast _ | Cstatic_cast _
+        | Cmulhi _ | Cbswap _ | Ccsel _ | Cclz | Cctz | Cprefetch _ | Catomic _
+        | Ccmpi _ | Cnegf _ | Cabsf _ | Caddf _ | Csubf _ | Cmulf _ | Cdivf _
+        | Creinterpret_cast _ | Cstatic_cast _
         | Ccmpf (_, _)
         | Cprobe _ | Cprobe_is_enabled _
         | Ctuple_field (_, _) ),
@@ -801,7 +817,7 @@ let map_shallow_tail f = function
           | Cendregion | Cdls_get | Ctls_get | Cdomain_index | Cpoll | Cpause
           | Capply _ | Cextcall _ | Cload _
           | Cstore (_, _)
-          | Cmulhi _ | Cbswap _ | Ccsel _ | Cclz _ | Cctz _ | Cprefetch _
+          | Cmulhi _ | Cbswap _ | Ccsel _ | Cclz | Cctz | Cprefetch _
           | Catomic _ | Ccmpi _ | Cnegf _ | Cabsf _ | Caddf _ | Csubf _
           | Cmulf _ | Cdivf _ | Creinterpret_cast _ | Cstatic_cast _
           | Ccmpf (_, _)

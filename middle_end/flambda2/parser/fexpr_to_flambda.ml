@@ -98,6 +98,9 @@ let const (c : Fexpr.const) : Reg_width_const.t =
   | Naked_vec256 bits -> Reg_width_const.naked_vec256 (bits |> vec256)
   | Naked_vec512 bits -> Reg_width_const.naked_vec512 (bits |> vec512)
   | Null -> Reg_width_const.const_null
+  | Poison (kind, name) ->
+    let kind = Flambda_kind.With_subkind.kind (value_kind_with_subkind kind) in
+    Reg_width_const.const_poison kind name
 
 let rec rec_info env (ri : Fexpr.rec_info) : Rec_info_expr.t =
   let module US = Rec_info_expr.Unrolling_state in
@@ -136,11 +139,7 @@ let field_of_block env (v : Fexpr.field_of_block) =
   let simple =
     match v with
     | Symbol s -> Simple.symbol (get_symbol env s)
-    | Tagged_immediate i ->
-      let i = Targetint_32_64.of_string machine_width i in
-      Simple.const
-        (Reg_width_const.tagged_immediate
-           (Target_ocaml_int.of_targetint machine_width i))
+    | Const cst -> Simple.const (const cst)
     | Dynamically_computed var ->
       let var = find_var env var in
       Simple.var var
@@ -186,7 +185,60 @@ let defining_expr env (named : Fexpr.named) : Flambda.Named.t =
     Flambda.Named.create_rec_info ri
   | Closure _ -> assert false
 
-let set_of_closures env fun_decls value_slots alloc =
+module Acc = struct
+  type closure_info =
+    { code_id : Code_id.t;
+      slot_offsets_at_definition : Slot_offsets.t
+          (* note: this last field is not a property of the current closure, but
+             rather a property of its point of definition (i.e. the state of the
+             slot_offsets right before we entered the current closure). It's
+             mainly stored here for efficiency reasons. *)
+    }
+
+  type t =
+    { slot_offsets : Slot_offsets.t;
+      code_slot_offsets : Slot_offsets.t Code_id.Map.t;
+      closure_infos : closure_info list
+    }
+
+  let empty =
+    { slot_offsets = Slot_offsets.empty;
+      code_slot_offsets = Code_id.Map.empty;
+      closure_infos = []
+    }
+
+  let add_set_of_closures_offsets ~is_phantom t set_of_closures =
+    let slot_offsets =
+      Slot_offsets.add_set_of_closures t.slot_offsets ~is_phantom
+        set_of_closures
+    in
+    { t with slot_offsets }
+
+  let push_closure_info ~code_id t =
+    { t with
+      slot_offsets = Slot_offsets.empty;
+      closure_infos =
+        { code_id; slot_offsets_at_definition = t.slot_offsets }
+        :: t.closure_infos
+    }
+
+  let pop_closure_info t =
+    let closure_info, closure_infos =
+      match t.closure_infos with
+      | [] -> Misc.fatal_error "pop_closure_info called on empty stack"
+      | closure_info :: closure_infos -> closure_info, closure_infos
+    in
+    let code_slot_offsets =
+      Code_id.Map.add closure_info.code_id t.slot_offsets t.code_slot_offsets
+    in
+    ( closure_info,
+      { closure_infos;
+        code_slot_offsets;
+        slot_offsets = closure_info.slot_offsets_at_definition
+      } )
+end
+
+let set_of_closures env fun_decls value_slots =
   let fun_decls : Function_declarations.t =
     let translate_fun_decl (fun_decl : Fexpr.fun_decl) :
         Function_slot.t * Code_id.t =
@@ -213,10 +265,9 @@ let set_of_closures env fun_decls value_slots alloc =
     in
     List.map convert value_slots |> Value_slot.Map.of_list
   in
-  let alloc = alloc_mode_for_allocations env alloc in
-  Set_of_closures.create ~value_slots alloc fun_decls
+  Set_of_closures.create ~value_slots fun_decls
 
-let apply_cont env ({ cont; args; trap_action } : Fexpr.apply_cont) =
+let apply_cont env acc ({ cont; args; trap_action } : Fexpr.apply_cont) =
   let trap_action : Trap_action.t option =
     trap_action
     |> Option.map (fun (ta : Fexpr.trap_action) : Trap_action.t ->
@@ -239,7 +290,7 @@ let apply_cont env ({ cont; args; trap_action } : Fexpr.apply_cont) =
      in
      Misc.fatal_errorf "wrong continuation arity %s" cont_str);
   let args = List.map (simple env) args in
-  Flambda.Apply_cont.create c ~args ~dbg:Debuginfo.none ?trap_action
+  acc, Flambda.Apply_cont.create c ~args ~dbg:Debuginfo.none ?trap_action
 
 let continuation_sort (sort : Fexpr.continuation_sort) : Continuation.Sort.t =
   match sort with
@@ -247,7 +298,7 @@ let continuation_sort (sort : Fexpr.continuation_sort) : Continuation.Sort.t =
   | Exn -> Normal_or_exn
   | Define_root_symbol -> Define_root_symbol
 
-let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
+let rec expr env acc (e : Fexpr.expr) : _ * Flambda.Expr.t =
   match e with
   | Let { bindings = []; _ } -> assert false (* should not be possible *)
   | Let
@@ -276,14 +327,19 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
       map_accum_left convert_binding env vars_and_closure_bindings
     in
     let bound = Bound_pattern.set_of_closures bound_vars in
-    let named =
-      let closure_bindings = List.map snd vars_and_closure_bindings in
-      set_of_closures env closure_bindings value_slots alloc
-      |> Flambda.Named.create_set_of_closures
+    let closure_bindings = List.map snd vars_and_closure_bindings in
+    let soc = set_of_closures env closure_bindings value_slots in
+    let name_mode = Bound_pattern.name_mode bound in
+    let is_phantom = Name_mode.is_phantom name_mode in
+    let acc = Acc.add_set_of_closures_offsets ~is_phantom acc soc in
+    let alloc_mode = alloc_mode_for_allocations env alloc in
+    let named = Flambda.Named.create_set_of_closures ~alloc_mode soc in
+    let acc, body = expr env acc body in
+    let let_expr =
+      Flambda.Let.create bound named ~body ~free_names_of_body:Unknown
+      |> Flambda.Expr.create_let
     in
-    let body = expr env body in
-    Flambda.Let.create bound named ~body ~free_names_of_body:Unknown
-    |> Flambda.Expr.create_let
+    acc, let_expr
   | Let
       { bindings =
           { defining_expr = Simple _ | Prim _ | Rec_info _; _ } :: _ :: _;
@@ -296,13 +352,16 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
   | Let { bindings = [{ var; defining_expr = d }]; body; value_slots = None } ->
     let named = defining_expr env d in
     let id, id_duid, env = fresh_var env var (Flambda.Named.kind named) in
-    let body = expr env body in
+    let acc, body = expr env acc body in
     let var = Bound_var.create id id_duid Name_mode.normal in
     let bound = Bound_pattern.singleton var in
-    Flambda.Let.create bound named ~body ~free_names_of_body:Unknown
-    |> Flambda.Expr.create_let
+    let let_expr =
+      Flambda.Let.create bound named ~body ~free_names_of_body:Unknown
+      |> Flambda.Expr.create_let
+    in
+    acc, let_expr
   | Let_cont { recursive; body; bindings = [{ name; params; sort; handler }] }
-    -> (
+    ->
     let sort =
       sort |> Option.value ~default:(Normal : Fexpr.continuation_sort)
     in
@@ -321,7 +380,7 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
       then fresh_exn_cont env name ~arity
       else fresh_cont env name ~sort ~arity
     in
-    let body = expr body_env body in
+    let acc, body = expr body_env acc body in
     let create_params env params =
       let env, parameters =
         List.fold_right
@@ -342,33 +401,54 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
       | Recursive invariant_params -> create_params body_env invariant_params
     in
     let handler_env, params = create_params env params in
-    let handler = expr handler_env handler in
+    let acc, handler = expr handler_env acc handler in
     let handler =
       Flambda.Continuation_handler.create params ~handler
         ~free_names_of_handler:Unknown ~is_exn_handler ~is_cold:false
     in
-    match recursive with
-    | Nonrecursive ->
-      Flambda.Let_cont.create_non_recursive name handler ~body
-        ~free_names_of_body:Unknown
-    | Recursive _ ->
-      let handlers = Continuation.Lmap.singleton name handler in
-      Flambda.Let_cont.create_recursive ~invariant_params handlers ~body)
-  | Let_cont _ -> failwith "TODO andwhere"
-  | Apply_cont ac -> Flambda.Expr.create_apply_cont (apply_cont env ac)
-  | Switch { scrutinee; cases } ->
-    let arms =
-      List.map
-        (fun (case, apply) ->
-          (* CR mshinwell: Should get machine_width from fexpr context when
-             available *)
-          Target_ocaml_int.of_int machine_width case, apply_cont env apply)
-        cases
-      |> Target_ocaml_int.Map.of_list
+    let let_cont =
+      match recursive with
+      | Nonrecursive ->
+        Flambda.Let_cont.create_non_recursive name handler ~body
+          ~free_names_of_body:Unknown
+      | Recursive _ ->
+        let handlers = Continuation.Lmap.singleton name handler in
+        Flambda.Let_cont.create_recursive ~invariant_params handlers ~body
     in
-    Flambda.Expr.create_switch
-      (Flambda.Switch.create ~condition_dbg:Debuginfo.none
-         ~scrutinee:(simple env scrutinee) ~arms)
+    acc, let_cont
+  | Let_cont _ -> failwith "TODO andwhere"
+  | Apply_cont ac ->
+    let acc, ac = apply_cont env acc ac in
+    acc, Flambda.Expr.create_apply_cont ac
+  | Switch { scrutinee; cases } ->
+    let (acc, build_let_ks), arms =
+      List.fold_left_map
+        (fun (acc, build_let_ks) (case, apply) ->
+          match (apply : Fexpr.apply_or_inlined_cont) with
+          | Named_cont apply ->
+            (* CR mshinwell: Should get machine_width from fexpr context when
+               available *)
+            let acc, apply = apply_cont env acc apply in
+            ( (acc, build_let_ks),
+              (Target_ocaml_int.of_int machine_width case, apply) )
+          | Inlined_goto body ->
+            let (acc : Acc.t), build_let, (apply : Apply_cont_expr.t) =
+              inlined_goto env acc body
+            in
+            let build_let_ks (acc : Acc.t) body =
+              let acc, let_k = build_let acc body in
+              build_let_ks acc let_k
+            in
+            ( (acc, build_let_ks),
+              (Target_ocaml_int.of_int machine_width case, apply) ))
+        (acc, fun acc e -> acc, e)
+        cases
+    in
+    let arms = Target_ocaml_int.Map.of_list arms in
+    build_let_ks acc
+    @@ Flambda.Expr.create_switch
+         (Flambda.Switch.create ~condition_dbg:Debuginfo.none
+            ~scrutinee:(simple env scrutinee) ~arms)
   | Let_symbol { bindings; value_slots; body } ->
     (* Desugar the abbreviated form for a single set of closures *)
     let found_explicit_set = ref false in
@@ -449,10 +529,10 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
       map_accum_left process_binding env bindings
     in
     let bound_static = bound_static |> Bound_static.create in
-    let static_const env (b : Fexpr.symbol_binding) :
-        Flambda.Static_const_or_code.t =
+    let static_const env acc (b : Fexpr.symbol_binding) :
+        _ * Flambda.Static_const_or_code.t =
       let static_const const =
-        Flambda.Static_const_or_code.create_static_const const
+        acc, Flambda.Static_const_or_code.create_static_const const
       in
       let module SC = Static_const in
       match b with
@@ -487,9 +567,49 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
           static_const
             (SC.immutable_float_array
                (List.map (or_variable float env) elements))
+        | Immutable_float32_array elements ->
+          static_const
+            (SC.immutable_float32_array
+               (List.map (or_variable float32 env) elements))
         | Immutable_value_array elements ->
           static_const
             (SC.immutable_value_array (List.map (field_of_block env) elements))
+        | Immutable_int_array elements ->
+          static_const
+            (SC.immutable_int_array
+               (List.map (or_variable targetint_31_63 env) elements))
+        | Immutable_int8_array elements ->
+          static_const
+            (SC.immutable_int8_array
+               (List.map (or_variable Fun.id env) elements))
+        | Immutable_int16_array elements ->
+          static_const
+            (SC.immutable_int16_array
+               (List.map (or_variable Fun.id env) elements))
+        | Immutable_int32_array elements ->
+          static_const
+            (SC.immutable_int32_array
+               (List.map (or_variable Fun.id env) elements))
+        | Immutable_int64_array elements ->
+          static_const
+            (SC.immutable_int64_array
+               (List.map (or_variable Fun.id env) elements))
+        | Immutable_nativeint_array elements ->
+          static_const
+            (SC.immutable_nativeint_array
+               (List.map (or_variable targetint env) elements))
+        | Immutable_vec128_array elements ->
+          static_const
+            (SC.immutable_vec128_array
+               (List.map (or_variable vec128 env) elements))
+        | Immutable_vec256_array elements ->
+          static_const
+            (SC.immutable_vec256_array
+               (List.map (or_variable vec256 env) elements))
+        | Immutable_vec512_array elements ->
+          static_const
+            (SC.immutable_vec512_array
+               (List.map (or_variable vec512 env) elements))
         | Empty_array array_kind -> static_const (SC.empty_array array_kind)
         | Mutable_string { initial_value = s } ->
           static_const (SC.mutable_string ~initial_value:s)
@@ -500,10 +620,10 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
             (fun (b : Fexpr.static_closure_binding) -> b.fun_decl)
             bindings
         in
-        let set = set_of_closures env fun_decls elements Heap in
+        let set = set_of_closures env fun_decls elements in
         static_const (SC.set_of_closures set)
       | Closure _ -> assert false (* should have been filtered out above *)
-      | Deleted_code _ -> Flambda.Static_const_or_code.deleted_code
+      | Deleted_code _ -> acc, Flambda.Static_const_or_code.deleted_code
       | Code
           { id;
             newer_version_of;
@@ -514,6 +634,7 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
             params_and_body;
             code_size;
             is_tupled;
+            stub;
             loopify;
             result_mode
           } ->
@@ -539,7 +660,8 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
         let ( _params,
               params_and_body,
               free_names_of_params_and_body,
-              is_my_closure_used ) =
+              is_my_closure_used,
+              acc ) =
           let { Fexpr.params;
                 closure_var;
                 region_var;
@@ -580,14 +702,18 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
               ~arity:(Flambda_arity.cardinal_unarized result_arity)
           in
           let exn_continuation, env = fresh_exn_cont env exn_cont ~arity:1 in
-          let body = expr env body in
+          let acc = Acc.push_closure_info acc ~code_id in
+          let acc, body = expr env acc body in
+          let _closure_info, acc = Acc.pop_closure_info acc in
           let params_and_body =
             Flambda.Function_params_and_body.create ~return_continuation
               ~exn_continuation
               (Bound_parameters.create params)
-              ~body ~my_closure ~my_region:(Some my_region)
-              ~my_ghost_region:(Some my_ghost_region) ~my_depth
-              ~free_names_of_body:Unknown
+              ~body ~my_closure
+              ~my_alloc_mode:
+                (Alloc_mode.For_applications.local ~region:my_region
+                   ~ghost_region:my_ghost_region)
+              ~my_depth ~free_names_of_body:Unknown
           in
           let free_names =
             (* CR mshinwell: This needs fixing XXX *)
@@ -596,8 +722,8 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
           ( params,
             params_and_body,
             free_names,
-            Flambda.Function_params_and_body.is_my_closure_used params_and_body
-          )
+            Flambda.Function_params_and_body.is_my_closure_used params_and_body,
+            acc )
         in
         let recursive = convert_recursive_flag recursive in
         let inline =
@@ -627,7 +753,7 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
           Code.create code_id ~params_and_body ~free_names_of_params_and_body
             ~newer_version_of ~params_arity ~param_modes
             ~first_complex_local_param:(Flambda_arity.num_params params_arity)
-            ~result_arity ~result_types:Unknown ~result_mode ~stub:false ~inline
+            ~result_arity ~result_types:Unknown ~result_mode ~stub ~inline
             ~zero_alloc_attribute:Default_zero_alloc
               (* CR gyorsh: should [check] be set properly? *)
             ~is_a_functor:false ~is_opaque:false ~recursive
@@ -642,17 +768,21 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
                  (Compilation_unit.get_current_exn ()))
             ~relative_history:Inlining_history.Relative.empty ~loopify
         in
-        Flambda.Static_const_or_code.create_code code
+        acc, Flambda.Static_const_or_code.create_code code
     in
-    let static_consts =
-      List.map (static_const env) bindings |> Flambda.Static_const_group.create
+    let acc, static_const_group =
+      List.fold_left_map
+        (fun acc binding -> static_const env acc binding)
+        acc bindings
     in
-    let body = expr env body in
-    Flambda.Let.create
-      (Bound_pattern.static bound_static)
-      (Flambda.Named.create_static_consts static_consts)
-      ~body ~free_names_of_body:Unknown
-    |> Flambda.Expr.create_let
+    let static_consts = Flambda.Static_const_group.create static_const_group in
+    let acc, body = expr env acc body in
+    ( acc,
+      Flambda.Let.create
+        (Bound_pattern.static bound_static)
+        (Flambda.Named.create_static_consts static_consts)
+        ~body ~free_names_of_body:Unknown
+      |> Flambda.Expr.create_let )
   | Apply
       { func;
         call_kind;
@@ -717,6 +847,21 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
             return_arity )
         | None | Some { params_arity = None; ret_arity = _ } ->
           Misc.fatal_errorf "Must specify arities for C call")
+      | Method { kind; obj } ->
+        let params_arity =
+          (* CR mshinwell: This needs fixing to cope with the fact that the
+             arities have moved onto [Apply_expr] *)
+          Flambda_arity.create_singletons
+            (List.map (fun _ -> Flambda_kind.With_subkind.any_value) args)
+        in
+        let return_arity =
+          (* CR mshinwell: This needs fixing to cope with the fact that the
+             arities have moved onto [Apply_expr] *)
+          Flambda_arity.create_singletons [Flambda_kind.With_subkind.any_value]
+        in
+        ( Call_kind.method_call kind ~obj:(simple env obj),
+          params_arity,
+          return_arity )
     in
     let inlined : Inlined_attribute.t =
       match inlined with
@@ -751,8 +896,25 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
         ~inlining_state ~probe:None ~position:Normal
         ~relative_history:Inlining_history.Relative.empty
     in
-    Flambda.Expr.create_apply apply
-  | Invalid { message } -> Flambda.Expr.create_invalid (Message message)
+    acc, Flambda.Expr.create_apply apply
+  | Invalid { message } -> acc, Flambda.Expr.create_invalid (Message message)
+
+and inlined_goto env acc (handler_body : Fexpr.expr) =
+  let acc, handler = expr env acc handler_body in
+  let handler =
+    Flambda.Continuation_handler.create Bound_parameters.empty
+      ~free_names_of_handler:Unknown ~is_exn_handler:false ~is_cold:false
+      ~handler
+  in
+  (* no need to propagate env, nothing here can nor should be used elsewhere *)
+  let cont = Continuation.create ~name:"branch_k" ~sort:Normal_or_exn () in
+  let apply = Flambda.Apply_cont.create cont ~args:[] ~dbg:Debuginfo.none in
+  let build_let acc body =
+    ( acc,
+      Flambda.Let_cont.create_non_recursive cont handler ~body
+        ~free_names_of_body:Unknown )
+  in
+  acc, build_let, apply
 
 let bind_all_code_ids env (unit : Fexpr.flambda_unit) =
   let rec go env (e : Fexpr.expr) =
@@ -782,7 +944,12 @@ let bind_all_code_ids env (unit : Fexpr.flambda_unit) =
   in
   go env unit.body
 
-let conv comp_unit (fexpr : Fexpr.flambda_unit) : Flambda_unit.t =
+type conv_result =
+  { unit : Flambda_unit.t;
+    code_slot_offsets : Slot_offsets.t Code_id.Map.t
+  }
+
+let conv comp_unit (fexpr : Fexpr.flambda_unit) : conv_result =
   let module_symbol =
     Flambda2_import.Symbol.for_compilation_unit comp_unit
     |> Symbol.create_wrapped
@@ -797,9 +964,13 @@ let conv comp_unit (fexpr : Fexpr.flambda_unit) : Flambda_unit.t =
   in
   let exn_continuation = Exn_continuation.exn_handler error_continuation in
   let env = bind_all_code_ids env fexpr in
-  let body = expr env fexpr.body in
-  Flambda_unit.create ~return_continuation ~exn_continuation
-    ~toplevel_my_region:toplevel_region
-    ~toplevel_my_ghost_region:
-      (Variable.create "my_ghost_region" Flambda_kind.region)
-    ~body ~module_symbol ~used_value_slots:Unknown
+  let acc, body = expr env Acc.empty fexpr.body in
+  let code_slot_offsets = acc.Acc.code_slot_offsets in
+  let unit =
+    Flambda_unit.create ~return_continuation ~exn_continuation
+      ~toplevel_my_region:toplevel_region
+      ~toplevel_my_ghost_region:
+        (Variable.create "my_ghost_region" Flambda_kind.region)
+      ~body ~module_symbol ~used_value_slots:Unknown
+  in
+  { unit; code_slot_offsets }

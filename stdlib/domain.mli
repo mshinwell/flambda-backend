@@ -17,10 +17,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-[@@@alert unstable
-    "The Domain interface may change in incompatible ways in the future."
-]
-
 (** Domains.
 
     See 'Parallel programming' chapter in the manual.
@@ -36,7 +32,8 @@ val spawn : (unit -> 'a) -> 'a t @@ nonportable
    "User programs should never spawn domains. To execute a function on a \
     domain, use [Multicore] from the threading library. This is because \
     spawning more than [recommended_domain_count] domains (the CPU core count) \
-    will significantly degrade GC performance."]
+    will significantly degrade GC performance. Using both [Domain.spawn] and \
+    [Multicore] can cause [Multicore] to abort."]
 [@@alert unsafe_multidomain "Use [Domain.Safe.spawn]."]
 (** [spawn f] creates a new domain that runs in parallel with the
     current domain.
@@ -57,6 +54,33 @@ val get_id : 'a t -> id @@ portable
 
 val self : unit -> id @@ portable
 (** [self ()] is the identifier of the currently running domain *)
+
+val before_first_spawn : (unit -> unit) -> unit @@ nonportable
+(** [before_first_spawn f] registers [f] to be called before the first domain
+    is spawned by the program. The functions registered with
+    [before_first_spawn] are called on the main (initial) domain. The functions
+    registered with [before_first_spawn] are called in 'first in, first out'
+    order: the oldest function added with [before_first_spawn] is called first.
+
+    @raise Invalid_argument if the program has already spawned a domain. *)
+
+val at_exit : (unit -> unit) -> unit @@ nonportable
+(** [at_exit f] registers [f] to be called when the current domain exits. Note
+    that [at_exit] callbacks are domain-local and only apply to the calling
+    domain. The registered functions are called in 'last in, first out' order:
+    the function most recently added with [at_exit] is called first. An example:
+
+    {[
+let temp_file_key = Domain.DLS.new_key (fun _ ->
+  let tmp = snd (Filename.open_temp_file "" "") in
+  Domain.at_exit (fun () -> close_out_noerr tmp);
+  tmp)
+    ]}
+
+    The snippet above creates a key that when retrieved for the first
+    time will open a temporary file and register an [at_exit] callback
+    to close it, thus guaranteeing the descriptor is not leaked in
+    case the current domain exits. *)
 
 external cpu_relax : unit -> unit @@ portable = "%cpu_relax"
 (** If busy-waiting, calling cpu_relax () between iterations
@@ -87,35 +111,8 @@ val self_index : unit -> int @@ portable
     @since 5.3
 *)
 
-val before_first_spawn : (unit -> unit) -> unit @@ nonportable
-(** [before_first_spawn f] registers [f] to be called before the first domain
-    is spawned by the program. The functions registered with
-    [before_first_spawn] are called on the main (initial) domain. The functions
-    registered with [before_first_spawn] are called in 'first in, first out'
-    order: the oldest function added with [before_first_spawn] is called first.
-
-    @raise Invalid_argument if the program has already spawned a domain. *)
-
-val at_exit : (unit -> unit) -> unit @@ nonportable
-(** [at_exit f] registers [f] to be called when the current domain exits. Note
-    that [at_exit] callbacks are domain-local and only apply to the calling
-    domain. The registered functions are called in 'last in, first out' order:
-    the function most recently added with [at_exit] is called first. An example:
-
-    {[
-let temp_file_key = Domain.DLS.new_key (fun _ ->
-  let tmp = snd (Filename.open_temp_file "" "") in
-  Domain.at_exit (fun () -> close_out_noerr tmp);
-  tmp)
-    ]}
-
-    The snippet above creates a key that when retrieved for the first
-    time will open a temporary file and register an [at_exit] callback
-    to close it, thus guaranteeing the descriptor is not leaked in
-    case the current domain exits. *)
-
-(** Domain-local Storage *)
 module DLS : sig
+(** Domain-local Storage *)
 
     type 'a key : value mod portable contended
     (** Type of a DLS key *)
@@ -124,7 +121,7 @@ module DLS : sig
       @@ nonportable
     [@@alert unsafe_multidomain "Use [Domain.Safe.DLS.new_key]."]
     (** [new_key f] returns a new key bound to initialiser [f] for accessing
-,        domain-local variables.
+        domain-local variables.
 
         If [split_from_parent] is not provided, the value for a new
         domain will be computed on-demand by the new domain: the first
@@ -208,8 +205,41 @@ module TLS : sig
     end
 end
 
-(** Submodule containing non-backwards-compatible functions which enforce thread safety
-    via modes. *)
+module Tick : sig @@ portable
+  (** A handle to a request that the tick thread tick at a given interval
+
+      In between calling [acquire] and calling [release], the tick thread will
+      tick {i at least as frequently} as the provided [interval_usec]. *)
+  type t : mutable_data mod external_ global non_float
+
+  (** Request that the tick thread tick at least as frequently as
+      [interval_usec] until [release] is called on the returned handle. *)
+  val acquire : interval_usec:int -> t @ unique
+
+  (** Release a handle to a tick request.
+
+     It is unsound to call this on a domain other than the one that called
+     [acquire] (though it is fine to call it on a different thread on the same
+     domain).
+  *)
+  val release : t @ unique -> unit
+
+  (** [with_ ~interval_usec f] runs [f] with the tick thread ticking at least as
+      frequently as [interval_usec] *)
+  val with_
+    : ('r : value_or_null).
+       interval_usec:int
+    -> (t @ local -> 'r) @ local once
+    -> 'r
+
+  (** Returns the interval at which the tick thread will tick, or [Null]
+      if no domain has any active tick requests. This is the global minimum
+      across all domains of live tick requests. *)
+  val effective_interval_usec : unit -> int or_null
+end
+
+(** Submodule containing non-backwards-compatible functions which enforce thread
+    safety via modes. *)
 module Safe : sig @@ portable
 
   (** Like {!DLS}, but uses modes to enforce properties necessary for data-race
@@ -259,7 +289,8 @@ module Safe : sig @@ portable
      "User programs should never spawn domains. To execute a function on a \
       domain, use [Multicore] from the threading library. This is because \
       spawning more than [recommended_domain_count] domains (the CPU core \
-      count) will significantly degrade GC performance."]
+      count) will significantly degrade GC performance. Using both \
+      [Domain.spawn] and [Multicore] can cause [Multicore] to abort."]
   (** Like {!spawn}, but enforces thread-safety via modes. In particular, the provided
       computation must be [portable], and so cannot close over and interact with any
       unsynchronized mutable data in the current domain. *)

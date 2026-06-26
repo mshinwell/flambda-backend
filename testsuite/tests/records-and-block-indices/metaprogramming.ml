@@ -285,10 +285,9 @@ module Type_structure = struct
     | Unit_u -> Void
     | Int64x2_u -> Vec128
 
-  let is_flat_float_record t =
+  let flattens_floats t =
     match t with
-    | Record (ts, Boxed) ->
-      List.for_all ts ~f:(fun t -> layout t = Float64 || scrape t = Float)
+    | Record (ts, Boxed) -> List.for_all ts ~f:(fun t -> scrape t = Float)
     | _ -> false
 
   let rec contains_vec128 t =

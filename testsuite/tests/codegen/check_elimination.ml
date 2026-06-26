@@ -1,8 +1,6 @@
 (* TEST
  flags += " -O3";
- flags += " -cfg-prologue-shrink-wrap";
- flags += " -regalloc-param SPLIT_AROUND_LOOPS:on";
- flags += " -regalloc-param AFFINITY:on -regalloc irc";
+ flags += " -experimental-optimizations";
  only-default-codegen;
  expect.opt;
 *)
@@ -13,21 +11,21 @@ let unwrap_twice o = Option.value ~default:7 o + Option.value ~default:7 o
 [%%expect_asm X86_64{|
 unwrap_twice:
   testb $1, %al
-  je    .L108
+  je    .L0
   movl  $15, %ebx
   testb $1, %al
-  je    .L119
-  jmp   .L117
-.L108:
+  je    .L2
+  jmp   .L1
+.L0:
   movq  (%rax), %rbx
   testb $1, %al
-  je    .L119
-.L117:
+  je    .L2
+.L1:
   movl  $15, %eax
-  jmp   .L123
-.L119:
+  jmp   .L3
+.L2:
   movq  (%rax), %rax
-.L123:
+.L3:
   leaq  -1(%rax,%rbx), %rax
   ret
 |}]
@@ -48,32 +46,143 @@ arr_sum:
   salq  $8, %rdi
   shrq  $17, %rdi
   orq   $1, %rdi
-  movq  %rdi, %rsi
-  addq  $-2, %rsi
+  leaq  -2(%rdi), %rsi
   cmpq  $1, %rsi
-  jl    .L135
+  jl    .L2
+  sarq  $1, %rsi
   movl  $1, %eax
-  movl  $1, %edx
-  cmpq  %rdi, %rdx
-  jae   .L131
-.L118:
-  movq  -4(%rbx,%rdx,4), %rcx
+  xorl  %edx, %edx
+.L0:
+  leaq  1(%rdx,%rdx), %rcx
+  cmpq  %rdi, %rcx
+  jae   .L1
+  movq  -4(%rbx,%rcx,4), %rcx
   leaq  -1(%rax,%rcx), %rax
+  incq  %rdx
   cmpq  %rsi, %rdx
-  je    .L125
-  addq  $2, %rdx
-  cmpq  %rdi, %rdx
-  jae   .L131
-  jmp   .L118
-.L125:
+  jle   .L0
   ret
-.L131:
-  movq  camlTOP2__block95@GOTPCREL(%rip), %rax
+.L1:
+  movq  <hidden PC-relative offset>(%rip), %rax
   movq  48(%r14), %rsp
   popq  48(%r14)
   popq  %r11
   jmp   *%r11
-.L135:
+.L2:
   movl  $1, %eax
   ret
+|}]
+
+(* CR ttebbi: The generated control flow branches two times on
+   should_continue. Additionally, we materialise the should_continue bit. *)
+let search ~target (start : int list) =
+  let node = ref start in
+  while
+    match !node with
+    | [] -> false
+    | x :: xs ->
+      let should_continue = target < x in
+      if should_continue then node := xs;
+      should_continue
+  do () done;
+  !node
+;;
+[%%expect_asm X86_64{|
+search:
+  movq  %rax, %rdi
+  testb $1, %bl
+  je    .L1
+.L0:
+  xorl  %esi, %esi
+  movq  %rbx, %rax
+  jmp   .L4
+.L1:
+  movq  (%rbx), %rax
+  xorl  %esi, %esi
+  cmpq  %rax, %rdi
+  setl  %sil
+  testq %rsi, %rsi
+  je    .L2
+  movq  8(%rbx), %rax
+  testq %rsi, %rsi
+  jne   .L3
+  jmp   .L4
+.L2:
+  movq  %rbx, %rax
+  jmp   .L4
+.L3:
+  movq  %rax, %rbx
+  testb $1, %bl
+  je    .L1
+  jmp   .L0
+.L4:
+  ret
+|}]
+
+(* CR ttebbi: The second branch is always true. *)
+let redundant_compare (x: int) = if x > 0 && x > 5 then 100 else 200
+[%%expect_asm X86_64{|
+redundant_compare:
+  cmpq  $1, %rax
+  jle   .L0
+  cmpq  $11, %rax
+  jle   .L0
+  movl  $201, %eax
+  ret
+.L0:
+  movl  $401, %eax
+  ret
+|}]
+
+(* CR ttebbi: We don't learn that x is 3 in the first case. *)
+let learn_from_branch (x : int) : int =
+  match x with
+  | 3 -> x * 2
+  | _ -> 100
+[%%expect_asm X86_64{|
+learn_from_branch:
+  cmpq  $7, %rax
+  je    .L0
+  movl  $201, %eax
+  ret
+.L0:
+  leaq  -1(%rax,%rax), %rax
+  ret
+|}]
+
+
+(* CR ttebbi: We shouldn't materialize the boolean and some branches are
+   imposssible to take. *)
+let complex_branching_on_two_comparisons (x: int) (y: int) c1 c2 c3 =
+ match x = 2, y = 2 with
+ | true, true -> c1 ()
+ | _, false -> c2 ()
+ | false, _ -> c3 ()
+[%%expect_asm X86_64{|
+complex_branching_on_two_comparisons:
+  movq  %rax, %rcx
+  movq  %rbx, %rax
+  movq  %rsi, %rbx
+  cmpq  $5, %rax
+  sete  %al
+  movzbq %al, %rax
+  cmpq  $5, %rcx
+  jne   .L0
+  testq %rax, %rax
+  je    .L0
+  movl  $1, %eax
+  movq  (%rdi), %rsi
+  movq  %rdi, %rbx
+  jmp   *%rsi
+.L0:
+  testq %rax, %rax
+  je    .L1
+  movl  $1, %eax
+  movq  (%rdx), %rdi
+  movq  %rdx, %rbx
+  jmp   *%rdi
+.L1:
+  movl  $1, %eax
+  movq  (%rbx), %rdi
+  jmp   *%rdi
 |}]

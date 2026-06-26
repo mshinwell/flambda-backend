@@ -85,18 +85,6 @@ let print_fexpr name target ppf unit =
   let header = "After " ^ name in
   dump_to_target_if_any ppf target ~header ~f:pp_flambda_as_fexpr unit
 
-let pp_flambda_as_flexpect ppf (old_unit, new_unit) =
-  let before = old_unit |> Flambda_to_fexpr.conv in
-  let after = new_unit |> Flambda_to_fexpr.conv in
-  let test : Fexpr.expect_test_spec = { before; after } in
-  Print_fexpr.expect_test_spec ppf test
-
-let print_flexpect name main_dump_ppf ~raw_flambda:old_unit new_unit =
-  dump_to_target_if_any main_dump_ppf
-    (Flambda_features.dump_flexpect ())
-    ~header:("Before and after " ^ name)
-    ~f:pp_flambda_as_flexpect (old_unit, new_unit)
-
 module NO = Flambda2_nominal.Name_occurrences
 
 type run_result =
@@ -144,6 +132,15 @@ type flambda_result =
     offsets : Exported_offsets.t;
     reachable_names : NO.t
   }
+
+let compilation_unit_callbacks = ref []
+
+let register_compilation_unit_callback f =
+  compilation_unit_callbacks := f :: !compilation_unit_callbacks
+
+let invoke_compilation_unit_callbacks res =
+  List.iter (( |> ) res) !compilation_unit_callbacks;
+  compilation_unit_callbacks := []
 
 let flambda_to_flambda0 : type m.
     ppf_dump:Format.formatter ->
@@ -198,7 +195,6 @@ let flambda_to_flambda0 : type m.
       print_fexpr "simplify"
         (Flambda_features.dump_fexpr (This_pass "simplify"))
         ppf flambda;
-      print_flexpect "simplify" ppf ~raw_flambda flambda;
       dump_fexpr_annot ~prefixname "simplify" flambda;
       let ( flambda,
             free_names,
@@ -213,10 +209,10 @@ let flambda_to_flambda0 : type m.
                 Flambda2_reaper.Reaper.run ~machine_width ~cmx_loader ~all_code
                   ~final_typing_env flambda)
           in
+          print_flambda "reaper" (Flambda_features.dump_reaper ()) ppf flambda;
           print_fexpr "reaper"
             (Flambda_features.dump_fexpr (This_pass "reaper"))
             ppf flambda;
-          print_flexpect "reaper" ppf ~raw_flambda flambda;
           dump_fexpr_annot ~prefixname "reaper" flambda;
           ( flambda,
             free_names,
@@ -251,8 +247,10 @@ let flambda_to_flambda0 : type m.
   | Some cmx -> Compilenv.set_export_info cmx);
   { flambda; offsets; reachable_names; all_code }
 
-let flambda_to_flambda ~ppf_dump ~prefixname ~machine_width
+let flambda_to_flambda ~ppf_dump ~prefixname ~machine_width ~code_slot_offsets
     (unit : Flambda_unit.t) =
+  (* CR bclement: this does not seem like the right place to set this up. *)
+  Misc.Style.setup (Flambda_features.colour ());
   let cmx_loader = Flambda_cmx.create_loader ~get_module_info in
   let mode, close_prog_metadata =
     match Flambda_features.mode () with
@@ -261,8 +259,7 @@ let flambda_to_flambda ~ppf_dump ~prefixname ~machine_width
       Misc.fatal_error "Unsupported classic mode in standalone middle-end pass"
   in
   flambda_to_flambda0 ~ppf_dump ~prefixname ~cmx_loader ~machine_width ~mode
-    ~close_prog_metadata
-    ~code_slot_offsets:Flambda2_identifiers.Code_id.Map.empty unit
+    ~close_prog_metadata ~code_slot_offsets unit
 
 let lambda_to_flambda ~ppf_dump:ppf ~prefixname ~machine_width
     (program : Lambda.program) =
@@ -314,6 +311,7 @@ let lambda_to_flambda ~ppf_dump:ppf ~prefixname ~machine_width
           ~big_endian:Arch.big_endian ~cmx_loader ~compilation_unit ~module_repr
           module_initializer)
   in
+  invoke_compilation_unit_callbacks compilation_unit;
   flambda_to_flambda0 ~ppf_dump:ppf ~prefixname ~cmx_loader ~machine_width ~mode
     ~close_prog_metadata ~code_slot_offsets raw_flambda
 

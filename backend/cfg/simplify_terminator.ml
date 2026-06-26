@@ -112,7 +112,7 @@ let eval_int_op op (left : nativeint) (right : nativeint) : nativeint option =
      in the future; care is needed as some may clobber registers beyond
      [res.(0)] on certain targets (e.g. [Imul] may not always lower to a form
      writing only to the destination). *)
-  | Imul | Imulh _ | Idiv | Imod | Iclz _ | Ictz _ | Ipopcnt | Icomp _ -> None
+  | Imul | Imulh _ | Idiv | Imod | Iclz | Ictz | Ipopcnt | Icomp _ -> None
 
 let eval_float_op op (left : float) (right : float option) : float option =
   match (op : Operation.float_operation) with
@@ -130,13 +130,15 @@ let find_unique_index : 'a array -> f:('a -> bool) -> int option =
   let rec find arr idx f acc =
     if idx < 0
     then acc
-    else begin
-      if f (Array.unsafe_get arr idx)
-      then begin
-        match acc with None -> find arr (idx - 1) f None | Some _ -> None
-      end
+    else
+      begin if f (Array.unsafe_get arr idx)
+      then
+        begin match acc with
+        | None -> find arr (idx - 1) f None
+        | Some _ -> None
+        end
       else find arr (idx - 1) f acc
-    end
+      end
   in
   find arr (Array.length arr - 1) f None
 
@@ -284,9 +286,9 @@ let collect_known_values (cfg : Cfg.t) (block : Cfg.basic_block) :
           remove_destroyed instr
         end
       | Op
-          ( Spill | Reload | Dummy_use | Const_symbol _ | Const_vec128 _
-          | Const_vec256 _ | Const_vec512 _ | Stackoffset _ | Load _ | Store _
-          | Int128op _ | Intop_atomic _
+          ( Spill | Reload | Const_symbol _ | Const_vec128 _ | Const_vec256 _
+          | Const_vec512 _ | Stackoffset _ | Load _ | Store _ | Int128op _
+          | Intop_atomic _
           | Floatop (Float32, _)
           | Csel _ | Reinterpret_cast _ | Static_cast _ | Probe_is_enabled _
           | Opaque | Begin_region | End_region | Specific _
@@ -420,7 +422,9 @@ let evaluate_terminator (known_values : known_value Reg.UsingLocEquality.Tbl.t)
           then Some (Array.unsafe_get labels idx)
           else None
         else None)
-  | Never -> assert false
+  | Never ->
+    Misc.fatal_error
+      "Simplify_terminator.evaluate_terminator: unexpected Never terminator"
   | Always _ | Return | Raise _ | Tailcall_self _ | Tailcall_func _
   | Call_no_return _ | Call _ | Prim _ | Invalid _ ->
     None

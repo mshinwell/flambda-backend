@@ -37,10 +37,13 @@ type bad : immediate = A of unit_u | B of int
 Line 1, characters 0-45:
 1 | type bad : immediate = A of unit_u | B of int
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Error: The kind of type "bad" is immutable_data with unit_u
+Error: The layout of type "bad" is value non_float
          because it's a boxed variant type.
-       But the kind of type "bad" must be a subkind of immediate
+       But the layout of type "bad" must be a sublayout of value non_pointer
          because of the annotation on the declaration of the type bad.
+       Note: The layout of immediate is value non_pointer.
+       Note: The kinds mutable_data, immutable_data, and sync_data have
+       the layout value non_float.
 |}]
 
 (* With-bounds for all-void variants *)
@@ -237,64 +240,64 @@ external length : ('a : any mod separable) . 'a array -> int = "%array_length"
 external get : ('a : any mod separable). 'a array -> int -> 'a = "%array_safe_get"
 [@@layout_poly]
 [%%expect{|
-external length : ('a : any mod separable). 'a array -> int = "%array_length"
+external length : ('a : any separable). 'a array -> int = "%array_length"
   [@@layout_poly]
-external get : ('a : any mod separable). 'a array -> int -> 'a
+external get : ('a : any separable). 'a array -> int -> 'a
   = "%array_safe_get" [@@layout_poly]
 |}]
 
 let f (a : unit_u array) = length a
 [%%expect{|
-Line 1, characters 27-35:
+Line 1, characters 34-35:
 1 | let f (a : unit_u array) = length a
-                               ^^^^^^^^
+                                      ^
 Error: Types whose layout contains [void] are not yet supported in arrays.
 |}]
 
 let f (a : #(int * unit_u) array) = length a
 [%%expect{|
-Line 1, characters 36-44:
+Line 1, characters 43-44:
 1 | let f (a : #(int * unit_u) array) = length a
-                                        ^^^^^^^^
+                                               ^
 Error: Types whose layout contains [void] are not yet supported in arrays.
 |}]
 
 let f (a : unit_u array) i = get a i
 [%%expect{|
-Line 1, characters 29-36:
+Line 1, characters 33-34:
 1 | let f (a : unit_u array) i = get a i
-                                 ^^^^^^^
+                                     ^
 Error: Types whose layout contains [void] are not yet supported in arrays.
 |}]
 
 let f (a : #(int * unit_u) array) i = get a i
 [%%expect{|
-Line 1, characters 38-45:
+Line 1, characters 42-43:
 1 | let f (a : #(int * unit_u) array) i = get a i
-                                          ^^^^^^^
+                                              ^
 Error: Types whose layout contains [void] are not yet supported in arrays.
 |}]
 
 let f (a : u1 array) i = get a i
 [%%expect{|
-Line 1, characters 25-32:
+Line 1, characters 29-30:
 1 | let f (a : u1 array) i = get a i
-                             ^^^^^^^
+                                 ^
 Error: Types whose layout contains [void] are not yet supported in arrays.
 |}]
 
 let f (a : u2 array) i = get a i
 [%%expect{|
-Line 1, characters 25-32:
+Line 1, characters 29-30:
 1 | let f (a : u2 array) i = get a i
-                             ^^^^^^^
+                                 ^
 Error: Types whose layout contains [void] are not yet supported in arrays.
 |}]
 
 let f (a : u3 array) i = get a i
 [%%expect{|
-Line 1, characters 25-32:
+Line 1, characters 29-30:
 1 | let f (a : u3 array) i = get a i
-                             ^^^^^^^
+                                 ^
 Error: Types whose layout contains [void] are not yet supported in arrays.
 |}]

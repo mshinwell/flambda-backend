@@ -23,24 +23,16 @@ and extra_ty =
   | Pext_ty
   | Punboxed_ty
 
-(* Create the unboxed version of a path, ensuring the invariant that there
-   are no "twice unboxed" paths. (It would be nice to enforce this at the type
-   level, but that would be a pervasive change.) *)
-let unboxed_version t =
-  match t with
-  | Pident _ | Pdot _ | Papply _
-  | Pextra_ty (_, (Pcstr_ty _ | Pext_ty)) ->
-    Pextra_ty (t, Punboxed_ty)
-  | Pextra_ty (_, Punboxed_ty) ->
-    Misc.fatal_error "Path.unboxed_version"
+let unboxed_version t = Pextra_ty (t, Punboxed_ty)
 
-let is_unboxed_version t =
+let boxed_version t =
   match t with
+  | Pextra_ty (inner, Punboxed_ty) -> Some inner
   | Pident _ | Pdot _ | Papply _
   | Pextra_ty (_, (Pcstr_ty _ | Pext_ty)) ->
-    false
-  | Pextra_ty (_, Punboxed_ty) ->
-    true
+    None
+
+let is_unboxed_version t = Option.is_some (boxed_version t)
 
 let rec same p1 p2 =
   p1 == p2
@@ -160,6 +152,10 @@ let flatten =
   in
   fun t -> flatten [] t
 
+let rec scrape_extra_ty = function
+  | Pextra_ty (t, _) -> scrape_extra_ty t
+  | t -> t
+
 let heads p =
   let rec heads p acc = match p with
     | Pident id -> id :: acc
@@ -186,3 +182,32 @@ module T = struct
 end
 module Set = Set.Make(T)
 module Map = Map.Make(T)
+
+let rec hash_aux acc p =
+  let combine acc x = Hashtbl.seeded_hash acc x in
+  match p with
+  | Pident id -> combine acc (Ident.hash id)
+  | Pdot (p', name) ->
+      let acc = combine acc 1 in
+      let acc = hash_aux acc p' in
+      combine acc name
+  | Papply (p1, p2) ->
+      let acc = combine acc 2 in
+      let acc = hash_aux acc p1 in
+      hash_aux acc p2
+  | Pextra_ty (p', extra) ->
+      let acc = combine acc 3 in
+      let acc = hash_aux acc p' in
+      begin match extra with
+      | Pcstr_ty s -> combine (combine acc 0) s
+      | Pext_ty -> combine acc 1
+      | Punboxed_ty -> combine acc 2
+      end
+
+let hash p = hash_aux 0 p
+
+module Tbl = Hashtbl.Make(struct
+  type nonrec t = t
+  let equal = same
+  let hash = hash
+end)

@@ -7,9 +7,7 @@
 
  only-default-codegen;
  flags = " -O3 -I ocamlopt.opt";
- flags += " -cfg-prologue-shrink-wrap";
- flags += " -regalloc-param SPLIT_AROUND_LOOPS:on";
- flags += " -regalloc-param AFFINITY:on -regalloc irc";
+ flags += " -experimental-optimizations";
  expect.opt;
 *)
 
@@ -108,8 +106,8 @@ to_float:
   subq  $8, %rsp
   subq  $16, %r15
   cmpq  (%r14), %r15
-  jb    .L104
-.L106:
+  jb    <hidden GC jump pad>
+.L0:
   leaq  8(%r15), %rax
   movq  $1277, -8(%rax)
   vmovsd %xmm0, (%rax)
@@ -145,34 +143,29 @@ min:
   vmovsd 8(%rsp), %xmm0
   vmovsd (%rsp), %xmm1
   vcomisd %xmm1, %xmm0
-  ja    .L134
+  ja    .L1
   vmovsd 8(%rsp), %xmm0
   call  caml_signbit@PLT
   cmpq  $1, %rax
-  jne   .L126
+  jne   .L0
   vmovsd (%rsp), %xmm0
   call  caml_signbit@PLT
   cmpq  $1, %rax
-  jne   .L134
-.L126:
+  jne   .L1
+.L0:
   vmovsd (%rsp), %xmm0
   vucomisd %xmm0, %xmm0
-  jnp   .L130
-  vmovsd (%rsp), %xmm0
-  addq  $24, %rsp
-  ret
-.L130:
-  vmovsd 8(%rsp), %xmm0
-  addq  $24, %rsp
-  ret
-.L134:
+  jp    .L3
+  jmp   .L2
+.L1:
   vmovsd 8(%rsp), %xmm0
   vucomisd %xmm0, %xmm0
-  jnp   .L138
+  jnp   .L3
+.L2:
   vmovsd 8(%rsp), %xmm0
   addq  $24, %rsp
   ret
-.L138:
+.L3:
   vmovsd (%rsp), %xmm0
   addq  $24, %rsp
   ret
@@ -189,34 +182,29 @@ max:
   vmovsd 8(%rsp), %xmm0
   vmovsd (%rsp), %xmm1
   vcomisd %xmm1, %xmm0
-  ja    .L134
+  ja    .L1
   vmovsd 8(%rsp), %xmm0
   call  caml_signbit@PLT
   cmpq  $1, %rax
-  jne   .L126
+  jne   .L0
   vmovsd (%rsp), %xmm0
   call  caml_signbit@PLT
   cmpq  $1, %rax
-  jne   .L134
-.L126:
+  jne   .L1
+.L0:
   vmovsd 8(%rsp), %xmm0
   vucomisd %xmm0, %xmm0
-  jnp   .L130
-  vmovsd 8(%rsp), %xmm0
-  addq  $24, %rsp
-  ret
-.L130:
-  vmovsd (%rsp), %xmm0
-  addq  $24, %rsp
-  ret
-.L134:
+  jp    .L3
+  jmp   .L2
+.L1:
   vmovsd (%rsp), %xmm0
   vucomisd %xmm0, %xmm0
-  jnp   .L138
+  jnp   .L3
+.L2:
   vmovsd (%rsp), %xmm0
   addq  $24, %rsp
   ret
-.L138:
+.L3:
   vmovsd 8(%rsp), %xmm0
   addq  $24, %rsp
   ret
@@ -233,34 +221,29 @@ min_num:
   vmovsd 8(%rsp), %xmm0
   vmovsd (%rsp), %xmm1
   vcomisd %xmm1, %xmm0
-  ja    .L134
+  ja    .L1
   vmovsd 8(%rsp), %xmm0
   call  caml_signbit@PLT
   cmpq  $1, %rax
-  jne   .L126
+  jne   .L0
   vmovsd (%rsp), %xmm0
   call  caml_signbit@PLT
   cmpq  $1, %rax
-  jne   .L134
-.L126:
+  jne   .L1
+.L0:
   vmovsd 8(%rsp), %xmm0
   vucomisd %xmm0, %xmm0
-  jnp   .L130
-  vmovsd (%rsp), %xmm0
-  addq  $24, %rsp
-  ret
-.L130:
-  vmovsd 8(%rsp), %xmm0
-  addq  $24, %rsp
-  ret
-.L134:
+  jp    .L3
+  jmp   .L2
+.L1:
   vmovsd (%rsp), %xmm0
   vucomisd %xmm0, %xmm0
-  jnp   .L138
+  jnp   .L3
+.L2:
   vmovsd 8(%rsp), %xmm0
   addq  $24, %rsp
   ret
-.L138:
+.L3:
   vmovsd (%rsp), %xmm0
   addq  $24, %rsp
   ret
@@ -277,34 +260,29 @@ max_num:
   vmovsd 8(%rsp), %xmm0
   vmovsd (%rsp), %xmm1
   vcomisd %xmm1, %xmm0
-  ja    .L134
+  ja    .L1
   vmovsd 8(%rsp), %xmm0
   call  caml_signbit@PLT
   cmpq  $1, %rax
-  jne   .L126
+  jne   .L0
   vmovsd (%rsp), %xmm0
   call  caml_signbit@PLT
   cmpq  $1, %rax
-  jne   .L134
-.L126:
+  jne   .L1
+.L0:
   vmovsd (%rsp), %xmm0
   vucomisd %xmm0, %xmm0
-  jnp   .L130
-  vmovsd 8(%rsp), %xmm0
-  addq  $24, %rsp
-  ret
-.L130:
-  vmovsd (%rsp), %xmm0
-  addq  $24, %rsp
-  ret
-.L134:
+  jp    .L3
+  jmp   .L2
+.L1:
   vmovsd 8(%rsp), %xmm0
   vucomisd %xmm0, %xmm0
-  jnp   .L138
+  jnp   .L3
+.L2:
   vmovsd (%rsp), %xmm0
   addq  $24, %rsp
   ret
-.L138:
+.L3:
   vmovsd 8(%rsp), %xmm0
   addq  $24, %rsp
   ret
@@ -320,10 +298,10 @@ min_unchecked:
   vmovapd %xmm0, %xmm2
   vmovapd %xmm1, %xmm0
   vcomisd %xmm2, %xmm0
-  jbe   .L105
+  jbe   .L0
   vmovapd %xmm2, %xmm0
   ret
-.L105:
+.L0:
   ret
 |}]
 

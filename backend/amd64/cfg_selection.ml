@@ -121,7 +121,10 @@ let one_arg name args =
    [effects_of], below. *)
 let inline_ops = ["sqrt"]
 
-let int_is_immediate n = n <= 0x7FFF_FFFF && n >= -0x8000_0000
+(* While -0x8000_0000 is representable as a signed 32bit immediate, we make it
+   symmetric here so that we can negate the immediate when necessary, which is
+   needed to turn subtraction into lea. *)
+let int_is_immediate n = n <= 0x7FFF_FFFF && n >= -0x7FFF_FFFF
 
 let is_immediate_natint n =
   Nativeint.compare n 0x7FFF_FFFFn <= 0
@@ -155,7 +158,7 @@ let pseudoregs_for_operation op arg res =
     arg.(0) <- res.(0);
     arg, res
   (* One-address unary operations: arg.(0) and res.(0) must be the same *)
-  | Intop_imm ((Iadd | Isub | Imul | Iand | Ior | Ixor | Ilsl | Ilsr | Iasr), _)
+  | Intop_imm ((Imul | Iand | Ior | Ixor | Ilsl | Ilsr | Iasr), _)
   | Floatop ((Float64 | Float32), (Iabsf | Inegf))
   | Specific (Ibswap { bitwidth = Thirtytwo | Sixtyfour }) ->
     res, res
@@ -213,17 +216,19 @@ let pseudoregs_for_operation op arg res =
     arg, res
   (* Other instructions are regular *)
   | Intop_atomic { op = Add | Sub | Land | Lor | Lxor; _ }
-  | Intop (Ipopcnt | Iclz _ | Ictz _ | Icomp _ | Iadd)
-  | Intop_imm ((Imulh _ | Idiv | Imod | Icomp _ | Ipopcnt | Iclz _ | Ictz _), _)
+  | Intop (Ipopcnt | Iclz | Ictz | Icomp _ | Iadd)
+  | Intop_imm
+      ( (Iadd | Isub | Imulh _ | Idiv | Imod | Icomp _ | Ipopcnt | Iclz | Ictz),
+        _ )
   | Specific
       ( Isextend32 | Izextend32 | Ilea _
       | Istore_int (_, _, _)
       | Ilfence | Isfence | Imfence
       | Ioffset_loc (_, _)
       | Irdtsc | Icldemote _ | Iprefetch _ )
-  | Move | Spill | Reload | Dummy_use | Reinterpret_cast _ | Static_cast _
-  | Const_int _ | Const_float32 _ | Const_float _ | Const_vec128 _
-  | Const_vec256 _ | Const_vec512 _ | Const_symbol _ | Stackoffset _ | Load _
+  | Move | Spill | Reload | Reinterpret_cast _ | Static_cast _ | Const_int _
+  | Const_float32 _ | Const_float _ | Const_vec128 _ | Const_vec256 _
+  | Const_vec512 _ | Const_symbol _ | Stackoffset _ | Load _
   | Store (_, _, _)
   | Alloc _ | Name_for_debugger _ | Probe_is_enabled _ | Opaque | Pause
   | Begin_region | End_region | Poll | Dls_get | Tls_get | Domain_index ->
@@ -354,7 +359,12 @@ let select_floatarith commutative width (regular_op : Operation.float_operation)
     Rewritten (specific (Ifloatarithmem (width, mem_op, addr)), [arg2; arg1])
   | _, [arg1; arg2] ->
     Rewritten (Basic (Op (Floatop (width, regular_op))), [arg1; arg2])
-  | _ -> assert false
+  | _ ->
+    Misc.fatal_errorf
+      "Cfg_selection.select_floatarith: unexpected combination of width %s and \
+       %d argument(s)"
+      (match width with Float64 -> "Float64" | Float32 -> "Float32")
+      (List.length args)
 
 let select_operation'
     ~(generic_select_condition :

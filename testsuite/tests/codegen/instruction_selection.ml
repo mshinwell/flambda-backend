@@ -7,9 +7,7 @@
 
  only-default-codegen;
  flags = " -O3 -I ocamlopt.opt";
- flags += " -cfg-prologue-shrink-wrap";
- flags += " -regalloc-param SPLIT_AROUND_LOOPS:on";
- flags += " -regalloc-param AFFINITY:on -regalloc irc";
+ flags += " -experimental-optimizations";
  expect.opt;
 *)
 
@@ -42,7 +40,6 @@ initialize_t:
 |}]
 
 
-(* CR ttebbi: We should use lea instead of add instructions to save moves. *)
 let f x =
   let x1 = x + 1 in
   let x2 = x1 + x in
@@ -51,8 +48,7 @@ let f x =
 ;;
 [%%expect_asm X86_64{|
 f:
-  movq  %rax, %rbx
-  addq  $2, %rbx
+  leaq  2(%rax), %rbx
   leaq  (%rbx,%rax), %rdi
   addq  %rdi, %rbx
   leaq  -3(%rax,%rbx), %rax
@@ -66,11 +62,28 @@ let do_intersect t1 t2 =
 do_intersect:
   andq  %rbx, %rax
   testq %rax, %rax
-  jne   .L106
+  jne   .L0
   movl  $100, %eax
   ret
-.L106:
+.L0:
   movl  $200, %eax
+  ret
+|}]
+
+
+(* CR ttebbi: We could merge the and and cmp instructions *)
+let logand_branch x y f = if x land (1 lsl 4) <> 0 then f()
+[%%expect_asm X86_64{|
+logand_branch:
+  movq  %rdi, %rbx
+  andl  $33, %eax
+  cmpq  $1, %rax
+  je    .L0
+  movl  $1, %eax
+  movq  (%rbx), %rdi
+  jmp   *%rdi
+.L0:
+  movl  $1, %eax
   ret
 |}]
 
@@ -86,19 +99,92 @@ let combine_comparisons r f =
 [%%expect_asm X86_64{|
 combine_comparisons:
   movq  (%rax), %rbx
+  xorl  %eax, %eax
   cmpq  $41, %rbx
   setl  %al
-  movzbq %al, %rax
   cmpq  $11, %rbx
-  jle   .L114
+  jle   .L0
   testq %rax, %rax
-  je    .L111
+  je    .L0
   movq  %rbx, %rax
   ret
-.L111:
+.L0:
   movl  $1, %eax
   ret
-.L114:
+|}]
+
+(* CR ttebbi: We branch twice on the same comparison, even though we realise
+   it is the same one. *)
+let repeat_comparisons r _f =
+  let a = !r > 5 in
+  let b = !r > 5 in
+  if a && b then 1 else 2
+[%%expect_asm X86_64{|
+repeat_comparisons:
+  movq  (%rax), %rbx
+  xorl  %eax, %eax
+  cmpq  $11, %rbx
+  setg  %al
+  cmpq  $11, %rbx
+  jle   .L0
+  testq %rax, %rax
+  je    .L0
+  movl  $3, %eax
+  ret
+.L0:
+  movl  $5, %eax
+  ret
+|}]
+
+(* CR ttebbi: We first compute the boolean result of the || predicate, instead
+   of jumping directly. *)
+let bad_max a b =
+  let i = ref 0 in
+  while !i < a || !i < b do incr i done;
+  !i
+[%%expect_asm X86_64{|
+bad_max:
+  movq  %rax, %rdi
+  movl  $1, %esi
+  cmpq  %rdi, %rsi
+  jge   .L1
+.L0:
+  movl  $1, %eax
+  jmp   .L2
+.L1:
+  xorl  %eax, %eax
+  cmpq  %rbx, %rsi
+  setl  %al
+  testq %rax, %rax
+  je    .L3
+.L2:
+  addq  $2, %rsi
+  cmpq  %rdi, %rsi
+  jge   .L1
+  jmp   .L0
+.L3:
+  movq  %rsi, %rax
+  ret
+|}]
+
+let int_compare x y =
+  let[@inline never] opaque _ = 0 in
+  match Stdlib.Int.compare x y with
+  | 0 -> opaque x
+  | r -> r
+[%%expect_asm X86_64{|
+int_compare:
+  movq  %rax, %rdi
+  cmpq  %rbx, %rdi
+  je    .L0
+  movq  $-1, %rsi
+  xorl  %eax, %eax
+  cmpq  %rbx, %rdi
+  setg  %al
+  cmovge %rax, %rsi
+  leaq  1(%rsi,%rsi), %rax
+  ret
+.L0:
   movl  $1, %eax
   ret
 |}]
@@ -111,15 +197,15 @@ let branch_and_return o =
 [%%expect_asm X86_64{|
 branch_and_return:
   movq  %rax, %rbx
+  xorl  %eax, %eax
   cmpq  $1, %rbx
   setne %al
-  movzbq %al, %rax
   leaq  1(%rax,%rax), %rax
   cmpq  $3, %rax
-  jne   .L107
+  jne   .L0
   movq  %rbx, %rax
   ret
-.L107:
+.L0:
   movl  $15, %eax
   ret
 |}]
@@ -134,8 +220,8 @@ two_element_list:
   movq  %rax, %rbx
   subq  $48, %r15
   cmpq  (%r14), %r15
-  jb    .L105
-.L107:
+  jb    <hidden GC jump pad>
+.L0:
   leaq  8(%r15), %rdi
   addq  $24, %rdi
   movq  $2048, -8(%rdi)
@@ -158,17 +244,15 @@ let constant_folding (x : int) =
 [%%expect_asm X86_64{|
 constant_folding:
   cmpq  %rax, %rax
-  jge   .L105
-  movl  $7, %eax
-  ret
-.L105:
+  jl    .L0
   subq  %rax, %rax
   incq  %rax
   cmpq  $1, %rax
-  jne   .L111
+  jne   .L1
+.L0:
   movl  $7, %eax
   ret
-.L111:
+.L1:
   movl  $9, %eax
   ret
 |}]
@@ -231,8 +315,8 @@ pause:
   subq  $8, %rsp
   pause
   cmpq  (%r14), %r15
-  jbe   .L105
-.L106:
+  jbe   <hidden GC jump pad>
+.L0:
   movl  $1, %eax
   addq  $8, %rsp
   ret
@@ -280,7 +364,7 @@ opaque_int:
 
 (* Tag test for variant discrimination *)
 
-let is_int (x : 'a) = obj_is_int x
+let is_int (x : 'a) = Obj.is_int (Obj.repr x)
 [%%expect_asm X86_64{|
 is_int:
   andl  $1, %eax
@@ -288,29 +372,40 @@ is_int:
   ret
 |}]
 
-let is_int_branch (x : 'a) f = if obj_is_int x then f()
+(* CR ttebbi: We should constant-fold this. *)
+let is_int_constant () : bool =
+   Obj.repr (Some 3) |> Obj.is_int
+[%%expect_asm X86_64{|
+is_int_constant:
+  movq  <hidden PC-relative offset>(%rip), %rax
+  andl  $1, %eax
+  leaq  1(%rax,%rax), %rax
+  ret
+|}]
+
+let is_int_branch (x : 'a) f = if Obj.is_int(Obj.repr x) then f()
 [%%expect_asm X86_64{|
 is_int_branch:
   testb $1, %al
-  je    .L107
+  je    .L0
   movl  $1, %eax
   movq  (%rbx), %rdi
   jmp   *%rdi
-.L107:
+.L0:
   movl  $1, %eax
   ret
 |}]
 
 
 (* CR ttebbi: https://github.com/oxcaml/oxcaml/issues/2521 *)
-let is_block_branch (x : 'a) f = if not(obj_is_int x) then f()
+let is_block_branch (x : 'a) f = if not(Obj.is_int(Obj.repr x)) then f()
 [%%expect_asm X86_64{|
 is_block_branch:
   testb $1, %al
-  je    .L105
+  je    .L0
   movl  $1, %eax
   ret
-.L105:
+.L0:
   movl  $1, %eax
   movq  (%rbx), %rdi
   jmp   *%rdi
@@ -328,14 +423,14 @@ let branch_or_tailcall x =
 [%%expect_asm X86_64{|
 branch_or_tailcall:
   cmpq  $5, %rax
-  jbe   .L105
-  movq  camlTOP25__Pmakeblock786@GOTPCREL(%rip), %rax
+  jbe   .L0
+  movq  <hidden PC-relative offset>(%rip), %rax
   movq  48(%r14), %rsp
   popq  48(%r14)
   popq  %r11
   jmp   *%r11
-.L105:
-  movq  camlTOP25__switch_block787@GOTPCREL(%rip), %rbx
+.L0:
+  movq  <hidden PC-relative offset>(%rip), %rbx
   movq  -4(%rbx,%rax,4), %rax
   ret
 |}]

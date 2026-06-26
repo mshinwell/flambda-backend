@@ -17,7 +17,6 @@
 (* To print values *)
 
 open Format
-module Printtyp=Printtyp.Compat
 open Parser_aux
 open Types
 
@@ -75,14 +74,7 @@ module EvalPath =
 
 module Printer = Genprintval.Make(Debugcom.Remote_value)(EvalPath)
 
-let install_printer path ty _ppf fn =
-  Printer.install_printer path ty
-    (fun ppf remote_val ->
-       try
-         fn ppf (Obj.repr (Debugcom.Remote_value.obj remote_val))
-       with
-         Debugcom.Marshalling_error ->
-           fprintf ppf "<cannot fetch remote object>")
+let install_printer = Printer.install_printer
 
 let remove_printer = Printer.remove_printer
 
@@ -96,7 +88,7 @@ let print_exception ppf obj =
 let print_value max_depth env obj (ppf : Format.formatter) ty =
   let t =
     Printer.outval_of_value !max_printer_steps max_depth
-      check_depth env obj ty in
+      check_depth env obj (Lpoly.determined []) ty in
   !Oprint.out_value ppf t
 
 let print_named_value max_depth exp env obj ppf ty =

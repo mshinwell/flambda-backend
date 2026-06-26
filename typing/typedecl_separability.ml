@@ -130,7 +130,7 @@ let rec immediate_subtypes : type_expr -> type_expr list = fun ty ->
       [ty1; ty2]
   | Ttuple(tys) -> List.map snd tys
   | Tunboxed_tuple(tys) -> List.map snd tys
-  | Tpackage(_, fl) -> (snd (List.split fl))
+  | Tpackage pack -> (snd (List.split pack.pack_cstrs))
   | Tobject(row,class_ty) ->
       let class_subtys =
         match !class_ty with
@@ -147,7 +147,7 @@ let rec immediate_subtypes : type_expr -> type_expr list = fun ty ->
       (* these should only occur under Tobject and not at the toplevel,
          but "better safe than sorry" *)
       immediate_subtypes_object_row [] ty
-  | Tquote ty | Tsplice ty -> [ty]
+  | Tquote ty | Tsplice ty | Tquote_eval ty | Tbox ty -> [ty]
   | Tlink _ | Tsubst _ -> assert false (* impossible due to Ctype.repr *)
   | Tvar _ | Tunivar _ -> []
   | Tof_kind _ -> []
@@ -426,7 +426,9 @@ let check_type
     | ((Tnil | Tfield _)  , Sep    )
     | (Tquote(_)          , Sep    )
     | (Tsplice(_)         , Sep    )
-    | (Tpackage(_,_)      , Sep    )
+    | (Tquote_eval(_)     , Sep    )
+    | (Tbox(_)            , Sep    )
+    | (Tpackage _         , Sep    )
     | (Tof_kind(_)        , Sep    ) -> empty
     (* "Deeply separable" case for these same constructors. *)
     | (Tarrow _           , Deepsep)
@@ -437,7 +439,9 @@ let check_type
     | ((Tnil | Tfield _)  , Deepsep)
     | (Tquote(_)          , Deepsep)
     | (Tsplice(_)         , Deepsep)
-    | (Tpackage(_,_)      , Deepsep) ->
+    | (Tquote_eval(_)     , Deepsep)
+    | (Tbox(_)            , Deepsep)
+    | (Tpackage _         , Deepsep) ->
         let tys = immediate_subtypes ty in
         let on_subtype context ty =
           context ++ check_type (Hyps.guard hyps) ty Deepsep in

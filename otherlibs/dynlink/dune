@@ -130,9 +130,12 @@
   zero_alloc
   types
   oprint
-  btype
   typemode
+  ldd_intf
+  ldd
+  axis_lattice
   value_rec_types
+  btype
   lazy_backtrack
   type_shape
   zero_alloc_utils
@@ -141,15 +144,19 @@
   predef
   subst
   signature_with_global_bindings
+  data_types
   datarepr
   cmi_format
   persistent_env
   env
   jkind
+  ikind
   errortrace
   ctype
   signature_group
+  out_type
   printtyp
+  errortrace_report
   includecore
   typedecl_properties
   typedecl_separability
@@ -159,9 +166,12 @@
   mtype
   debuginfo
   static_label
+  slambdaident
   lambda
+  mixed_product_bytes
   runtimedef
   runtimetags
+  structured_mangling
   instruct
   opcodes
   bytesections
@@ -203,6 +213,8 @@
 ;; .ml:
 
 (copy_files ../../utils/runtimetags.ml)
+
+(copy_files ../../utils/structured_mangling.ml)
 
 (copy_files ../../utils/binutils.ml)
 
@@ -334,7 +346,11 @@
 
 (copy_files ../../typing/errortrace.ml)
 
+(copy_files ../../typing/errortrace_report.ml)
+
 (copy_files ../../typing/ctype.ml)
+
+(copy_files ../../typing/out_type.ml)
 
 (copy_files ../../typing/printtyp.ml)
 
@@ -359,8 +375,13 @@
 (copy_files ../../typing/predef.ml)
 
 (copy_files ../../typing/subst.ml)
+(copy_files ../../typing/axis_lattice*.ml{,i})
+(copy_files ../../typing/ldd*.ml{,i})
+(copy_files ../../typing/ikind.ml{,i})
 
 (copy_files ../../typing/signature_with_global_bindings.ml)
+
+(copy_files ../../typing/data_types.ml)
 
 (copy_files ../../typing/datarepr.ml)
 
@@ -375,6 +396,10 @@
 (copy_files ../../lambda/debuginfo.ml)
 
 (copy_files ../../lambda/static_label.ml)
+
+(copy_files ../../lambda/slambdaident.ml)
+
+(copy_files ../../lambda/mixed_product_bytes.ml)
 
 (copy_files ../../lambda/lambda.ml)
 
@@ -395,6 +420,8 @@
 ;; .mli:
 
 (copy_files ../../utils/runtimetags.mli)
+
+(copy_files ../../utils/structured_mangling.mli)
 
 (copy_files ../../utils/binutils.mli)
 
@@ -520,9 +547,13 @@
 
 (copy_files ../../typing/errortrace.mli)
 
+(copy_files ../../typing/errortrace_report.mli)
+
 (copy_files ../../typing/ctype.mli)
 
 (copy_files ../../typing/signature_group.mli)
+
+(copy_files ../../typing/out_type.mli)
 
 (copy_files ../../typing/printtyp.mli)
 
@@ -548,6 +579,8 @@
 
 (copy_files ../../typing/signature_with_global_bindings.mli)
 
+(copy_files ../../typing/data_types.mli)
+
 (copy_files ../../typing/datarepr.mli)
 
 (copy_files ../../typing/unit_info.mli)
@@ -565,6 +598,10 @@
 (copy_files ../../lambda/debuginfo.mli)
 
 (copy_files ../../lambda/static_label.mli)
+
+(copy_files ../../lambda/slambdaident.mli)
+
+(copy_files ../../lambda/mixed_product_bytes.mli)
 
 (copy_files ../../lambda/lambda.mli)
 
@@ -679,6 +716,7 @@
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Compilation_unit.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Import_info.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Linkage_name.cmo
+  .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Structured_mangling.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Symbol.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Docstrings.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Lexer.cmo
@@ -702,6 +740,11 @@
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Jkind_axis.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Jkind_types.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Zero_alloc.cmo
+  .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Axis_lattice.cmo
+  .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Ldd_intf.cmo
+  .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Ldd.cmo
+  .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Unit_info.cmo
+  .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Shape.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Types.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Attr_helper.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Scalar.cmo
@@ -709,8 +752,6 @@
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Oprint.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Btype.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Typemode.cmo
-  .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Unit_info.cmo
-  .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Shape.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Predef.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Subst.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Signature_with_global_bindings.cmo
@@ -718,6 +759,7 @@
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Cmi_format.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Debuginfo.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Consistbl.cmo
+  .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Data_types.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Datarepr.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__CamlinternalMenhirLib.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Parser_types.cmo
@@ -726,20 +768,25 @@
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Type_shape.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Env.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Jkind.cmo
+  .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Ikind.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Errortrace.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Ctype.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Signature_group.cmo
+  .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Out_type.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Printtyp.cmo
+  .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Errortrace_report.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Includecore.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Typedtree.cmo
+  .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Static_label.cmo
+  .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Slambdaident.cmo
+  .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Lambda.cmo
+  .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Mixed_product_bytes.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Typedecl_properties.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Typedecl_separability.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Typedecl_variance.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Typetexp.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Typedecl.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Mtype.cmo
-  .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Static_label.cmo
-  .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Lambda.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Dll.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Instruct.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Meta.cmo
@@ -794,6 +841,7 @@
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Compilation_unit.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Import_info.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Linkage_name.cmx
+  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Structured_mangling.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Symbol.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Docstrings.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Lexer.cmx
@@ -817,6 +865,11 @@
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Jkind_axis.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Jkind_types.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Zero_alloc.cmx
+  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Axis_lattice.cmx
+  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Ldd_intf.cmx
+  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Ldd.cmx
+  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Unit_info.cmx
+  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Shape.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Types.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Attr_helper.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Scalar.cmx
@@ -824,8 +877,6 @@
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Oprint.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Btype.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Typemode.cmx
-  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Unit_info.cmx
-  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Shape.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Predef.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Subst.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Signature_with_global_bindings.cmx
@@ -833,6 +884,7 @@
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Cmi_format.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Debuginfo.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Consistbl.cmx
+  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Data_types.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Datarepr.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__CamlinternalMenhirLib.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Parser_types.cmx
@@ -841,20 +893,25 @@
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Type_shape.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Env.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Jkind.cmx
+  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Ikind.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Errortrace.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Ctype.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Signature_group.cmx
+  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Out_type.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Printtyp.cmx
+  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Errortrace_report.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Includecore.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Typedtree.cmx
+  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Static_label.cmx
+  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Slambdaident.cmx
+  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Lambda.cmx
+  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Mixed_product_bytes.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Typedecl_properties.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Typedecl_separability.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Typedecl_variance.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Typetexp.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Typedecl.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Mtype.cmx
-  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Static_label.cmx
-  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Lambda.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Dll.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Instruct.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Meta.cmx
@@ -894,6 +951,9 @@
   ;    (dynlink.cmxs as dynlink/dynlink.cmxs)
   (dynlink.mli as dynlink/dynlink.mli)
   (dynlink.cmi as dynlink/dynlink.cmi)
+  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Axis_lattice.cmx
+  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Ldd_intf.cmx
+  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Ldd.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Misc.cmx
   (META as dynlink/META))
  (section lib)

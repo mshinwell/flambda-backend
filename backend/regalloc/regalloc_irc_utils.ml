@@ -127,7 +127,6 @@ let is_move_basic : Cfg.basic -> bool =
     | Static_cast _ -> false
     | Spill -> false
     | Reload -> false
-    | Dummy_use -> false
     | Const_int _ -> false
     | Const_float32 _ -> false
     | Const_float _ -> false
@@ -170,16 +169,14 @@ let k reg =
 
 module Spilling_heuristics = struct
   type t =
-    | Set_choose
     | Flat_uses
     | Hierarchical_uses
 
   let default = Flat_uses
 
-  let all = [Set_choose; Flat_uses; Hierarchical_uses]
+  let all = [Flat_uses; Hierarchical_uses]
 
   let to_string = function
-    | Set_choose -> "set_choose"
     | Flat_uses -> "flat_uses"
     | Hierarchical_uses -> "hierarchical_uses"
 
@@ -193,10 +190,26 @@ module Spilling_heuristics = struct
       | None -> default
       | Some id -> (
         match String.lowercase_ascii id with
-        | "set_choose" | "set-choose" -> Set_choose
         | "flat_uses" | "flat-uses" -> Flat_uses
         | "hierarchical_uses" | "hierarchical-uses" -> Hierarchical_uses
         | _ ->
           fatal "unknown heuristics %S (possible values: %s)" id
             (available_heuristics ())))
+end
+
+module Interf_threshold = struct
+  type t = int option
+
+  let default = None
+
+  let value =
+    lazy
+      (match find_param_value "IRC_INTERF_THRESHOLD" with
+      | None -> default
+      | Some threshold -> (
+        match int_of_string_opt threshold with
+        | None ->
+          fatal "invalid interference threshold %S (should be an integer)"
+            threshold
+        | Some value as threshold -> if value < 0 then None else threshold))
 end

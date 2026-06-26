@@ -31,6 +31,11 @@ val vectorize_max_block_size : int ref
 
 val cfg_peephole_optimize: bool ref
 
+val x86_peephole_optimize : bool ref
+val x86_peephole_remove_mov_to_dead_register : bool ref
+val x86_peephole_remove_redundant_cmp : bool ref
+val x86_peephole_combine_add_rsp : bool ref
+
 val cfg_stack_checks : bool ref
 val cfg_stack_checks_threshold : int ref
 
@@ -51,6 +56,8 @@ val basic_block_sections : bool ref
 val module_entry_functions_section : bool ref
 
 val dasm_comments : bool ref
+
+val frametables_in_rodata : bool ref
 
 val default_heap_reduction_threshold : int
 val heap_reduction_threshold : int ref
@@ -149,6 +156,7 @@ module Flambda2 : sig
     val reaper_change_calling_conventions : bool
     val unicode : bool
     val kind_checks : bool
+    val match_in_match : bool
   end
 
   (* CR-someday lmaurer: We could eliminate most of the per-flag boilerplate using GADTs
@@ -171,6 +179,7 @@ module Flambda2 : sig
     reaper_change_calling_conventions : bool;
     unicode : bool;
     kind_checks : bool;
+    match_in_match : bool;
   }
 
   val default_for_opt_level : opt_level or_default -> flags
@@ -192,6 +201,7 @@ module Flambda2 : sig
   val reaper_change_calling_conventions : bool or_default ref
   val unicode : bool or_default ref
   val kind_checks : bool or_default ref
+  val match_in_match : bool or_default ref
 
   module Dump : sig
     type target = Nowhere | Main_dump_stream | File of Misc.filepath
@@ -200,7 +210,6 @@ module Flambda2 : sig
     val rawfexpr : target ref
     val fexpr : target ref
     val fexpr_after : pass ref
-    val flexpect : target ref
     val fexpr_annot : bool ref
     val fexpr_annot_after : string list ref
     val slot_offsets : bool ref
@@ -222,7 +231,7 @@ module Flambda2 : sig
       val max_function_simplify_run : int
       val shorten_symbol_names : bool
       val cont_lifting_budget : int
-      val cont_spec_budget : int
+      val cont_spec_threshold : float
     end
 
     type flags = {
@@ -236,7 +245,7 @@ module Flambda2 : sig
       max_function_simplify_run : int;
       shorten_symbol_names : bool;
       cont_lifting_budget : int;
-      cont_spec_budget : int;
+      cont_spec_threshold : float;
     }
 
     val default_for_opt_level : opt_level or_default -> flags
@@ -251,7 +260,7 @@ module Flambda2 : sig
     val max_function_simplify_run : int or_default ref
     val shorten_symbol_names : bool or_default ref
     val cont_lifting_budget : int or_default ref
-    val cont_spec_budget : int or_default ref
+    val cont_spec_threshold : float or_default ref
   end
 
   module Debug : sig
@@ -276,12 +285,15 @@ module Flambda2 : sig
       poly_compare_cost : float;
       small_function_size : int;
       large_function_size : int;
+      small_functor_size : int;
+      large_functor_size : int;
       threshold : float;
     }
 
     module Default : sig
       val default_arguments : inlining_arguments
       val speculative_inlining_only_if_arguments_useful : bool
+      val speculative_inlining_track_lifted_constants : bool
     end
 
     val oclassic_arguments : inlining_arguments
@@ -301,9 +313,14 @@ module Flambda2 : sig
     val small_function_size : Clflags.Int_arg_helper.parsed ref
     val large_function_size : Clflags.Int_arg_helper.parsed ref
 
+    val small_functor_size : Clflags.Int_arg_helper.parsed ref
+    val large_functor_size : Clflags.Int_arg_helper.parsed ref
+
     val threshold : Clflags.Float_arg_helper.parsed ref
 
     val speculative_inlining_only_if_arguments_useful : bool ref
+
+    val speculative_inlining_track_lifted_constants : bool ref
 
     val report_bin : bool ref
   end

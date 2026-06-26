@@ -170,10 +170,6 @@ let destroyed_by_plt_stub_set = Reg.set_of_array destroyed_by_plt_stub
 
 let stack_slot slot ty = Reg.create_at_location ty (Stack slot)
 
-(* Instruction selection *)
-
-let word_addressed = false
-
 (* Calling conventions *)
 
 let size_domainstate_args = 64 * size_int
@@ -324,7 +320,7 @@ let win64_float_external_arguments = Regs.[| MM0; MM1; MM2; MM3 |]
 let win64_loc_external_arguments arg =
   let loc = Array.make (Array.length arg) Reg.dummy in
   let reg = ref 0
-  and ofs = ref (if Config.runtime5 then 0 else 32) in
+  and ofs = ref 0 in
   for i = 0 to Array.length arg - 1 do
     let ty : machtype_component = arg.(i) in
     let arguments, size =
@@ -364,12 +360,10 @@ let domainstate_ptr_dwarf_register_number = 14
 (* Registers destroyed by operations *)
 
 let int_regs_destroyed_at_c_call_win64 =
-  if Config.runtime5
-  then Regs.[|RAX; RBX; RDX; RCX; R8; R9; R10; R11; RBP|]
-  else Regs.[|RAX;      RDX; RCX; R8; R9; R10; R11     |]
+  Regs.[|RAX; RBX; RDX; RCX; R8; R9; R10; R11; RBP|]
 
 let int_regs_destroyed_at_c_call =
-  if Config.runtime5 && not Config.no_stack_checks
+  if not Config.no_stack_checks
   then (* Clobbers R13 to hold stack pointer. See emit.ml *)
        Regs.[|RAX; RDI; RSI; RDX; RCX; R8; R9; R13; R10; R11|]
   else Regs.[|RAX; RDI; RSI; RDX; RCX; R8; R9;      R10; R11|]
@@ -544,16 +538,16 @@ let destroyed_at_basic (basic : Cfg_intf.S.basic) =
       Misc.fatal_errorf "destroyed_at_basic: Unexpected llvm_intrinsic %s: \
                          not using LLVM backend"
         intr
-  | Op (Move | Spill | Reload | Dummy_use
-       | Const_int _ | Const_float _ | Const_float32 _ | Const_symbol _
+  | Op (Move | Spill | Reload | Const_int _
+       | Const_float _ | Const_float32 _ | Const_symbol _
        | Const_vec128 _ | Const_vec256 _ | Const_vec512 _
        | Stackoffset _
        | Intop (Iadd | Isub | Imul | Iand | Ior | Ixor | Ilsl | Ilsr
-               | Iasr | Ipopcnt | Iclz _ | Ictz _
+               | Iasr | Ipopcnt | Iclz | Ictz
                )
        | Int128op (Iadd128 | Isub128 | Imul64 _)
        | Intop_imm ((Iadd | Isub | Imul | Imulh _ | Iand | Ior | Ixor | Ilsl
-                    | Ilsr | Iasr | Ipopcnt | Iclz _ | Ictz _ ),_)
+                    | Ilsr | Iasr | Ipopcnt | Iclz | Ictz ),_)
        | Floatop _
        | Csel _
        | Reinterpret_cast _
@@ -577,7 +571,9 @@ let destroyed_at_basic (basic : Cfg_intf.S.basic) =
 (* note: keep this function in sync with `is_destruction_point` below. *)
 let destroyed_at_terminator (terminator : Cfg_intf.S.terminator) =
   match terminator with
-  | Never -> assert false
+  | Never ->
+    Misc.fatal_error
+      "Proc.destroyed_at_terminator: unexpected Never terminator"
   | Always _ | Parity_test _ | Truth_test _ | Float_test _ | Int_test _
   | Return | Raise _ | Tailcall_self  _ | Tailcall_func _
   | Prim {op = Probe _; _}
@@ -604,7 +600,9 @@ let destroyed_at_terminator (terminator : Cfg_intf.S.terminator) =
 (* note: keep this function in sync with `destroyed_at_terminator` above. *)
 let is_destruction_point ~(more_destruction_points : bool) (terminator : Cfg_intf.S.terminator) =
   match terminator with
-  | Never -> assert false
+  | Never ->
+    Misc.fatal_error
+      "Proc.is_destruction_point: unexpected Never terminator"
   | Always _ | Parity_test _ | Truth_test _ | Float_test _ | Int_test _
   | Return | Raise _ | Tailcall_self  _ | Tailcall_func _
   | Prim {op = Probe _; _} ->
@@ -681,6 +679,14 @@ let slot_offset loc ~stack_class ~stack_offset ~fun_contains_calls
 let assemble_file infile outfile =
   X86_proc.assemble_file infile outfile
 
+(* On amd64 the deferred-JIT-hook mechanism is implemented inside [X86_proc]
+   via the [binary_content] ref written by the registered internal assembler.
+   These entry points exist only so that the cross-architecture interface in
+   [proc.mli] is uniform. *)
+let set_pending_jit_run _ = ()
+
+let clear_pending_jit_run () = ()
+
 (* Precolored_regs is not always the same as [all_phys_regs], as some physical registers
    may not be allocatable (e.g. rbp when frame pointers are enabled). *)
 let precolored_regs () =
@@ -704,7 +710,7 @@ let operation_supported = function
   | Cand | Cor | Cxor | Clsl | Clsr | Casr
   | Ccsel _
   | Cbswap _
-  | Cclz _ | Cctz _
+  | Cclz | Cctz
   | Ccmpi _ | Caddv | Cadda
   | Cnegf _ | Cabsf _ | Caddf _ | Csubf _ | Cmulf _ | Cdivf _ | Cpackf32
   | Ccmpf _

@@ -7,9 +7,7 @@
 
  only-default-codegen;
  flags = " -O3 -I ocamlopt.opt";
- flags += " -cfg-prologue-shrink-wrap";
- flags += " -regalloc-param SPLIT_AROUND_LOOPS:on";
- flags += " -regalloc-param AFFINITY:on -regalloc irc";
+ flags += " -experimental-optimizations";
  expect.opt;
 *)
 
@@ -33,10 +31,10 @@ min:
   movq  %rax, %rdi
   movq  %rbx, %rax
   cmpq  %rax, %rdi
-  jg    .L105
+  jg    .L0
   movq  %rdi, %rax
   ret
-.L105:
+.L0:
   ret
 |}]
 
@@ -48,19 +46,17 @@ bswap:
   ret
 |}]
 
-(* CR ttebbi: Double cmp instruction, subtraction should be done on byte registers. *)
+(* CR ttebbi: `movq  $-1, %rsi` has a large encoding. *)
 let compare x y = Int32_u.compare x y
 [%%expect_asm X86_64{|
 compare:
   movq  %rax, %rdi
-  cmpq  %rbx, %rdi
-  setl  %al
-  movzbq %al, %rsi
+  movq  $-1, %rsi
+  xorl  %eax, %eax
   cmpq  %rbx, %rdi
   setg  %al
-  movzbq %al, %rax
-  subq  %rsi, %rax
-  leaq  1(%rax,%rax), %rax
+  cmovge %rax, %rsi
+  leaq  1(%rsi,%rsi), %rax
   ret
 |}]
 

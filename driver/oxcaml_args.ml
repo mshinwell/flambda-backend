@@ -105,6 +105,29 @@ let mk_no_cfg_peephole_optimize f =
     Arg.Unit f,
     " Do not apply peephole optimizations to CFG" )
 
+let mk_x86_peephole_optimize f =
+  ("-x86-peephole-optimize", Arg.Unit f, " Apply peephole optimizations to x86")
+
+let mk_no_x86_peephole_optimize f =
+  ( "-no-x86-peephole-optimize",
+    Arg.Unit f,
+    " Do not apply peephole optimizations to x86" )
+
+let mk_no_x86_peephole_remove_mov_to_dead_register f =
+  ( "-no-x86-peephole-remove-mov-to-dead-register",
+    Arg.Unit f,
+    " Disable x86 peephole: remove mov to dead register" )
+
+let mk_no_x86_peephole_remove_redundant_cmp f =
+  ( "-no-x86-peephole-remove-redundant-cmp",
+    Arg.Unit f,
+    " Disable x86 peephole: remove redundant cmp" )
+
+let mk_no_x86_peephole_combine_add_rsp f =
+  ( "-no-x86-peephole-combine-add-rsp",
+    Arg.Unit f,
+    " Disable x86 peephole: combine adjacent add rsp" )
+
 let mk_cfg_cse_optimize f =
   ("-cfg-cse-optimize", Arg.Unit f, " Apply CSE optimizations to CFG")
 
@@ -202,6 +225,12 @@ let mk_no_cfg_value_propagation_flow f =
     Arg.Unit f,
     " Do not propagate values across block to simplify CFG" )
 
+let mk_experimental_optimizations f =
+  ( "-experimental-optimizations",
+    Arg.Unit f,
+    " Enable a bundle of experimental codegen optimizations that are not yet \
+     on by default (subject to change)" )
+
 let mk_reorder_blocks_random f =
   ( "-reorder-blocks-random",
     Arg.Int f,
@@ -244,6 +273,16 @@ let mk_dasm_comments f =
 
 let mk_dno_asm_comments f =
   ("-dno-asm-comments", Arg.Unit f, " Do not add comments in .s files")
+
+let mk_frametables_in_rodata f =
+  ( "-frametables-in-rodata",
+    Arg.Unit f,
+    " Emit GC frametables into the .rodata section (default)" )
+
+let mk_no_frametables_in_rodata f =
+  ( "-no-frametables-in-rodata",
+    Arg.Unit f,
+    " Do not emit GC frametables into the .rodata section" )
 
 let mk_heap_reduction_threshold f =
   ( "-heap-reduction-threshold",
@@ -324,6 +363,11 @@ let mk_function_layout f =
     Arg.Symbol (layouts, f),
     Printf.sprintf " Order of functions in the generated assembly (default: %s)"
       default )
+
+let mk_name_mangling_scheme f =
+  ( "-name-mangling-scheme",
+    Arg.Symbol ([ "flat"; "structured" ], f),
+    " Override the default name mangling scheme set at configure time" )
 
 let mk_disable_builtin_check f =
   ( "-disable-builtin-check",
@@ -678,6 +722,16 @@ let mk_no_reaper_change_calling_conventions f =
        functions%s (Flambda2 only)"
       (format_not_default Flambda2.Default.reaper_change_calling_conventions) )
 
+let mk_flambda2_match_in_match f =
+  ( "-flambda2-match-in-match",
+    Arg.Unit f,
+    Printf.sprintf " Enable the match-in-match optimisation (Flambda2 only)" )
+
+let mk_no_flambda2_match_in_match f =
+  ( "-no-flambda2-match-in-match",
+    Arg.Unit f,
+    Printf.sprintf " Disable the match-in-match optimisation (Flambda2 only)" )
+
 let mk_flambda2_expert_fallback_inlining_heuristic f =
   ( "-flambda2-expert-fallback-inlining-heuristic",
     Arg.Unit f,
@@ -807,12 +861,12 @@ let mk_flambda2_expert_cont_lifting_budget f =
       " Set the limit of extra parameters introduced\n\
       \ when lifting continuations (per function)" )
 
-let mk_flambda2_expert_cont_spec_budget f =
-  ( "-flambda2-expert-cont-specialization-budget",
-    Arg.Int f,
+let mk_flambda2_expert_cont_spec_threshold f =
+  ( "-flambda2-expert-cont-specialization-threshold",
+    Arg.Float f,
     Printf.sprintf
-      " Set the limit on the number of continuations \n\
-      \ copied/generated when specializing a continuation (per function)" )
+      " Aggressiveness of continuation specialization, similar to  the inline \
+       threshold." )
 
 let mk_flambda2_debug_concrete_types_only_on_canonicals f =
   ( "-flambda2-debug-concrete-types-only-on-canonicals",
@@ -925,6 +979,27 @@ let mk_flambda2_inline_large_function_size f =
       \     (Flambda 2 only)"
       Flambda2_inlining_default.default_arguments.large_function_size )
 
+let mk_flambda2_inline_small_functor_size f =
+  ( "-flambda2-inline-small-functor-size",
+    Arg.String f,
+    Printf.sprintf
+      "<int>|<round>=<int>[,...]\n\
+      \     Functors with a cost less than this will always be inlined\n\
+      \     unless an attribute instructs otherwise (default %d)\n\
+      \     (Flambda 2 only)"
+      Flambda2_inlining_default.default_arguments.small_functor_size )
+
+let mk_flambda2_inline_large_functor_size f =
+  ( "-flambda2-inline-large-functor-size",
+    Arg.String f,
+    Printf.sprintf
+      "<int>|<round>=<int>[,...]\n\
+      \     Functors with a cost greater than this will never be inlined\n\
+      \     unless an attribute instructs otherwise (default %d); speculative\n\
+      \     inlining will be disabled if equal to the small functor size\n\
+      \     (Flambda 2 only)"
+      Flambda2_inlining_default.default_arguments.large_functor_size )
+
 let mk_flambda2_inline_threshold f =
   ( "-flambda2-inline-threshold",
     Arg.String f,
@@ -956,6 +1031,26 @@ let mk_no_flambda2_speculative_inlining_only_if_arguments_useful f =
       \     speculative inlining%s (Flambda 2 only)"
       (format_not_default
          Flambda2.Inlining.Default.speculative_inlining_only_if_arguments_useful)
+  )
+
+let mk_flambda2_speculative_inlining_track_lifted_constants f =
+  ( "-flambda2-speculative-inlining-track-lifted-constants",
+    Arg.Unit f,
+    Printf.sprintf
+      " Track the size of lifted constants when doing speculative inlining%s\n\
+      \    (Flambda 2 only)"
+      (format_default
+         Flambda2.Inlining.Default.speculative_inlining_track_lifted_constants)
+  )
+
+let mk_no_flambda2_speculative_inlining_track_lifted_constants f =
+  ( "-no-flambda2-speculative-inlining-track-lifted-constants",
+    Arg.Unit f,
+    Printf.sprintf
+      " Do not track the size of lifted constants when doing speculative\n\
+      \    inlining%s (Flambda 2 only)"
+      (format_not_default
+         Flambda2.Inlining.Default.speculative_inlining_track_lifted_constants)
   )
 
 let mk_flambda2_inlining_report_bin f =
@@ -1017,11 +1112,6 @@ let mk_dfexpr_to f =
   ( "-dfexpr-to",
     Arg.String f,
     "<file> Like -dfexpr but dumps to given file (Flambda 2 only)" )
-
-let mk_dflexpect_to f =
-  ( "-dflexpect-to",
-    Arg.String f,
-    "<file> Combine -drawfexpr and -dfexpr in an .flt file (Flambda 2 only)" )
 
 let mk_dslot_offsets f =
   ("-dslot-offsets", Arg.Unit f, " Dump closure offsets (Flambda 2 only)")
@@ -1147,6 +1237,8 @@ let mk_cached_generic_functions_path f =
     "<file>  Set the path of the cached generic functions (default to \
      cached-generic-functions.o)" )
 
+let mk_x f = ("-X", Arg.String f, "(undocumented)")
+
 let set_long_frames_threshold n =
   if n < 0 then raise (Arg.Bad "Long frames threshold must be non-negative.");
   if n > Oxcaml_flags.max_long_frames_threshold then
@@ -1191,6 +1283,11 @@ module type Oxcaml_options = sig
   val dvectorize : unit -> unit
   val cfg_peephole_optimize : unit -> unit
   val no_cfg_peephole_optimize : unit -> unit
+  val x86_peephole_optimize : unit -> unit
+  val no_x86_peephole_optimize : unit -> unit
+  val no_x86_peephole_remove_mov_to_dead_register : unit -> unit
+  val no_x86_peephole_remove_redundant_cmp : unit -> unit
+  val no_x86_peephole_combine_add_rsp : unit -> unit
   val cfg_stack_checks : unit -> unit
   val no_cfg_stack_checks : unit -> unit
   val cfg_stack_checks_threshold : int -> unit
@@ -1209,11 +1306,14 @@ module type Oxcaml_options = sig
   val no_cfg_value_propagation_float : unit -> unit
   val cfg_value_propagation_flow : unit -> unit
   val no_cfg_value_propagation_flow : unit -> unit
+  val experimental_optimizations : unit -> unit
   val reorder_blocks_random : int -> unit
   val basic_block_sections : unit -> unit
   val module_entry_functions_section : unit -> unit
   val dasm_comments : unit -> unit
   val dno_asm_comments : unit -> unit
+  val frametables_in_rodata : unit -> unit
+  val no_frametables_in_rodata : unit -> unit
   val heap_reduction_threshold : int -> unit
   val zero_alloc_check : string -> unit
   val zero_alloc_assert : string -> unit
@@ -1225,6 +1325,7 @@ module type Oxcaml_options = sig
   val no_zero_alloc_checker_details_extra : unit -> unit
   val zero_alloc_checker_join : int -> unit
   val function_layout : string -> unit
+  val name_mangling_scheme : string -> unit
   val disable_builtin_check : unit -> unit
   val disable_poll_insertion : unit -> unit
   val enable_poll_insertion : unit -> unit
@@ -1280,6 +1381,8 @@ module type Oxcaml_options = sig
   val reaper_max_unbox_size : int -> unit
   val reaper_change_calling_conventions : unit -> unit
   val no_reaper_change_calling_conventions : unit -> unit
+  val flambda2_match_in_match : unit -> unit
+  val no_flambda2_match_in_match : unit -> unit
   val flambda2_expert_fallback_inlining_heuristic : unit -> unit
   val no_flambda2_expert_fallback_inlining_heuristic : unit -> unit
   val flambda2_expert_inline_effects_in_cmm : unit -> unit
@@ -1296,7 +1399,7 @@ module type Oxcaml_options = sig
   val flambda2_expert_shorten_symbol_names : unit -> unit
   val no_flambda2_expert_shorten_symbol_names : unit -> unit
   val flambda2_expert_cont_lifting_budget : int -> unit
-  val flambda2_expert_cont_spec_budget : int -> unit
+  val flambda2_expert_cont_spec_threshold : float -> unit
   val flambda2_debug_concrete_types_only_on_canonicals : unit -> unit
   val no_flambda2_debug_concrete_types_only_on_canonicals : unit -> unit
   val flambda2_debug_keep_invalid_handlers : unit -> unit
@@ -1311,9 +1414,13 @@ module type Oxcaml_options = sig
   val flambda2_inline_poly_compare_cost : string -> unit
   val flambda2_inline_small_function_size : string -> unit
   val flambda2_inline_large_function_size : string -> unit
+  val flambda2_inline_small_functor_size : string -> unit
+  val flambda2_inline_large_functor_size : string -> unit
   val flambda2_inline_threshold : string -> unit
   val flambda2_speculative_inlining_only_if_arguments_useful : unit -> unit
   val no_flambda2_speculative_inlining_only_if_arguments_useful : unit -> unit
+  val flambda2_speculative_inlining_track_lifted_constants : unit -> unit
+  val no_flambda2_speculative_inlining_track_lifted_constants : unit -> unit
   val flambda2_inlining_report_bin : unit -> unit
   val flambda2_unicode : unit -> unit
   val flambda2_kind_checks : unit -> unit
@@ -1322,7 +1429,6 @@ module type Oxcaml_options = sig
   val dfexpr : unit -> unit
   val dfexpr_to : string -> unit
   val dfexpr_after : string -> unit
-  val dflexpect_to : string -> unit
   val dfexpr_annot : unit -> unit
   val dfexpr_annot_after : string -> unit
   val dslot_offsets : unit -> unit
@@ -1332,6 +1438,7 @@ module type Oxcaml_options = sig
   val dreaper : unit -> unit
   val use_cached_generic_functions : unit -> unit
   val cached_generic_functions_path : string -> unit
+  val x : string -> unit
 end
 
 module Make_oxcaml_options (F : Oxcaml_options) = struct
@@ -1360,6 +1467,13 @@ module Make_oxcaml_options (F : Oxcaml_options) = struct
       mk_dvectorize F.dvectorize;
       mk_cfg_peephole_optimize F.cfg_peephole_optimize;
       mk_no_cfg_peephole_optimize F.no_cfg_peephole_optimize;
+      mk_x86_peephole_optimize F.x86_peephole_optimize;
+      mk_no_x86_peephole_optimize F.no_x86_peephole_optimize;
+      mk_no_x86_peephole_remove_mov_to_dead_register
+        F.no_x86_peephole_remove_mov_to_dead_register;
+      mk_no_x86_peephole_remove_redundant_cmp
+        F.no_x86_peephole_remove_redundant_cmp;
+      mk_no_x86_peephole_combine_add_rsp F.no_x86_peephole_combine_add_rsp;
       mk_cfg_stack_checks F.cfg_stack_checks;
       mk_no_cfg_stack_checks F.no_cfg_stack_checks;
       mk_cfg_stack_checks_threshold F.cfg_stack_checks_threshold;
@@ -1379,11 +1493,14 @@ module Make_oxcaml_options (F : Oxcaml_options) = struct
       mk_no_cfg_value_propagation_float F.no_cfg_value_propagation_float;
       mk_cfg_value_propagation_flow F.cfg_value_propagation_flow;
       mk_no_cfg_value_propagation_flow F.no_cfg_value_propagation_flow;
+      mk_experimental_optimizations F.experimental_optimizations;
       mk_reorder_blocks_random F.reorder_blocks_random;
       mk_basic_block_sections F.basic_block_sections;
       mk_module_entry_functions_section F.module_entry_functions_section;
       mk_dasm_comments F.dasm_comments;
       mk_dno_asm_comments F.dno_asm_comments;
+      mk_frametables_in_rodata F.frametables_in_rodata;
+      mk_no_frametables_in_rodata F.no_frametables_in_rodata;
       mk_heap_reduction_threshold F.heap_reduction_threshold;
       mk_zero_alloc_check F.zero_alloc_check;
       mk_zero_alloc_assert F.zero_alloc_assert;
@@ -1396,6 +1513,7 @@ module Make_oxcaml_options (F : Oxcaml_options) = struct
         F.no_zero_alloc_checker_details_extra;
       mk_zero_alloc_checker_join F.zero_alloc_checker_join;
       mk_function_layout F.function_layout;
+      mk_name_mangling_scheme F.name_mangling_scheme;
       mk_disable_builtin_check F.disable_builtin_check;
       mk_disable_poll_insertion F.disable_poll_insertion;
       mk_enable_poll_insertion F.enable_poll_insertion;
@@ -1459,6 +1577,8 @@ module Make_oxcaml_options (F : Oxcaml_options) = struct
       mk_reaper_change_calling_conventions F.reaper_change_calling_conventions;
       mk_no_reaper_change_calling_conventions
         F.no_reaper_change_calling_conventions;
+      mk_flambda2_match_in_match F.flambda2_match_in_match;
+      mk_no_flambda2_match_in_match F.no_flambda2_match_in_match;
       mk_flambda2_expert_fallback_inlining_heuristic
         F.flambda2_expert_fallback_inlining_heuristic;
       mk_no_flambda2_expert_fallback_inlining_heuristic
@@ -1486,7 +1606,8 @@ module Make_oxcaml_options (F : Oxcaml_options) = struct
         F.no_flambda2_expert_shorten_symbol_names;
       mk_flambda2_expert_cont_lifting_budget
         F.flambda2_expert_cont_lifting_budget;
-      mk_flambda2_expert_cont_spec_budget F.flambda2_expert_cont_spec_budget;
+      mk_flambda2_expert_cont_spec_threshold
+        F.flambda2_expert_cont_spec_threshold;
       mk_flambda2_debug_concrete_types_only_on_canonicals
         F.flambda2_debug_concrete_types_only_on_canonicals;
       mk_no_flambda2_debug_concrete_types_only_on_canonicals
@@ -1507,11 +1628,17 @@ module Make_oxcaml_options (F : Oxcaml_options) = struct
         F.flambda2_inline_small_function_size;
       mk_flambda2_inline_large_function_size
         F.flambda2_inline_large_function_size;
+      mk_flambda2_inline_small_functor_size F.flambda2_inline_small_functor_size;
+      mk_flambda2_inline_large_functor_size F.flambda2_inline_large_functor_size;
       mk_flambda2_inline_threshold F.flambda2_inline_threshold;
       mk_flambda2_speculative_inlining_only_if_arguments_useful
         F.flambda2_speculative_inlining_only_if_arguments_useful;
       mk_no_flambda2_speculative_inlining_only_if_arguments_useful
         F.no_flambda2_speculative_inlining_only_if_arguments_useful;
+      mk_flambda2_speculative_inlining_track_lifted_constants
+        F.flambda2_speculative_inlining_track_lifted_constants;
+      mk_no_flambda2_speculative_inlining_track_lifted_constants
+        F.no_flambda2_speculative_inlining_track_lifted_constants;
       mk_flambda2_inlining_report_bin F.flambda2_inlining_report_bin;
       mk_flambda2_unicode F.flambda2_unicode;
       mk_flambda2_kind_checks F.flambda2_kind_checks;
@@ -1520,7 +1647,6 @@ module Make_oxcaml_options (F : Oxcaml_options) = struct
       mk_dfexpr F.dfexpr;
       mk_dfexpr_to F.dfexpr_to;
       mk_dfexpr_after F.dfexpr_after;
-      mk_dflexpect_to F.dflexpect_to;
       mk_dfexpr_annot F.dfexpr_annot;
       mk_dfexpr_annot_after F.dfexpr_annot_after;
       mk_dslot_offsets F.dslot_offsets;
@@ -1530,6 +1656,7 @@ module Make_oxcaml_options (F : Oxcaml_options) = struct
       mk_dreaper F.dreaper;
       mk_use_cached_generic_functions F.use_cached_generic_functions;
       mk_cached_generic_functions_path F.cached_generic_functions_path;
+      mk_x F.x;
     ]
 end
 
@@ -1539,6 +1666,101 @@ let set_dissector_partition_size f =
       (Arg.Bad
          "-dissector-partition-size must be greater than 0 and less than 2 GiB");
   Clflags.dissector_partition_size := Some f
+
+module Extra_options = struct
+  type 'a arg_parser = string -> 'a ref -> string -> unit
+  type 'a param_setter = Format.formatter -> string -> 'a ref -> string -> unit
+
+  type extra_option =
+    | O : 'a ref * 'a arg_parser * 'a param_setter * string -> extra_option
+
+  let extra_params : (string, extra_option) Hashtbl.t = Hashtbl.create 17
+
+  let register loc r parser setter kwd =
+    match Hashtbl.find_opt extra_params kwd with
+    | Some (O (_, _, _, loc2)) ->
+        Printf.eprintf
+          "Warning: extra compiler argument '-X %s' is already defined:\n" kwd;
+        Printf.eprintf "  First definition: %s\n" loc2;
+        Printf.eprintf "  New definition: %s\n" loc;
+        fun () -> !r
+    | None ->
+        Hashtbl.replace extra_params kwd (O (r, parser, setter, loc));
+        fun () -> !r
+
+  let wrong opt arg expected =
+    raise
+      (Arg.Bad
+         (Format.asprintf "wrong argument '%s'; option '-X %s' expects %s" opt
+            arg expected))
+
+  let set_string _ r opt = r := opt
+  let string_setter _ppf _name option s = option := s
+
+  let string loc kwd default =
+    register loc (ref default) set_string string_setter kwd
+
+  let set_int arg r opt =
+    match int_of_string_opt opt with
+    | Some i -> r := i
+    | None -> wrong opt arg "an integer"
+
+  let int loc kwd default =
+    register loc (ref default) set_int Compenv.int_setter kwd
+
+  let bool_arg arg r opt =
+    match opt with
+    | "0" -> r := false
+    | "1" -> r := true
+    | _ -> wrong opt arg "'0' or '1'"
+
+  let set' ppf name option s = Compenv.setter ppf (fun b -> b) name [ option ] s
+  let bool loc kwd = register loc (ref false) bool_arg set' kwd
+
+  let make_symlist ~sep flags =
+    match flags with
+    | [] -> "<none>"
+    | (h, _) :: t -> List.fold_left (fun x (y, _) -> x ^ sep ^ y) h t
+
+  let set_symbol symbols arg r opt =
+    match List.assoc opt symbols with
+    | exception Not_found ->
+        wrong opt arg ("one of: " ^ make_symlist ~sep:" " symbols)
+    | v -> r := v
+
+  let symbol_setter symbols _ppf name option s =
+    match List.assoc s symbols with
+    | exception Not_found ->
+        Misc.fatal_errorf "Syntax: %s=%s" name (make_symlist ~sep:"|" symbols)
+    | v -> option := v
+
+  let symbol loc kwd default symbols =
+    register loc (ref default) (set_symbol symbols) (symbol_setter symbols) kwd
+
+  let parse_one_arg name =
+    match Misc.cut_at name '=' with
+    | exception Not_found ->
+        raise
+          (Arg.Bad
+             (Format.asprintf
+                "wrong argument '%s'; option '-X' expects a name=value pair"
+                name))
+    | name, v -> (
+        match Hashtbl.find_opt extra_params name with
+        | Some (O (option, parser, _setter, _loc)) -> parser name option v
+        | None ->
+            raise (Arg.Bad (Format.asprintf "unknown option '-X %s'" name)))
+
+  let read_one_param ppf name v =
+    if String.starts_with ~prefix:"X" name then
+      let name_without_prefix = String.sub name 1 (String.length name - 1) in
+      match Hashtbl.find_opt extra_params name_without_prefix with
+      | Some (O (option, _parser, setter, _loc)) ->
+          setter ppf name option v;
+          true
+      | None -> false
+    else false
+end
 
 module Oxcaml_options_impl = struct
   let set r () = r := Oxcaml_flags.Set true
@@ -1565,6 +1787,18 @@ module Oxcaml_options_impl = struct
   let dvectorize = set' Oxcaml_flags.dump_vectorize
   let cfg_peephole_optimize = set' Oxcaml_flags.cfg_peephole_optimize
   let no_cfg_peephole_optimize = clear' Oxcaml_flags.cfg_peephole_optimize
+  let x86_peephole_optimize = set' Oxcaml_flags.x86_peephole_optimize
+  let no_x86_peephole_optimize = clear' Oxcaml_flags.x86_peephole_optimize
+
+  let no_x86_peephole_remove_mov_to_dead_register =
+    clear' Oxcaml_flags.x86_peephole_remove_mov_to_dead_register
+
+  let no_x86_peephole_remove_redundant_cmp =
+    clear' Oxcaml_flags.x86_peephole_remove_redundant_cmp
+
+  let no_x86_peephole_combine_add_rsp =
+    clear' Oxcaml_flags.x86_peephole_combine_add_rsp
+
   let cfg_stack_checks = set' Oxcaml_flags.cfg_stack_checks
   let no_cfg_stack_checks = clear' Oxcaml_flags.cfg_stack_checks
 
@@ -1600,6 +1834,20 @@ module Oxcaml_options_impl = struct
   let no_cfg_value_propagation_flow =
     clear' Oxcaml_flags.cfg_value_propagation_flow
 
+  (* Bundle of experimental codegen optimizations enabled by
+     [-experimental-optimizations]. *)
+  let experimental_optimizations () =
+    cfg_prologue_shrink_wrap ();
+    cfg_prologue_validate ();
+    x86_peephole_optimize ();
+    regalloc_param "SPLIT_AROUND_LOOPS:on";
+    regalloc_param "AFFINITY:on";
+    regalloc_param "BIT_MATRIX_THRESHOLD:8192";
+    regalloc_param "IRC_INTERF_THRESHOLD:4096";
+    cfg_merge_blocks ();
+    cfg_eliminate_dead_trap_handlers ();
+    cfg_value_propagation_flow ()
+
   let reorder_blocks_random seed =
     Oxcaml_flags.reorder_blocks_random := Some seed
 
@@ -1610,6 +1858,8 @@ module Oxcaml_options_impl = struct
 
   let dasm_comments = set' Oxcaml_flags.dasm_comments
   let dno_asm_comments = clear' Oxcaml_flags.dasm_comments
+  let frametables_in_rodata = set' Oxcaml_flags.frametables_in_rodata
+  let no_frametables_in_rodata = clear' Oxcaml_flags.frametables_in_rodata
   let dump_inlining_paths = set' Oxcaml_flags.dump_inlining_paths
   let davail = set' Oxcaml_flags.davail
   let dranges = set' Oxcaml_flags.dranges
@@ -1661,6 +1911,17 @@ module Oxcaml_options_impl = struct
     match Oxcaml_flags.Function_layout.of_string s with
     | None -> () (* this should not occur as we use Arg.Symbol *)
     | Some layout -> Oxcaml_flags.function_layout := layout
+
+  let name_mangling_scheme s =
+    let scheme : Config.name_mangling_scheme option =
+      match s with
+      | "flat" -> Some Flat
+      | "structured" -> Some Structured
+      | _ -> None (* this should not occur as we use Arg.Symbol *)
+    in
+    match scheme with
+    | Some scheme -> Compilation_unit.set_name_mangling_scheme_override scheme
+    | None -> ()
 
   let disable_builtin_check = set' Oxcaml_flags.disable_builtin_check
   let disable_poll_insertion = set' Oxcaml_flags.disable_poll_insertion
@@ -1752,6 +2013,8 @@ module Oxcaml_options_impl = struct
   let flambda2_join_depth n = Flambda2.join_depth := Oxcaml_flags.Set n
   let flambda2_reaper = set Flambda2.enable_reaper
   let no_flambda2_reaper = clear Flambda2.enable_reaper
+  let flambda2_match_in_match = set Flambda2.match_in_match
+  let no_flambda2_match_in_match = clear Flambda2.match_in_match
 
   let reaper_preserve_direct_calls s =
     match s with
@@ -1824,15 +2087,10 @@ module Oxcaml_options_impl = struct
     Flambda2.Expert.shorten_symbol_names := Oxcaml_flags.Set false
 
   let flambda2_expert_cont_lifting_budget budget =
-    (* continuation lifting requires the advanced meet algorithm *)
-    if budget <> 0 then flambda2_advanced_meet ();
     Flambda2.Expert.cont_lifting_budget := Oxcaml_flags.Set budget
 
-  let flambda2_expert_cont_spec_budget budget =
-    (* continuation lifting and specialization requires the advanced meet
-       algorithm *)
-    if budget <> 0 then flambda2_advanced_meet ();
-    Flambda2.Expert.cont_spec_budget := Oxcaml_flags.Set budget
+  let flambda2_expert_cont_spec_threshold threshold =
+    Flambda2.Expert.cont_spec_threshold := Oxcaml_flags.Set threshold
 
   let flambda2_debug_concrete_types_only_on_canonicals =
     set' Flambda2.Debug.concrete_types_only_on_canonicals
@@ -1898,6 +2156,16 @@ module Oxcaml_options_impl = struct
       "Syntax: -flambda2-inline-large-function-size <int> | <round>=<int>[,...]"
       Flambda2.Inlining.large_function_size
 
+  let flambda2_inline_small_functor_size spec =
+    Clflags.Int_arg_helper.parse spec
+      "Syntax: -flambda2-inline-small-functor-size <int> | <round>=<int>[,...]"
+      Flambda2.Inlining.small_functor_size
+
+  let flambda2_inline_large_functor_size spec =
+    Clflags.Int_arg_helper.parse spec
+      "Syntax: -flambda2-inline-large-functor-size <int> | <round>=<int>[,...]"
+      Flambda2.Inlining.large_functor_size
+
   let flambda2_inline_threshold spec =
     Clflags.Float_arg_helper.parse spec
       "Syntax: -flambda2-inline-threshold <float> | <round>=<float>[,...]"
@@ -1908,6 +2176,12 @@ module Oxcaml_options_impl = struct
 
   let no_flambda2_speculative_inlining_only_if_arguments_useful =
     clear' Flambda2.Inlining.speculative_inlining_only_if_arguments_useful
+
+  let flambda2_speculative_inlining_track_lifted_constants =
+    set' Flambda2.Inlining.speculative_inlining_track_lifted_constants
+
+  let no_flambda2_speculative_inlining_track_lifted_constants =
+    clear' Flambda2.Inlining.speculative_inlining_track_lifted_constants
 
   let flambda2_inlining_report_bin = set' Flambda2.Inlining.report_bin
   let flambda2_unicode = set Flambda2.unicode
@@ -1921,7 +2195,6 @@ module Oxcaml_options_impl = struct
     Flambda2.Dump.fexpr_after := Flambda2.Dump.This_pass pass
 
   let dfexpr_to file = Flambda2.Dump.fexpr := Flambda2.Dump.File file
-  let dflexpect_to file = Flambda2.Dump.flexpect := Flambda2.Dump.File file
   let dfexpr_annot () = Flambda2.Dump.fexpr_annot := true
 
   let dfexpr_annot_after pass =
@@ -1938,6 +2211,8 @@ module Oxcaml_options_impl = struct
 
   let cached_generic_functions_path file =
     Oxcaml_flags.cached_generic_functions_path := file
+
+  let x = Extra_options.parse_one_arg
 end
 
 module type Debugging_options = sig
@@ -2112,6 +2387,7 @@ module Extra_params = struct
     | "vectorize-max-block-size" ->
         set_int' Oxcaml_flags.vectorize_max_block_size
     | "cfg-peephole-optimize" -> set' Oxcaml_flags.cfg_peephole_optimize
+    | "x86-peephole-optimize" -> set' Oxcaml_flags.x86_peephole_optimize
     | "cfg-stack-checks" -> set' Oxcaml_flags.cfg_stack_checks
     | "cfg-eliminate-dead-trap-handlers" ->
         set' Oxcaml_flags.cfg_eliminate_dead_trap_handlers
@@ -2123,6 +2399,10 @@ module Extra_params = struct
         set' Oxcaml_flags.cfg_value_propagation_float
     | "cfg-value-propagation-flow" ->
         set' Oxcaml_flags.cfg_value_propagation_flow
+    | "experimental-optimizations" ->
+        if Compenv.check_bool ppf name v then
+          Oxcaml_options_impl.experimental_optimizations ();
+        true
     | "dump-inlining-paths" -> set' Oxcaml_flags.dump_inlining_paths
     | "davail" -> set' Oxcaml_flags.davail
     | "dranges" -> set' Oxcaml_flags.dranges
@@ -2181,6 +2461,20 @@ module Extra_params = struct
         | None ->
             raise (Arg.Bad (Printf.sprintf "Unexpected value %s for %s" v name))
         )
+    | "name-mangling-scheme" -> (
+        let scheme : Config.name_mangling_scheme option =
+          match v with
+          | "flat" -> Some Flat
+          | "structured" -> Some Structured
+          | _ -> None
+        in
+        match scheme with
+        | Some scheme ->
+            Compilation_unit.set_name_mangling_scheme_override scheme;
+            true
+        | None ->
+            raise (Arg.Bad (Printf.sprintf "Unexpected value %s for %s" v name))
+        )
     | "builtin-check" -> set' Oxcaml_flags.disable_builtin_check
     | "poll-insertion" -> set' Oxcaml_flags.disable_poll_insertion
     | "symbol-visibility-protected" ->
@@ -2200,6 +2494,7 @@ module Extra_params = struct
         set' Oxcaml_flags.caml_apply_inline_fast_path
     | "dasm-comments" -> set' Oxcaml_flags.dasm_comments
     | "gupstream-dwarf" -> set' Debugging.restrict_to_upstream_dwarf
+    | "gdwarf-inlined-frames" -> set' Debugging.dwarf_inlined_frames
     | "gdwarf-may-alter-codegen" -> set' Debugging.gdwarf_may_alter_codegen
     | "gdwarf-may-alter-codegen-experimental" ->
         set' Debugging.gdwarf_may_alter_codegen_experimental
@@ -2269,14 +2564,17 @@ module Extra_params = struct
         set Flambda2.Expert.can_inline_recursive_functions
     | "flambda2-expert-max-function-simplify-run" ->
         set_int Flambda2.Expert.max_function_simplify_run
+    | "flambda2-match-in-match" -> set Flambda2.match_in_match
     | "flambda2-expert-cont-lifting-budget" ->
         (match Compenv.check_int ppf name v with
         | Some i -> Flambda2.Expert.cont_lifting_budget := Oxcaml_flags.Set i
         | None -> ());
         true
-    | "flambda2-expert-cont-spec-budget" ->
+    | "flambda2-expert-cont-specialization-threshold" ->
         (match Compenv.check_int ppf name v with
-        | Some i -> Flambda2.Expert.cont_spec_budget := Oxcaml_flags.Set i
+        | Some i ->
+            Flambda2.Expert.cont_spec_threshold :=
+              Oxcaml_flags.Set (Float.of_int i)
         | None -> ());
         true
     | "flambda2-inline-max-depth" ->
@@ -2329,6 +2627,16 @@ module Extra_params = struct
           "Bad syntax in OCAMLPARAM for 'flambda2-inline-large-function-size'"
           Flambda2.Inlining.large_function_size;
         true
+    | "flambda2-inline-small-functor-size" ->
+        Clflags.Int_arg_helper.parse v
+          "Bad syntax in OCAMLPARAM for 'flambda2-inline-small-functor-size'"
+          Flambda2.Inlining.small_functor_size;
+        true
+    | "flambda2-inline-large-functor-size" ->
+        Clflags.Int_arg_helper.parse v
+          "Bad syntax in OCAMLPARAM for 'flambda2-inline-large-functor-size'"
+          Flambda2.Inlining.large_functor_size;
+        true
     | "flambda2-inline-threshold" ->
         Clflags.Float_arg_helper.parse v
           "Bad syntax in OCAMLPARAM for 'flambda2-inline-threshold'"
@@ -2336,6 +2644,8 @@ module Extra_params = struct
         true
     | "flambda2-speculative-inlining-only-if-arguments-useful" ->
         set' Flambda2.Inlining.speculative_inlining_only_if_arguments_useful
+    | "flambda2-speculative-inlining-track-lifted-constants" ->
+        set' Flambda2.Inlining.speculative_inlining_track_lifted_constants
     | "flambda2-inlining-report-bin" -> set' Flambda2.Inlining.report_bin
     | "flambda2-expert-fallback-inlining-heuristic" ->
         set Flambda2.Expert.fallback_inlining_heuristic
@@ -2395,7 +2705,7 @@ module Extra_params = struct
     | "no-manual-module-init" ->
         Oxcaml_flags.manual_module_init := false;
         true
-    | _ -> false
+    | _ -> Extra_options.read_one_param ppf name v
 end
 
 module type Optcomp_options = sig

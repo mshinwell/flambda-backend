@@ -211,7 +211,8 @@ end) : S = struct
             ~crc_with_unit:(Some (ui.ui_unit, Env.crc_of_unit modname))
           :: filter (Linkenv.extract_crc_interfaces linkenv);
         ui_imports_cmx = filter (Linkenv.extract_crc_implementations linkenv);
-        ui_quoted_globals = [] (* CR jrickard: Metaprogramming support. *);
+        ui_quoted_cmi = union (List.map (fun info -> info.ui_quoted_cmi) units);
+        ui_quoted_cmx = union (List.map (fun info -> info.ui_quoted_cmx) units);
         ui_format = format;
         ui_generic_fns =
           { curry_fun =
@@ -222,6 +223,8 @@ end) : S = struct
               union (List.map (fun info -> info.ui_generic_fns.send_fun) units)
           };
         ui_force_link = List.exists (fun info -> info.ui_force_link) units;
+        ui_requires_metaprogramming =
+          List.exists (fun info -> info.ui_requires_metaprogramming) units;
         ui_export_info;
         ui_zero_alloc_info;
         ui_external_symbols =

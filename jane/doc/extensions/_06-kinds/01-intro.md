@@ -129,7 +129,7 @@ Adding bounds to a kind always makes the kind more specific, or lower. That is,
 for any kind `k`, `k mod <bounds> <= k`.
 
 Along the future modal axes, a _lower_ mode leads to a lower kind. So `stateless
-< observing` leads to `value mod stateless <= value mod observing`, and bounding
+< reading` leads to `value mod stateless <= value mod reading`, and bounding
 by the maximum mode has no effect. However, along the past modal axes, a
 _higher_ mode leads to a lower kind. So `shared < contended` leads to `value mod
 contended <= value mod shared` and it's bounding by the minimum mode that has no
@@ -222,7 +222,7 @@ don't want to restrict the normal `list` type to work only on a subset of
 
 The solution to this problem is the with-bounds: a with-bound in a kind of a
 type makes that type not mode-cross whenever the with-bound also does not
-mode-cross. Add a bound to the `mod` section always *lowers* a kind, while
+mode-cross. Adding a bound to the `mod` section always *lowers* a kind, while
 adding a with-bound always *raises* a kind.
 
 Here is the full kind of `'a list`:
@@ -244,6 +244,10 @@ allowing `'a list` to mode-cross just because the `list` structure itself can
 mode-cross would be wrong: the elements would cross along with the list! We thus
 state in the with-bounds that `'a list` contains `'a` -- that's the intuition
 behind the `with` syntax.
+
+For mode-crossing purposes, `k with ty @@ modality` behaves as if the type had
+a record field of type `ty @@ modality`. Plain `k with ty` is the same idea
+with a field of type `ty`, without a modality.
 
 Looking at examples of `list`, we would have `int list : immutable_data`
 (because `int` mode-crosses everything) but `(int -> int) ref list : value`,

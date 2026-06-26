@@ -58,7 +58,9 @@ let longident_of_comp_unit cu =
     match names_rev with
     | [] -> fatal_error "empty sequence of names"
     | [name] -> Longident.Lident name
-    | name :: names_rev -> Longident.Ldot (of_names names_rev, name)
+    | name :: names_rev ->
+        Longident.Ldot (Location.mknoloc (of_names names_rev),
+                        Location.mknoloc name)
   in
   let names_rev =
     Compilation_unit.full_path cu
@@ -71,11 +73,15 @@ let global_path cu =
 let functor_path path param =
   match path with
     None -> None
-  | Some p -> Some(Longident.Lapply(p, Lident (Ident.name param)))
+  | Some p ->
+    Some(Longident.Lapply(Location.mknoloc p,
+         Location.mknoloc (Longident.Lident (Ident.name param))))
 let field_path path field =
   match path with
     None -> None
-  | Some p -> Some(Longident.Ldot(p, Ident.name field))
+  | Some p ->
+    Some(Longident.Ldot(Location.mknoloc p,
+         Location.mknoloc (Ident.name field)))
 
 (* Compile type extensions *)
 
@@ -91,6 +97,18 @@ let transl_type_extension ~scopes env rootpath tyext body =
            Lambda.debug_uid_none, lam, body))
     tyext.tyext_constructors
     body
+
+let block_of_module_representation ~loc = function
+  | Module_value_only _ -> Pmakeblock(0, Immutable, All_value, alloc_heap)
+  | Module_mixed (shape, _) ->
+    let mpb = Mixed_product_bytes.count (Product shape) in
+    (* All-value/void shapes compile to uniform blocks, so the scannable
+       prefix length limit doesn't apply. *)
+    if not (Mixed_product_bytes.all_value mpb)
+    then
+      Typedecl.assert_mixed_product_support loc Module
+        ~value_prefix_len:(Mixed_product_bytes.value_prefix_len mpb);
+    Pmakeblock(0, Immutable, Shape shape, alloc_heap)
 
 (* Compile a coercion *)
 
@@ -135,6 +153,7 @@ let rec apply_coercion loc strict restr arg =
       let lam = transl_module_path loc env path in
       name_lambda strict arg Lambda.layout_module
         (fun _ -> apply_coercion loc Alias cc lam)
+  | Tcoerce_invalid -> Misc.fatal_error "Translmod: invalid coercion"
 
 and apply_coercion_field loc get_field (pos, cc) =
   apply_coercion loc Alias cc (get_field pos)
@@ -312,7 +331,6 @@ let init_shape id modl =
               (* CR layouts: We should allow any representable layout here. It
                  will require reworking [camlinternalMod.init_mod]. *)
               let jkind = Jkind.Builtin.value_or_null ~why:Recmod_fun_arg in
-              let ty_arg = Ctype.correct_levels ty_arg in
               match Ctype.check_type_jkind env ty_arg jkind with
               | Ok _ -> const_int 0 (* camlinternalMod.Function *)
               | Error _ ->
@@ -630,7 +648,7 @@ and transl_module ~scopes cc rootpath mexp =
       transl_module ~scopes (compose_coercions cc ccarg) rootpath arg
   | Tmod_unpack(arg, _) ->
       apply_coercion loc Strict cc
-        (Translcore.transl_exp ~scopes Jkind.Sort.Const.for_module arg)
+        (Translcore.transl_exp ~scopes Lambda.layout_module arg)
 
 and transl_apply ~scopes ~loc ~cc mod_env funct translated_arg =
   let inlined_attribute =
@@ -736,7 +754,10 @@ and transl_structure ~scopes loc
             transl_structure ~scopes loc fields cc rootpath final_env rem
           in
           let sort = Jkind.Sort.default_for_transl_and_get sort in
-          Lsequence(transl_exp ~scopes sort expr, body), repr
+          let layout =
+            Typeopt.layout_of_sort expr.exp_loc sort
+          in
+          Lsequence(transl_exp ~scopes layout expr, body), repr
       | Tstr_value(rec_flag, pat_expr_list) ->
           (* Translate bindings first *)
           let mk_lam_let =
@@ -985,7 +1006,7 @@ let scan_used_globals lam =
   let rec scan lam =
     Lambda.iter_head_constructor scan lam;
     match lam with
-      Lprim ((Pgetglobal cu), _, _) ->
+      Lprim ((Pgetglobal (cu, _)), _, _) ->
         globals := Compilation_unit.Set.add cu !globals
     | _ -> ()
   in
@@ -1095,6 +1116,15 @@ let wrap_toplevel_functor_in_struct code =
 let has_parameters () =
   Env.parameters () <> []
 
+let module_block_size component_names coercion =
+  match coercion with
+  | Tcoerce_none -> List.length component_names
+  | Tcoerce_structure { pos_cc_list; _ } -> List.length pos_cc_list
+  | Tcoerce_functor _
+  | Tcoerce_primitive _
+  | Tcoerce_alias _
+  | Tcoerce_invalid -> assert false
+
 let transl_implementation compilation_unit impl ~loc =
   reset_labels ();
   primitive_declarations := [];
@@ -1173,7 +1203,7 @@ let toploop_getvalue id =
   Lapply{
     ap_loc=Loc_unknown;
     ap_func=Lprim(Pfield (toploop_getvalue_pos, Pointer, Reads_agree),
-                  [Lprim(Pgetglobal toploop_unit, [], Loc_unknown)],
+                  [Lprim(Pgetglobal (toploop_unit, Dynamic), [], Loc_unknown)],
                   Loc_unknown);
     ap_args=[Lconst(Const_base(
       Const_string (toplevel_name id, Location.none, None)))];
@@ -1193,7 +1223,7 @@ let toploop_setvalue id lam =
   Lapply{
     ap_loc=Loc_unknown;
     ap_func=Lprim(Pfield (toploop_setvalue_pos, Pointer, Reads_agree),
-                  [Lprim(Pgetglobal toploop_unit, [], Loc_unknown)],
+                  [Lprim(Pgetglobal (toploop_unit, Dynamic), [], Loc_unknown)],
                   Loc_unknown);
     ap_args=
       [Lconst(Const_base(
@@ -1224,12 +1254,14 @@ let transl_toplevel_item ~scopes item =
        unit. *)
     Tstr_eval (expr, sort, _) ->
       let sort = Jkind.Sort.default_for_transl_and_get sort in
-      transl_exp ~scopes sort expr
+      let layout = Typeopt.layout_of_sort expr.exp_loc sort in
+      transl_exp ~scopes layout expr
   | Tstr_value(Nonrecursive,
                [{vb_pat = {pat_desc=Tpat_any}; vb_expr = expr;
                  vb_sort = sort}]) ->
       let sort = Jkind.Sort.default_for_transl_and_get sort in
-      transl_exp ~scopes sort expr
+      let layout = Typeopt.layout_of_sort expr.exp_loc sort in
+      transl_exp ~scopes layout expr
   | Tstr_value(rec_flag, pat_expr_list) ->
       let idents = let_bound_idents pat_expr_list in
       transl_let ~scopes ~return_layout:Lambda.layout_unit ~in_structure:true
@@ -1276,8 +1308,8 @@ let transl_toplevel_item ~scopes item =
          be a value named identically *)
       let (ids, class_bindings) = transl_class_bindings ~scopes cl_list in
       List.iter set_toplevel_unique_name ids;
-      let body = make_sequence toploop_setvalue_id ids in
-      Value_rec_compiler.compile_letrec class_bindings body
+      Value_rec_compiler.compile_letrec class_bindings
+        (make_sequence toploop_setvalue_id ids)
   | Tstr_include incl ->
       let ids = bound_value_identifiers incl.incl_type in
       let loc = of_location ~scopes incl.incl_loc in
@@ -1361,24 +1393,17 @@ let transl_toplevel_definition str =
 
 let get_component = function
     None -> Lconst const_unit
-  | Some id -> Lprim(Pgetglobal id, [], Loc_unknown)
+  | Some id -> Lprim(Pgetglobal (id, Dynamic), [], Loc_unknown)
 
 let () =
   match Jkind.Sort.Const.for_module with
-  | Base Value -> ()
+  | Base Scannable -> ()
   | _ -> Misc.fatal_error "Lambda.transl_package: expected modules to be values"
     (* If this assumption is broken, [transl_package] should return a
        module representation instead of a size *)
 
 let transl_package component_names coercion =
-  let field_count =
-    match coercion with
-    | Tcoerce_none -> List.length component_names
-    | Tcoerce_structure { pos_cc_list; _ } -> List.length pos_cc_list
-    | Tcoerce_functor _
-    | Tcoerce_primitive _
-    | Tcoerce_alias _ -> assert false
-  in
+  let field_count = module_block_size component_names coercion in
   field_count,
   apply_coercion Loc_unknown Strict coercion
     (Lprim(block_of_module_representation ~loc:Location.none
@@ -1405,10 +1430,10 @@ let transl_runtime_arg arg =
   match arg with
   | Argument_block { ra_unit; ra_field_idx; ra_main_repr } ->
       Lprim (mod_field ra_field_idx ra_main_repr,
-             [Lprim (Pgetglobal ra_unit, [], Loc_unknown)],
+             [Lprim (Pgetglobal (ra_unit, Dynamic), [], Loc_unknown)],
              Loc_unknown)
   | Main_module_block cu ->
-      Lprim (Pgetglobal cu, [], Loc_unknown)
+      Lprim (Pgetglobal (cu, Dynamic), [], Loc_unknown)
   | Unit ->
       lambda_unit
 
@@ -1423,8 +1448,8 @@ let transl_instance_impl
     (* Any parameterised module has a block with exactly one field, namely the
        instantiating functor (see [Lambda.main_module_block_format]) *)
     Lprim (mod_field 0 (Module_value_only { field_count = 1 }),
-           [Lprim (Pgetglobal base_compilation_unit, [], Loc_unknown)],
-           Loc_unknown)
+      [Lprim (Pgetglobal (base_compilation_unit, Dynamic), [], Loc_unknown)],
+      Loc_unknown)
   in
   let runtime_args_lam = List.map transl_runtime_arg runtime_args in
   let code =
