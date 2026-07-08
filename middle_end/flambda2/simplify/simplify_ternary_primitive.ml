@@ -49,6 +49,25 @@ let simplify_array_set (array_kind : P.Array_kind.t)
       | Naked_vec256s | Naked_vec512s | Unboxed_product _ ->
         ()
     in
+    let array_set_kind : P.Array_set_kind.t =
+      match array_kind with
+      | Immediates -> (
+        match array_set_kind with
+        | Values _ ->
+          (* The array has been proved to contain only immediates, so the value
+             being stored must be an immediate, meaning that no GC barrier is
+             required. *)
+          Immediates
+        | Immediates | Gc_ignorable_values | Naked_floats | Naked_float32s
+        | Naked_ints | Naked_int8s | Naked_int16s | Naked_int32s | Naked_int64s
+        | Naked_nativeints | Naked_vec128s | Naked_vec256s | Naked_vec512s ->
+          array_set_kind)
+      | Gc_ignorable_values | Values | Naked_floats | Naked_float32s
+      | Naked_ints | Naked_int8s | Naked_int16s | Naked_int32s | Naked_int64s
+      | Naked_nativeints | Naked_vec128s | Naked_vec256s | Naked_vec512s
+      | Unboxed_product _ ->
+        array_set_kind
+    in
     let named =
       Named.create_prim
         (Ternary

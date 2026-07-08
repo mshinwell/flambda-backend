@@ -1090,6 +1090,26 @@ let array_set =
       | Naked_vec512s -> vec512 ()
       | Gc_ignorable_values -> gc_ign ())
   in
+  let default_set_kind (k : P.Array_kind.t) : P.Array_set_kind.t option =
+    match k with
+    | Values ->
+      Some
+        (Values (P.Init_or_assign.Assignment Alloc_mode.For_assignments.heap))
+    | Immediates -> Some Immediates
+    | Gc_ignorable_values -> Some Gc_ignorable_values
+    | Naked_floats -> Some Naked_floats
+    | Naked_float32s -> Some Naked_float32s
+    | Naked_ints -> Some Naked_ints
+    | Naked_int8s -> Some Naked_int8s
+    | Naked_int16s -> Some Naked_int16s
+    | Naked_int32s -> Some Naked_int32s
+    | Naked_int64s -> Some Naked_int64s
+    | Naked_nativeints -> Some Naked_nativeints
+    | Naked_vec128s -> Some Naked_vec128s
+    | Naked_vec256s -> Some Naked_vec256s
+    | Naked_vec512s -> Some Naked_vec512s
+    | Unboxed_product _ -> None
+  in
   ternary "%array_set"
     ~params:
       (maps
@@ -1099,36 +1119,21 @@ let array_set =
              match sk with
              | Some sk -> sk
              | None -> (
-               match (k : P.Array_kind.t) with
-               | Values ->
-                 Values
-                   (P.Init_or_assign.Assignment Alloc_mode.For_assignments.heap)
-               | Immediates -> Immediates
-               | Gc_ignorable_values -> Gc_ignorable_values
-               | Naked_floats -> Naked_floats
-               | Naked_float32s -> Naked_float32s
-               | Naked_ints -> Naked_ints
-               | Naked_int8s -> Naked_int8s
-               | Naked_int16s -> Naked_int16s
-               | Naked_int32s -> Naked_int32s
-               | Naked_int64s -> Naked_int64s
-               | Naked_nativeints -> Naked_nativeints
-               | Naked_vec128s -> Naked_vec128s
-               | Naked_vec256s -> Naked_vec256s
-               | Naked_vec512s -> Naked_vec512s
-               | Unboxed_product _ ->
-                 Misc.fatal_error "Missing product array set kind")
+               match default_set_kind k with
+               | Some sk -> sk
+               | None -> Misc.fatal_error "Missing product array set kind")
            in
            k, sk)
          ~to_:(fun _ (k, sk) ->
+           (* Print the set kind whenever it is not the default implied by
+              the array kind, so that the distinction is not lost (e.g. a
+              [Values] set kind on an [Immediates] array, which causes the GC
+              write barrier to be used). *)
            let sk =
-             match (k : P.Array_kind.t) with
-             | Unboxed_product _ -> Some sk
-             | Immediates | Gc_ignorable_values | Values | Naked_floats
-             | Naked_float32s | Naked_ints | Naked_int8s | Naked_int16s
-             | Naked_int32s | Naked_int64s | Naked_nativeints | Naked_vec128s
-             | Naked_vec256s | Naked_vec512s ->
+             match default_set_kind k with
+             | Some default when P.Array_set_kind.compare default sk = 0 ->
                None
+             | Some _ | None -> Some sk
            in
            k, sk))
     (fun _ (k, sk) -> P.Array_set (k, sk))
