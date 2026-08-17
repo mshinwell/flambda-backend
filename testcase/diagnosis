@@ -1,0 +1,74 @@
+  Symptom (reproduced)
+
+  With -O3 alone, main.ml's [@zero_alloc] check passes and main.o contains a locally specialized copy of the loop
+  (camlMain__loop_1_5_code). With -flambda2-reaper on lib_a.ml only, lib_a.cmx's export of camlLib_a__loop_1_3_code
+  flips from Code_present to Metadata_only and the check fails on a residual cross-unit direct call.
+
+  Why the baseline works
+
+  map_stack is exported Code_present with Attribute_inline, and its body contains the dynamic set_of_closures for
+  loop (value slot f). When main inlines map_stack, that set of closures lands in main's unit and simplify
+  re-simplifies it there, minting a fresh code id specialized with f = fun x -> x * x. The zero_alloc checker then
+  sees only stack allocations. This caller-side respecialization is exactly why flambda2 keeps Code_present for code
+  defined inside inlinable bodies — the invariant is spelled out in the comment at
+  middle_end/flambda2/reaper/rebuild.ml:556.
+
+  What the reaper does to break it
+
+  Looking at the post-reaper IR (-dflambda), the reaper unboxes the loop closure: its unit-local analysis sees that
+  the closure never escapes and every call site is a known-arity direct call, so it changes loop's calling convention
+  (f becomes an ordinary unboxed argument, my_closure goes unused) and deletes the set-of-closures binding from
+  map_stack's body, leaving a bare direct call to camlLib_a__loop_1_3_code. That's sound — external callers inline
+  the rebuilt body, whose call matches the new convention — but it causes two distinct problems:
+
+  1. The fundamental one: the exported inlinable body of map_stack no longer contains a set of closures. After main
+  inlines it, there is nothing for simplify to respecialize — a cross-unit direct call to the generic loop remains no
+  matter what. The datalog rules in reaper/unboxing_analysis.ml (~lines 320–450) block unboxing for escapes,
+  unknown-arity calls, etc., but have no rule treating "defined inside an exported-inlinable code body" as a barrier,
+  even though such bodies get copied into other units.
+  2. The export demotion (the proximate error): the logic that remembers code ids for closures inside code
+  definitions lives in rewrite_set_of_closures (rebuild.ml:553, guarded by inside_code_definition) — but the unboxing
+  rebuild path (rebuild_let_expr_holed_set_of_closures → bound_vars_will_be_unboxed →
+  rebuild_set_of_closures_binding_which_is_being_unboxed, rebuild.ml:1805-1811) returns res unchanged, bypassing it
+  entirely. Then Reaper.run (reaper.ml:56) calls Exported_code.add_code ~keep_code:(mem code_ids_to_remember), and
+  since loop's inlining_decision is Recursive ⇒ cannot_be_inlined (exported_code.ml:46), it's demoted to
+  Metadata_only.
+
+  The checker then fails because lib_a.cmx's "function summaries for static checks" table contains only
+  camlLib_a__entry in both configurations — and the generic loop could never have a zero-alloc summary anyway (it
+  calls an unknown f). The "build artifacts not available" hint is indeed misleading; the artifact is there, it just
+  has neither code nor summary for that symbol.
+
+  Empirical isolation
+
+  ┌─────────────────────────────────────────────────────┬───────────────┬────────────────────────────────────────┐
+  │                     lib_a flags                     │  loop export  │               zero_alloc               │
+  ├─────────────────────────────────────────────────────┼───────────────┼────────────────────────────────────────┤
+  │ -flambda2-reaper                                    │ Metadata_only │ FAIL                                   │
+  ├─────────────────────────────────────────────────────┼───────────────┼────────────────────────────────────────┤
+  │ -flambda2-reaper -no-reaper-unbox                   │ Code_present  │ PASS (local copy back in main.o)       │
+  ├─────────────────────────────────────────────────────┼───────────────┼────────────────────────────────────────┤
+  │ -flambda2-reaper                                    │ Code_present  │ PASS (unboxing requires convention     │
+  │ -no-reaper-change-calling-conventions               │               │ changes)                               │
+  ├─────────────────────────────────────────────────────┼───────────────┼────────────────────────────────────────┤
+  │ -flambda2-reaper -reaper-preserve-direct-calls      │ Metadata_only │ FAIL                                   │
+  │ always                                              │               │                                        │
+  └─────────────────────────────────────────────────────┴───────────────┴────────────────────────────────────────┘
+
+  Note the existing -reaper-preserve-direct-calls zero_alloc machinery can't help here: it consults the zero_alloc
+  attribute of code in the callee's unit (rebuild.ml:2150), but the Check attribute lives in a different unit that
+  hasn't been compiled yet.
+
+  Fix directions
+
+  - The behavior-restoring fix is in the analysis: forbid unboxing/calling-convention changes for closures defined
+  inside code bodies that will be exported as inlinable (Code_present and can-be-inlined) — the same
+  over-approximation rewrite_set_of_closures already uses for code_ids_to_remember (a conservative first cut:
+  anything inside any code definition).
+  - Independently, the code_ids_to_remember bypass on the unboxing path is a latent bug worth fixing (any code id
+  still referenced from a rebuilt exported body should stay Code_present), though on its own it would not restore
+  this test — without the set of closures in the body, the caller has nothing to respecialize.
+
+  This is not a soundness bug — the generated code is correct — it's an optimization/checkability regression that
+  surfaces as a hard error only because [@zero_alloc] turns the lost specialization into a compile failure.
+
