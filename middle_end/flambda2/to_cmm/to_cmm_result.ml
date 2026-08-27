@@ -26,7 +26,26 @@ type t =
        [Symbol.t], e.g. module entry point names. *)
     module_symbol : Symbol.t;
     module_symbol_defined : bool;
-    invalid_message_symbols : Symbol.t String.Map.t
+    invalid_message_symbols : Symbol.t String.Map.t;
+    atom_aliased_symbols : int String.Map.t;
+        (* For unloadable compilation units: linkage names of symbols that are
+           not defined in the unit's emitted data but instead denote the value
+           of the runtime's permanent atom of the given tag (zero-sized statics
+           such as empty arrays; see
+           [Cmm_helpers.register_unloadable_atom_aliased_symbol]). Used to force
+           such symbols [Global]: the JIT loader binds them by name, so
+           references must be named relocations rather than section-local
+           labels. *)
+    code_dep_symbols : Symbol.Set.t Code_id.Map.t
+        (* For unloadable compilation units: symbols of static data invented
+           during Cmm translation of a function's body (e.g. sets of closures
+           lifted by To_cmm itself), keyed by that function's code ID. Such
+           symbols postdate simplification, so they appear in no
+           [Code.free_names_of_params_and_body]; they are recorded here so that
+           [To_cmm_code_blocks.emit_code_block_for] can add them to the
+           function's [Code_block] dependencies. Without this, the GC could
+           reclaim a static block whose only reference is an immediate in the
+           function's machine code. *)
   }
 
 let create ~module_symbol ~reachable_names =
@@ -38,8 +57,37 @@ let create ~module_symbol ~reachable_names =
     symbols = String.Map.empty;
     module_symbol;
     module_symbol_defined = false;
-    invalid_message_symbols = String.Map.empty
+    atom_aliased_symbols = String.Map.empty;
+    invalid_message_symbols = String.Map.empty;
+    code_dep_symbols = Code_id.Map.empty
   }
+
+let alias_symbol_to_atom t symbol ~tag =
+  let sym_name = Linkage_name.to_string (Symbol.linkage_name symbol) in
+  C.register_unloadable_atom_aliased_symbol sym_name ~tag;
+  { t with
+    atom_aliased_symbols = String.Map.add sym_name tag t.atom_aliased_symbols
+  }
+
+let symbol_is_aliased_to_atom t symbol =
+  String.Map.mem
+    (Linkage_name.to_string (Symbol.linkage_name symbol))
+    t.atom_aliased_symbols
+
+let add_code_dep_symbol t code_id symbol =
+  { t with
+    code_dep_symbols =
+      Code_id.Map.update code_id
+        (function
+          | None -> Some (Symbol.Set.singleton symbol)
+          | Some symbols -> Some (Symbol.Set.add symbol symbols))
+        t.code_dep_symbols
+  }
+
+let code_dep_symbols t code_id =
+  match Code_id.Map.find_opt code_id t.code_dep_symbols with
+  | None -> Symbol.Set.empty
+  | Some symbols -> symbols
 
 (* Symbol handling
 
@@ -63,7 +111,11 @@ let symbol res sym =
   let sym_global =
     if
       Current_unit.is_current (Symbol.compilation_unit sym)
-      && not (Name_occurrences.mem_symbol res.reachable_names sym)
+      && (not (Name_occurrences.mem_symbol res.reachable_names sym))
+      (* Atom-aliased symbols have no definition in the unit's emitted data; the
+         JIT loader binds them by name, so all references must be named
+         relocations, i.e. [Global]. *)
+      && not (String.Map.mem sym_name res.atom_aliased_symbols)
     then Cmm.Local
     else Cmm.Global
   in
@@ -155,12 +207,19 @@ type result =
 let define_module_symbol_if_missing r =
   if r.module_symbol_defined
   then r
+  else if !Clflags.unit_is_unloadable
+  then
+    (* A zero-sized module block must not be emitted into the unit's donated
+       heap-extent region; bind the module symbol to the runtime's permanent
+       atom of tag 0 instead. (The module symbol is always referenced [Global],
+       by name, so the loader-side binding suffices.) *)
+    alias_symbol_to_atom r r.module_symbol ~tag:0
   else
     let linkage_name =
       Linkage_name.to_string (Symbol.linkage_name r.module_symbol)
     in
     let sym : Cmm.symbol = { sym_name = linkage_name; sym_global = Global } in
-    let l = C.emit_block sym (C.black_block_header 0 0) [] in
+    let l = C.emit_unit_block sym (C.unit_block_header 0 0) [] in
     set_data r l
 
 let add_invalid_message_symbol t symbol ~message =

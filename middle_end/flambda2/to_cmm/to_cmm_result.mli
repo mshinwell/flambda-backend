@@ -63,6 +63,30 @@ val add_function : t -> Cmm.fundecl -> t
     of whether the module block symbol for the current unit has been defined. *)
 val check_for_module_symbol : t -> Symbol.t -> t
 
+(** For unloadable compilation units: record that the given symbol is not
+    defined in the unit's emitted data but instead denotes the value of the
+    runtime's permanent atom of the given tag (used for zero-sized statics,
+    which must not be emitted into the unit's donated heap-extent region). Also
+    registers the symbol with
+    [Cmm_helpers.register_unloadable_atom_aliased_symbol] so the JIT loader can
+    bind it. All references to such a symbol are forced [Global]. *)
+val alias_symbol_to_atom : t -> Symbol.t -> tag:int -> t
+
+(** Whether [alias_symbol_to_atom] has been called for the given symbol. *)
+val symbol_is_aliased_to_atom : t -> Symbol.t -> bool
+
+(** Record that [Symbol.t] names a piece of static data invented during Cmm
+    translation of the body of the function with the given code ID (e.g. a set
+    of closures lifted by To_cmm itself). Such symbols postdate simplification
+    and so appear in no [Code.free_names_of_params_and_body]; recording them
+    here lets [To_cmm_code_blocks.emit_code_block_for] add them to the
+    function's [Code_block] dependencies, keeping the data alive (in unloadable
+    compilation units) for as long as the function's code is reachable. *)
+val add_code_dep_symbol : t -> Code_id.t -> Symbol.t -> t
+
+(** The symbols recorded by [add_code_dep_symbol] for the given code ID. *)
+val code_dep_symbols : t -> Code_id.t -> Symbol.Set.t
+
 (** Caching of symbols associated with [Invalid] messages. *)
 val add_invalid_message_symbol : t -> Symbol.t -> message:string -> t
 

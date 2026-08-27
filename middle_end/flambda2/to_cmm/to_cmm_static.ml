@@ -132,10 +132,19 @@ let add_function env res ~params_and_body code_id p ~result_arity ~fun_dbg
   R.add_function res fundecl
 
 let add_functions env ~params_and_body res (code : Code.t) =
-  add_function env res ~params_and_body (Code.code_id code)
-    (Code.params_and_body code)
-    ~result_arity:(Code.result_arity code) ~fun_dbg:(Code.dbg code)
-    ~zero_alloc_attribute:(Code.zero_alloc_attribute code)
+  let res =
+    add_function env res ~params_and_body (Code.code_id code)
+      (Code.params_and_body code)
+      ~result_arity:(Code.result_arity code) ~fun_dbg:(Code.dbg code)
+      ~zero_alloc_attribute:(Code.zero_alloc_attribute code)
+  in
+  (* Emit a [Code_block] for this function alongside the fundecl. The Code_block
+     must be emitted from this path (rather than later via
+     [Exported_code.iter_code]) because simplification can store the metadata of
+     a rebuilt function as [Metadata_only] in [all_code] while the function body
+     still flows through here via [Static_const_or_code. Code]. *)
+  To_cmm_code_blocks.emit_code_block_for ~all_code:(To_cmm_env.all_code env)
+    code res
 
 let preallocate_set_of_closures (res, updates, env) ~closure_symbols
     set_of_closures =
@@ -239,12 +248,12 @@ let immutable_unboxed_int_array env res updates int_type ~symbol ~elts ~to_int64
     | Nativeint_u -> num_elts, UK.naked_int64s, Tags.unboxed_nativeint_array_tag
   in
   let header =
-    C.black_mixed_block_header tag num_fields ~scannable_prefix_len:0
+    C.unit_mixed_block_header tag num_fields ~scannable_prefix_len:0
   in
   let static_fields =
     immutable_unboxed_int_array_payload int_type num_fields ~elts ~to_int64
   in
-  let block = C.emit_block sym header static_fields in
+  let block = C.emit_unit_block sym header static_fields in
   let env, res, updates =
     static_unboxed_array_updates sym env res updates update_kind 0 elts
   in
@@ -260,7 +269,7 @@ let immutable_unboxed_float32_array env res updates ~symbol ~elts =
     else Tags.unboxed_float32_array_one_tag
   in
   let header =
-    C.black_mixed_block_header tag num_fields ~scannable_prefix_len:0
+    C.unit_mixed_block_header tag num_fields ~scannable_prefix_len:0
   in
   let static_fields =
     (* If the array has odd length, the last 32 bits are implicitly initialized
@@ -273,7 +282,7 @@ let immutable_unboxed_float32_array env res updates ~symbol ~elts =
            Cmm.Csingle (Numeric_types.Float32_by_bit_pattern.to_float f)))
       elts
   in
-  let block = C.emit_block sym header static_fields in
+  let block = C.emit_unit_block sym header static_fields in
   let env, res, updates =
     static_unboxed_array_updates sym env res updates UK.naked_float32s 0 elts
   in
@@ -285,12 +294,12 @@ let immutable_unboxed_vector_array ~default ~to_cmm ~update_kind ~tag
   let num_elts = List.length elts in
   let num_fields = num_elts * words_per_element in
   let header =
-    C.black_mixed_block_header tag num_fields ~scannable_prefix_len:0
+    C.unit_mixed_block_header tag num_fields ~scannable_prefix_len:0
   in
   let static_fields =
     List.map (Or_variable.value_map ~default ~f:to_cmm) elts
   in
-  let block = C.emit_block sym header static_fields in
+  let block = C.emit_unit_block sym header static_fields in
   let env, res, updates =
     static_unboxed_array_updates sym env res updates update_kind 0 elts
   in
@@ -350,9 +359,58 @@ let immutable_unboxed_mask_array =
     ~update_kind:UK.naked_mask_fields ~tag:Tags.unboxed_mask_array_tag
     ~words_per_element:1
 
+(* [zero_sized_static_tag const] is [Some tag] iff translating [const] for a
+   [Block_like] binding would emit a block with zero fields, where [tag] is the
+   tag that block would carry. This must mirror the emission cases in
+   [static_const0] and the [immutable_unboxed_*_array] helpers above. In
+   unloadable compilation units such constants are never emitted: the
+   heap-extent machinery cannot represent a freed zero-wosize block, so their
+   symbols are bound to the runtime's permanent atoms of the same tag instead
+   (see [static_consts0]). *)
+let zero_sized_static_tag (static_const : SC.t) : int option =
+  match static_const with
+  | Block (tag, _, Value_only, []) -> Some (Tag.Scannable.to_int tag)
+  | Block (tag, _, Mixed_record shape, _) when MBS.size_in_words shape = 0 ->
+    Some (Tag.Scannable.to_int tag)
+  | Empty_array _ ->
+    (* Recall: empty arrays have tag zero, whatever their kind. *)
+    Some 0
+  | Immutable_value_array [] -> Some 0
+  | Immutable_float_block [] | Immutable_float_array [] ->
+    Some (Tag.to_int Tag.double_array_tag)
+  | Immutable_float32_array [] -> Some Tags.unboxed_float32_array_zero_tag
+  | Immutable_int_array [] -> Some Tags.untagged_int_array_tag
+  | Immutable_int8_array [] -> Some (Tags.untagged_int8_array_tag 0)
+  | Immutable_int16_array [] -> Some (Tags.untagged_int16_array_tag 0)
+  | Immutable_int32_array [] -> Some Tags.unboxed_int32_array_zero_tag
+  | Immutable_int64_array [] -> Some Tags.unboxed_int64_array_tag
+  | Immutable_nativeint_array [] -> Some Tags.unboxed_nativeint_array_tag
+  | Immutable_vec128_array [] -> Some Tags.unboxed_vec128_array_tag
+  | Immutable_vec256_array [] -> Some Tags.unboxed_vec256_array_tag
+  | Immutable_vec512_array [] -> Some Tags.unboxed_vec512_array_tag
+  | Immutable_mask_array [] -> Some Tags.unboxed_mask_array_tag
+  | Block (_, _, (Value_only | Mixed_record _), _)
+  | Immutable_value_array _ | Immutable_float_block _ | Immutable_float_array _
+  | Immutable_float32_array _ | Immutable_int_array _ | Immutable_int8_array _
+  | Immutable_int16_array _ | Immutable_int32_array _ | Immutable_int64_array _
+  | Immutable_nativeint_array _ | Immutable_vec128_array _
+  | Immutable_vec256_array _ | Immutable_vec512_array _ | Immutable_mask_array _
+  | Boxed_float _ | Boxed_float32 _ | Boxed_int32 _ | Boxed_int64 _
+  | Boxed_nativeint _ | Boxed_vec128 _ | Boxed_vec256 _ | Boxed_vec512 _
+  | Boxed_mask _ | Immutable_string _ | Set_of_closures _ ->
+    None
+
 let static_const0 env res ~updates (bound_static : Bound_static.Pattern.t)
     (static_const : Static_const.t) =
   match bound_static, static_const with
+  | Block_like s, _
+    when !Clflags.unit_is_unloadable
+         && Option.is_some (zero_sized_static_tag static_const) ->
+    (* The symbol was bound to a runtime atom by the pre-pass in
+       [static_consts0]; no data is emitted for it. *)
+    assert (R.symbol_is_aliased_to_atom res s);
+    let res = R.check_for_module_symbol res s in
+    env, res, updates
   | Block_like s, Block (tag, mut, shape, fields) ->
     (match mut with
     | Immutable | Immutable_unique -> ()
@@ -371,16 +429,16 @@ let static_const0 env res ~updates (bound_static : Bound_static.Pattern.t)
       match shape with
       | Value_only ->
         ( List.init num_fields (fun _ -> Flambda_kind.value),
-          C.black_block_header tag num_fields )
+          C.unit_block_header tag num_fields )
       | Mixed_record shape ->
         ( MBS.field_kinds shape |> Array.to_list,
-          C.black_mixed_block_header tag (MBS.size_in_words shape)
+          C.unit_mixed_block_header tag (MBS.size_in_words shape)
             ~scannable_prefix_len:(MBS.value_prefix_size shape) )
     in
     let static_fields =
       Misc.Stdlib.List.concat_map2 (static_field res) fields field_kinds
     in
-    let block = C.emit_block sym header static_fields in
+    let block = C.emit_unit_block sym header static_fields in
     let update_kinds =
       match shape with
       | Value_only -> List.map (fun _ -> UK.pointers) fields
@@ -585,14 +643,14 @@ let static_const0 env res ~updates (bound_static : Bound_static.Pattern.t)
     immutable_unboxed_mask_array env res updates ~symbol ~elts
   | Block_like s, Immutable_value_array fields ->
     let sym = R.symbol res s in
-    let header = C.black_block_header 0 (List.length fields) in
+    let header = C.unit_block_header 0 (List.length fields) in
     let field_kinds =
       List.init (List.length fields) (fun _ -> Flambda_kind.value)
     in
     let static_fields =
       Misc.Stdlib.List.concat_map2 (static_field res) fields field_kinds
     in
-    let block = C.emit_block sym header static_fields in
+    let block = C.emit_unit_block sym header static_fields in
     let update_kinds = List.map (fun _ -> UK.pointers) fields in
     let env, res, updates =
       static_block_updates sym env res updates 0
@@ -604,58 +662,58 @@ let static_const0 env res ~updates (bound_static : Bound_static.Pattern.t)
     (* Recall: empty arrays have tag zero, even if their kind is naked float.
        Likewise arrays of unboxed products have tag zero. *)
     let sym = R.symbol res s in
-    let header = C.black_block_header 0 0 in
-    let block = C.emit_block sym header [] in
+    let header = C.unit_block_header 0 0 in
+    let block = C.emit_unit_block sym header [] in
     env, R.set_data res block, updates
   | Block_like s, Empty_array Naked_float32s ->
     let sym = R.symbol res s in
-    let header = C.black_block_header 0 0 in
-    let block = C.emit_block sym header [] in
+    let header = C.unit_block_header 0 0 in
+    let block = C.emit_unit_block sym header [] in
     env, R.set_data res block, updates
   | Block_like s, Empty_array Naked_ints ->
     let sym = R.symbol res s in
-    let header = C.black_block_header 0 0 in
-    let block = C.emit_block sym header [] in
+    let header = C.unit_block_header 0 0 in
+    let block = C.emit_unit_block sym header [] in
     env, R.set_data res block, updates
   | Block_like s, Empty_array Naked_int8s ->
     let sym = R.symbol res s in
-    let header = C.black_block_header 0 0 in
-    let block = C.emit_block sym header [] in
+    let header = C.unit_block_header 0 0 in
+    let block = C.emit_unit_block sym header [] in
     env, R.set_data res block, updates
   | Block_like s, Empty_array Naked_int16s ->
     let sym = R.symbol res s in
-    let header = C.black_block_header 0 0 in
-    let block = C.emit_block sym header [] in
+    let header = C.unit_block_header 0 0 in
+    let block = C.emit_unit_block sym header [] in
     env, R.set_data res block, updates
   | Block_like s, Empty_array Naked_int32s ->
     let sym = R.symbol res s in
-    let header = C.black_block_header 0 0 in
-    let block = C.emit_block sym header [] in
+    let header = C.unit_block_header 0 0 in
+    let block = C.emit_unit_block sym header [] in
     env, R.set_data res block, updates
   | Block_like s, Empty_array Naked_int64s ->
     let sym = R.symbol res s in
-    let header = C.black_block_header 0 0 in
-    let block = C.emit_block sym header [] in
+    let header = C.unit_block_header 0 0 in
+    let block = C.emit_unit_block sym header [] in
     env, R.set_data res block, updates
   | Block_like s, Empty_array Naked_nativeints ->
     let sym = R.symbol res s in
-    let header = C.black_block_header 0 0 in
-    let block = C.emit_block sym header [] in
+    let header = C.unit_block_header 0 0 in
+    let block = C.emit_unit_block sym header [] in
     env, R.set_data res block, updates
   | Block_like s, Empty_array Naked_vec128s ->
     let sym = R.symbol res s in
-    let header = C.black_block_header 0 0 in
-    let block = C.emit_block sym header [] in
+    let header = C.unit_block_header 0 0 in
+    let block = C.emit_unit_block sym header [] in
     env, R.set_data res block, updates
   | Block_like s, Empty_array Naked_vec256s ->
     let sym = R.symbol res s in
-    let header = C.black_block_header 0 0 in
-    let block = C.emit_block sym header [] in
+    let header = C.unit_block_header 0 0 in
+    let block = C.emit_unit_block sym header [] in
     env, R.set_data res block, updates
   | Block_like s, Empty_array Naked_vec512s ->
     let sym = R.symbol res s in
-    let header = C.black_block_header 0 0 in
-    let block = C.emit_block sym header [] in
+    let header = C.unit_block_header 0 0 in
+    let block = C.emit_unit_block sym header [] in
     env, R.set_data res block, updates
   | Block_like s, Empty_array Naked_masks ->
     let sym = R.symbol res s in
@@ -730,6 +788,24 @@ let static_consts0 env r ~params_and_body bound_static static_consts =
     Misc.fatal_errorf
       "Mismatch between [Bound_static] and [Static_const]s:@ %a@ =@ %a"
       Bound_static.print bound_static Static_const_group.print static_consts;
+  let r =
+    if not !Clflags.unit_is_unloadable
+    then r
+    else
+      (* Bind the symbols of zero-sized constants to the runtime's permanent
+         atoms before translating the group, so that references from other
+         members of this (possibly recursive) group already see the aliasing
+         (which forces such symbols [Global]; see
+         [To_cmm_result.alias_symbol_to_atom]). *)
+      ListLabels.fold_left2 bound_static' static_consts' ~init:r
+        ~f:(fun r pat (const : Static_const_or_code.t) ->
+          match[@ocaml.warning "-4"] (pat : Bound_static.Pattern.t), const with
+          | Block_like s, Static_const static_const -> (
+            match zero_sized_static_tag static_const with
+            | Some tag -> R.alias_symbol_to_atom r s ~tag
+            | None -> r)
+          | _, _ -> r)
+  in
   let r =
     ListLabels.fold_left static_consts' ~init:r ~f:(fun r static_const ->
         match Static_const_or_code.to_code static_const with

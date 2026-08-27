@@ -254,9 +254,13 @@ end = struct
         let (kind, params_ty, result_ty), closure_code_pointers, dbg =
           get_func_decl_params_arity env code_id
         in
+        let is_unloadable =
+          Env.get_code_metadata env code_id |> Code_metadata.is_unloadable
+        in
         let closure_info =
           C.closure_info' ~arity:(kind, params_ty)
             ~startenv:(startenv - slot_offset) ~is_last:last_function_slot
+            ~is_unloadable
         in
         (* We build here the **reverse** list of fields for the function slot *)
         match closure_code_pointers with
@@ -318,9 +322,13 @@ end = struct
              deleted of size %d"
             Function_slot.print function_slot size function_slot_size;
         let closure_info =
+          (* Deleted slots represent code that was eliminated; they don't carry
+             a live code pointer, so [is_unloadable] is irrelevant here — pick
+             [false] for safety. *)
           C.pack_closure_info
             ~arity:(if size = 2 then 1 else 2)
             ~startenv:(startenv - slot_offset) ~is_last:last_function_slot
+            ~is_unloadable:false
         in
         let acc, chunk_acc =
           match size with
@@ -462,6 +470,10 @@ let transl_regalloc_param_attrib :
 let transl_cold_attrib (cold : bool) : Cmm.codegen_option list =
   if cold then [Cmm.Cold] else []
 
+(* Translation of unloadable attribute on functions. *)
+let transl_unloadable_attrib (is_unloadable : bool) : Cmm.codegen_option list =
+  if is_unloadable then [Cmm.Unloadable] else []
+
 (* Translation of the bodies of functions. *)
 
 let params_and_body0 env res code_id ~result_arity ~fun_dbg
@@ -492,8 +504,8 @@ let params_and_body0 env res code_id ~result_arity ~fun_dbg
       (Flambda_arity.unarized_components result_arity)
   in
   let env =
-    Env.enter_function_body env ~return_continuation ~return_continuation_arity
-      ~exn_continuation
+    Env.enter_function_body env ~code_id ~return_continuation
+      ~return_continuation_arity ~exn_continuation
   in
   (* [my_region] can be referenced in [Begin_region] primitives so must be in
      the environment; however it should never end up in actual generated code,
@@ -554,11 +566,15 @@ let params_and_body0 env res code_id ~result_arity ~fun_dbg
     Env.get_code_metadata env code_id |> Code_metadata.regalloc_param_attribute
   in
   let cold = Env.get_code_metadata env code_id |> Code_metadata.cold in
+  let is_unloadable =
+    Env.get_code_metadata env code_id |> Code_metadata.is_unloadable
+  in
   let fun_flags =
     transl_check_attrib zero_alloc_attribute
     @ transl_regalloc_attrib regalloc_attribute
     @ transl_regalloc_param_attrib regalloc_param_attribute
     @ transl_cold_attrib cold
+    @ transl_unloadable_attrib is_unloadable
     @
     if Flambda_features.optimize_for_speed () then [] else [Cmm.Reduce_code_size]
   in
@@ -684,8 +700,12 @@ let let_static_set_of_closures0 env res closure_symbols
   let block =
     match l with
     | _ :: _ ->
-      let header = C.cint (C.black_closure_header length) in
-      header :: l
+      (* Static closure blocks are emitted with black (NOT_MARKABLE) headers in
+         all modes. For unloadable units, the block lives inside the
+         [unloadable_blocks_start]/[unloadable_blocks_end] bracket and is
+         donated to the major heap (with its header colour rewritten) by
+         [caml_activate_unloadable_unit] once the unit's initialiser has run. *)
+      C.cint (C.unit_closure_header length) :: l
     | [] ->
       Misc.fatal_error "Cannot statically allocate an empty set of closures"
   in
@@ -724,6 +744,28 @@ let lift_set_of_closures env res ~body ~bound_vars layout set
         cid, Symbol.manufacture comp_unit name)
       cids bound_vars
     |> Function_slot.Map.of_list
+  in
+  (* In an unloadable compilation unit, the fresh symbols just created are
+     invisible to the GC liveness machinery: they postdate simplification, so
+     they appear in no [Code.free_names_of_params_and_body] and hence in no
+     [Code_block] dependency fields, yet the enclosing function's machine code
+     references them directly. Record them against the enclosing function's code
+     ID so [To_cmm_code_blocks.emit_code_block_for] adds them to that function's
+     [Code_block] dependencies. When translating the unit initialization code
+     there is no enclosing code ID; that is fine, because the initializer runs
+     exactly once, before the unit's static blocks are donated to the heap, so
+     its code references to the lifted set no longer matter afterwards (any
+     escaping value keeps the block alive through ordinary heap edges). *)
+  let res =
+    if not !Clflags.unit_is_unloadable
+    then res
+    else
+      match Env.current_code_id env with
+      | None -> res
+      | Some enclosing_code_id ->
+        Function_slot.Map.fold
+          (fun _cid sym res -> R.add_code_dep_symbol res enclosing_code_id sym)
+          closure_symbols res
   in
   (* Statically allocate the set of closures *)
   let env, res, static_data, updates =

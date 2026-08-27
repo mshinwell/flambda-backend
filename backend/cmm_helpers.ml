@@ -299,6 +299,20 @@ let white_closure_header sz = block_header Obj.closure_tag sz
 
 let black_closure_header sz = black_block_header Obj.closure_tag sz
 
+(* CU-appropriate variants. Static data always gets black (NOT_MARKABLE)
+   headers, including for unloadable compilation units: an unloadable unit's
+   static blocks remain invisible to the GC (exactly like AOT static data) while
+   the unit's initialiser runs, and are only donated to the major heap
+   afterwards, by [caml_activate_unloadable_unit] — which forces every block
+   header to the current allocation colour at that point. These aliases mark the
+   emission sites whose blocks end up inside the donated region. *)
+let unit_block_header tag sz = black_block_header tag sz
+
+let unit_mixed_block_header tag sz ~scannable_prefix_len =
+  black_mixed_block_header tag sz ~scannable_prefix_len
+
+let unit_closure_header sz = black_closure_header sz
+
 let local_closure_header sz = local_block_header Obj.closure_tag sz
 
 let infix_header ofs = block_header Obj.infix_tag ofs
@@ -368,6 +382,8 @@ let boxedintnat_local_header = local_block_header Obj.custom_tag 2
 
 let black_custom_header ~size = black_block_header Obj.custom_tag size
 
+let unit_custom_header ~size = unit_block_header Obj.custom_tag size
+
 let caml_float32_ops = "caml_float32_ops"
 
 let caml_nativeint_ops = "caml_nativeint_ops"
@@ -379,9 +395,11 @@ let caml_int64_ops = "caml_int64_ops"
 let pos_arity_in_closinfo = (8 * size_addr) - 8
 (* arity = the top 8 bits of the closinfo word *)
 
-let pack_closure_info ~arity ~startenv ~is_last =
+let pack_closure_info ~arity ~startenv ~is_last ~is_unloadable =
   assert (-128 <= arity && arity <= 127);
-  assert (0 <= startenv && startenv < 1 lsl (pos_arity_in_closinfo - 2));
+  (* The "delta" / startenv field now occupies one less bit than before (we
+     stole the top bit for [is_unloadable]). *)
+  assert (0 <= startenv && startenv < 1 lsl (pos_arity_in_closinfo - 3));
   Nativeint.(
     add
       (shift_left (of_int arity) pos_arity_in_closinfo)
@@ -389,20 +407,24 @@ let pack_closure_info ~arity ~startenv ~is_last =
          (shift_left
             (Bool.to_int is_last |> Nativeint.of_int)
             (pos_arity_in_closinfo - 1))
-         (add (shift_left (of_int startenv) 1) 1n)))
+         (add
+            (shift_left
+               (Bool.to_int is_unloadable |> Nativeint.of_int)
+               (pos_arity_in_closinfo - 2))
+            (add (shift_left (of_int startenv) 1) 1n))))
 
-let closure_info' ~arity ~startenv ~is_last =
+let closure_info' ~arity ~startenv ~is_last ~is_unloadable =
   let arity =
     match arity with
     | Lambda.Tupled, l -> -List.length l
     | Lambda.Curried _, l -> List.length l
   in
-  pack_closure_info ~arity ~startenv ~is_last
+  pack_closure_info ~arity ~startenv ~is_last ~is_unloadable
 
-let closure_info ~(arity : arity) ~startenv ~is_last =
+let closure_info ~(arity : arity) ~startenv ~is_last ~is_unloadable =
   closure_info'
     ~arity:(arity.function_kind, arity.params_layout)
-    ~startenv ~is_last
+    ~startenv ~is_last ~is_unloadable
 
 let alloc_boxedfloat32_header (mode : Cmm.Alloc_mode.t) dbg =
   match mode with
@@ -1816,6 +1838,7 @@ let memory_chunk_width_in_bytes : memory_chunk -> int = function
   | Word_int -> size_int
   | Word_mask -> size_int
   | Word_val -> size_addr
+  | Word_code_pointer -> size_addr
   | Double -> size_float
   | Onetwentyeight_unaligned | Onetwentyeight_aligned -> size_vec128
   | Twofiftysix_unaligned | Twofiftysix_aligned -> size_vec256
@@ -2424,6 +2447,7 @@ module Extended_machtype_component = struct
     | Val -> Val
     | Addr -> Addr
     | Int -> Any_int
+    | Code_pointer -> Any_int
     | Float -> Float
     | Vec128 -> Vec128
     | Vec256 -> Vec256
@@ -2531,6 +2555,9 @@ let machtype_identifier t =
     | Addr ->
       Misc.fatal_error "[Addr] is forbidden inside arity for generic functions"
     | Valx2 -> Misc.fatal_error "Unexpected machtype_component Valx2"
+    | Code_pointer ->
+      Misc.fatal_error
+        "[Code_pointer] is forbidden inside arity for generic functions"
   in
   String.of_seq (Seq.map char_of_component (Array.to_seq t))
 
@@ -2588,7 +2615,7 @@ let memory_chunk_size_in_words_for_mixed_block = function
         "Unable to compile mixed blocks on a platform where a float is not the \
          same width as a value.";
     1
-  | Word_int | Word_mask | Word_val -> 1
+  | Word_int | Word_mask | Word_val | Word_code_pointer -> 1
   | Onetwentyeight_unaligned | Onetwentyeight_aligned -> 2
   | Twofiftysix_unaligned | Twofiftysix_aligned -> 4
   | Fivetwelve_unaligned | Fivetwelve_aligned -> 8
@@ -2602,7 +2629,7 @@ let alloc_generic_set_fn block ofs newval memory_chunk dbg =
   | Word_val ->
     (* Values must go through "caml_initialize" *)
     addr_array_initialize block ofs newval dbg
-  | Word_int | Word_mask -> generic_case ()
+  | Word_int | Word_mask | Word_code_pointer -> generic_case ()
   (* Generic cases that may differ under big endian archs *)
   | Single _ | Double | Thirtytwo_unsigned | Thirtytwo_signed
   | Onetwentyeight_unaligned | Onetwentyeight_aligned | Twofiftysix_unaligned
@@ -2717,7 +2744,7 @@ let make_mixed_alloc ~mode dbg ~tag ~value_prefix_size args args_memory_chunks =
         then
           (* regular scanned part of a block *)
           match memory_chunk with
-          | Word_int | Word_val -> ok ()
+          | Word_int | Word_val | Word_code_pointer -> ok ()
           | Byte_unsigned | Byte_signed | Sixteen_unsigned | Sixteen_signed
           | Thirtytwo_unsigned | Thirtytwo_signed | Single _ | Double
           | Onetwentyeight_unaligned | Onetwentyeight_aligned
@@ -2733,7 +2760,8 @@ let make_mixed_alloc ~mode dbg ~tag ~value_prefix_size args args_memory_chunks =
           | Fivetwelve_aligned | Single _ | Byte_unsigned | Byte_signed
           | Sixteen_unsigned | Sixteen_signed ->
             ok ()
-          | Word_val -> error "the flat suffix of a mixed block")
+          | Word_val -> error "the flat suffix of a mixed block"
+          | Word_code_pointer -> error "the flat suffix of a mixed block")
       0 args_memory_chunks
   in
   make_alloc_generic
@@ -4102,6 +4130,7 @@ let machtype_stored_size t =
       match (c : machtype_component) with
       | Addr -> Misc.fatal_error "[Addr] cannot be stored"
       | Valx2 -> Misc.fatal_error "Unexpected machtype_component Valx2"
+      | Code_pointer -> Misc.fatal_error "[Code_pointer] cannot be stored"
       | Val | Int -> cur + 1
       | Float -> cur + ints_per_float
       | Float32 ->
@@ -4119,6 +4148,7 @@ let machtype_non_scanned_size t =
       match (c : machtype_component) with
       | Addr -> Misc.fatal_error "[Addr] cannot be stored"
       | Valx2 -> Misc.fatal_error "Unexpected machtype_component Valx2"
+      | Code_pointer -> Misc.fatal_error "[Code_pointer] cannot be stored"
       | Val -> cur
       | Int -> cur + 1
       | Float -> cur + ints_per_float
@@ -4144,6 +4174,8 @@ let value_slot_given_machtype vs =
         | Int | Float | Float32 | Vec128 | Vec256 | Vec512 | Mask -> true
         | Val -> false
         | Valx2 -> Misc.fatal_error "Unexpected machtype_component Valx2"
+        | Code_pointer ->
+          Misc.fatal_error "[Code_pointer] cannot be a value slot"
         | Addr -> assert false)
       vs
   in
@@ -4184,6 +4216,8 @@ let read_from_closure_given_machtype t clos base_offset dbg =
           (non_scanned_pos + 1, scanned_pos), load Word_mask non_scanned_pos
         | Val -> (non_scanned_pos, scanned_pos + 1), load Word_val scanned_pos
         | Valx2 -> Misc.fatal_error "Unexpected machtype_component Valx2"
+        | Code_pointer ->
+          Misc.fatal_error "[Code_pointer] cannot be read from a closure slot"
         | Addr -> Misc.fatal_error "[Addr] cannot be read")
       (base_offset, base_offset + machtype_non_scanned_size t)
       (Array.to_list t)
@@ -4286,7 +4320,11 @@ let intermediate_curry_functions ~nlocal ~arity result =
                         ~startenv:
                           (function_slot_size
                           + machtype_non_scanned_size arg_type)
-                        ~is_last:true,
+                        ~is_last:true ~is_unloadable:false
+                      (* The curry trampoline itself is in shared,
+                         non-unloadable code; the underlying unloadable closure
+                         is captured in the env and tracked via its own closinfo
+                         bit. *),
                       dbg () ) ]
                 @ (if has_nary
                    then
@@ -4544,6 +4582,93 @@ let emit_block symb white_header cont =
   let black_header = Nativeint.logor white_header caml_black in
   (Cint black_header :: cdefine_symbol symb) @ cont
 
+(* Tracking of (function-entry linkage name) for each unloadable function in the
+   CU. The corresponding [Code_block] linkage name is reconstructed via
+   [code_block_symbol_name].
+
+   File-global state is OK here because compilation is serial (one CU per
+   process); concurrent CU compilation would need this threaded through the
+   to_cmm context. *)
+let unloadable_code_block_entries : string list ref = ref []
+
+let register_unloadable_code_block_entry entry_linkage_name =
+  if !Clflags.unit_is_unloadable
+  then
+    unloadable_code_block_entries
+      := entry_linkage_name :: !unloadable_code_block_entries
+
+let flush_unloadable_code_block_entries () =
+  let r = !unloadable_code_block_entries in
+  unloadable_code_block_entries := [];
+  r
+
+(* The runtime exports one symbol per possible tag, [caml_atom_<tag>], naming
+   the header word of the corresponding permanent zero-sized block (atom) in the
+   runtime's atom table (see runtime/caml/mlvalues.h). The atom's *value* is one
+   word past that header. *)
+let atom_symbol ~tag : Cmm.symbol =
+  { sym_name = Printf.sprintf "caml_atom_%d" tag; sym_global = Global }
+
+let atom_value_data_item ~tag = Cmm.Csymbol_offset (atom_symbol ~tag, size_addr)
+
+(* Symbols of the current (unloadable) CU whose values are the runtime's
+   permanent atoms rather than blocks emitted into the unit's donated
+   heap-extent region: the extent machinery cannot represent a freed zero-wosize
+   block, so [To_cmm] never emits zero-sized blocks into the bracket and instead
+   binds their symbols to [caml_atom_<tag>]'s value. The JIT loader flushes this
+   list after compiling the unit and registers each symbol in its symbol table
+   before relocation.
+
+   File-global state is OK here for the same reason as
+   [unloadable_code_block_entries] above. *)
+let unloadable_atom_aliased_symbols : (string * int) list ref = ref []
+
+let register_unloadable_atom_aliased_symbol sym_name ~tag =
+  assert !Clflags.unit_is_unloadable;
+  if
+    not
+      (List.exists
+         (fun (name, _) -> String.equal name sym_name)
+         !unloadable_atom_aliased_symbols)
+  then
+    unloadable_atom_aliased_symbols
+      := (sym_name, tag) :: !unloadable_atom_aliased_symbols
+
+let flush_unloadable_atom_aliased_symbols () =
+  let r = !unloadable_atom_aliased_symbols in
+  unloadable_atom_aliased_symbols := [];
+  r
+
+(* The known name of the sentinel array that lists every unloadable function in
+   the CU as (entry_address, code_block_address) pairs. Layout: [count; entry_1;
+   code_block_1; ...; entry_count; code_block_count]. *)
+let unloadable_code_blocks_symbol_basename = "unloadable_code_blocks"
+
+(* The known names (relative to the current compilation unit) of the symbols
+   bracketing the contiguous run of static data blocks in an unloadable CU. The
+   JIT loader passes the delimited region to the runtime, which donates it to
+   the major heap as a heap extent once the unit's initialiser has run
+   ([caml_activate_unloadable_unit]). Every emitted item between the two symbols
+   must be a well-formed block (header word followed by its fields), with no
+   padding in between: the extent machinery walks the region
+   header-by-header. *)
+let unloadable_blocks_start_symbol_basename = "unloadable_blocks_start"
+
+let unloadable_blocks_end_symbol_basename = "unloadable_blocks_end"
+
+(* CU-appropriate emit: currently identical to [emit_block]; the separate name
+   marks the emission sites for static data belonging to the CU under
+   compilation, i.e. blocks that (in unloadable mode) end up inside the
+   [unloadable_blocks_start]/[unloadable_blocks_end] bracket. Zero-wosize blocks
+   must never be emitted into the bracket: the heap-extent free-block encoding
+   stores the freed block's size in its first field, which a zero-wosize block
+   does not have. [To_cmm] instead binds the symbols of would-be zero-sized
+   blocks (empty arrays, the entry function's dependency-free [Code_block], an
+   empty module block) to the runtime's permanent atoms (see
+   [register_unloadable_atom_aliased_symbol]), and pads any other
+   dependency-free [Code_block] to one field. *)
+let emit_unit_block symb white_header cont = emit_block symb white_header cont
+
 let emit_string_constant_fields s cont =
   let n = size_int - 1 - (String.length s mod size_int) in
   Cstring s :: Cskip n :: Cint8 n :: cont
@@ -4566,41 +4691,43 @@ let emit_float32_constant symb f cont =
   (* Here we are relying on the fact that the data section is zero initialized
      by just using [Csingle] and not worrying about the high 64 bits of the
      relevant field. *)
-  emit_block symb boxedfloat32_header
+  emit_unit_block symb boxedfloat32_header
     (Csymbol_address (global_symbol caml_float32_ops) :: Csingle f :: cont)
 
 let emit_float_constant symb f cont =
-  emit_block symb float_header (Cdouble f :: cont)
+  emit_unit_block symb float_header (Cdouble f :: cont)
 
 let emit_string_constant symb s cont =
-  emit_block symb
+  emit_unit_block symb
     (string_header (String.length s))
     (emit_string_constant_fields s cont)
 
 let emit_int32_constant symb n cont =
-  emit_block symb boxedint32_header (emit_boxed_int32_constant_fields n cont)
+  emit_unit_block symb boxedint32_header
+    (emit_boxed_int32_constant_fields n cont)
 
 let emit_int64_constant symb n cont =
-  emit_block symb boxedint64_header (emit_boxed_int64_constant_fields n cont)
+  emit_unit_block symb boxedint64_header
+    (emit_boxed_int64_constant_fields n cont)
 
 let emit_nativeint_constant symb n cont =
-  emit_block symb boxedintnat_header
+  emit_unit_block symb boxedintnat_header
     (emit_boxed_nativeint_constant_fields n cont)
 
 let emit_vec128_constant symb bits cont =
-  emit_block symb boxedvec128_header (Cvec128 bits :: cont)
+  emit_unit_block symb boxedvec128_header (Cvec128 bits :: cont)
 
 let emit_vec256_constant symb bits cont =
-  emit_block symb boxedvec256_header (Cvec256 bits :: cont)
+  emit_unit_block symb boxedvec256_header (Cvec256 bits :: cont)
 
 let emit_vec512_constant symb bits cont =
-  emit_block symb boxedvec512_header (Cvec512 bits :: cont)
+  emit_unit_block symb boxedvec512_header (Cvec512 bits :: cont)
 
 let emit_mask_constant symb bits cont =
   emit_block symb boxedmask_header (Cint (Int64.to_nativeint bits) :: cont)
 
 let emit_float_array_constant symb fields cont =
-  emit_block symb
+  emit_unit_block symb
     (floatarray_header (List.length fields))
     (Misc.map_end (fun f -> Cdouble f) fields cont)
 
@@ -4628,6 +4755,9 @@ let make_symbol ?compilation_unit name =
    dissector's -u linker flags must all agree on this name. *)
 let entry_symbol_name ?compilation_unit () =
   make_symbol ?compilation_unit "entry"
+
+let code_block_symbol_name entry_linkage_name =
+  entry_linkage_name ^ "_code_block"
 
 (* Failure function for closures that should never be called indirectly *)
 
@@ -5226,7 +5356,11 @@ let indirect_full_call ~dbg ty pos f ~callees args_type args =
       | [] -> Misc.fatal_error "indirect_full_call: args_type was empty"
       | _ :: _ :: _ -> 2
     in
-    load ~dbg Word_int Asttypes.Mutable
+    (* Load the closure's code pointer with [Word_code_pointer] so the resulting
+       value carries the [Code_pointer] machtype. This lets the GC track the
+       pointer via the parallel [code_ptr_live_ofs] frame descriptor array if
+       the value is held live across a safepoint. *)
+    load ~dbg Word_code_pointer Asttypes.Mutable
       ~addr:(field_address (Cvar v) offset dbg)
   in
   letin v' ~defining_expr:f
