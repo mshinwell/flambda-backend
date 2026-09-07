@@ -1465,74 +1465,42 @@ let simplify_effect_op dacc apply (op : Call_kind.Effect.t) ~down_to_up =
 let redirect_direct_call_to_specialised_code denv apply =
   match Apply.callee apply, Apply.call_kind apply with
   | None, Function { function_call = Direct code_id } -> (
-    let[@inline] redirect_to new_code_id =
-      match DE.find_code_metadata_exn denv new_code_id with
-      | exception Not_found -> apply
-      | _code_metadata ->
-        Apply.with_call_kind apply (Call_kind.direct_function_call new_code_id)
-    in
     match DE.find_code_specialisation denv code_id with
     | None -> apply
-    | Some (Within_set_of_closures new_code_id) ->
-      (* A recursive call through the set's own closures: the arguments for the
-         lifted parameters are the function's own lifted parameters, so the
-         assumptions hold by construction. *)
-      redirect_to new_code_id
-    | Some (Outside_set_of_closures { new_code_id; specialised_value_slots })
-      -> (
-      match DE.find_code_exn denv new_code_id with
-      | exception Not_found -> apply
-      | code_or_metadata -> (
-        match Code_or_metadata.view code_or_metadata with
-        | Metadata_only _ -> apply
-        | Code_present code ->
-          let typing_env = DE.typing_env denv in
-          let canonical simple =
-            if TE.mem_simple ~min_name_mode:NM.in_types typing_env simple
-            then
-              match
-                TE.get_canonical_simple_exn ~min_name_mode:NM.in_types
-                  typing_env simple
-              with
-              | simple -> Some (Simple.without_coercion simple)
-              | exception Not_found -> None
-            else None
-          in
-          let args = Apply.args apply in
-          let assumptions_hold =
-            Function_params_and_body.pattern_match (Code.params_and_body code)
-              ~f:(fun
-                  ~return_continuation:_
-                  ~exn_continuation:_
-                  params
-                  ~body:_
-                  ~my_closure:_
-                  ~is_my_closure_used:_
-                  ~my_alloc_mode:_
-                  ~my_depth:_
-                  ~free_names_of_body:_
-                  ~specialised_params
-                ->
-                let assumption_holds param arg =
-                  match Variable.Map.find_opt param specialised_params with
-                  | None -> true
-                  | Some value_slot -> (
-                    match
-                      Value_slot.Map.find_opt value_slot specialised_value_slots
-                    with
-                    | None ->
-                      (* No assumption was made about this parameter. *)
-                      true
-                    | Some simple -> (
-                      match canonical arg, canonical simple with
-                      | Some arg, Some simple -> Simple.equal arg simple
-                      | None, _ | _, None -> false))
-                in
-                let params = Bound_parameters.vars params in
-                List.compare_lengths params args = 0
-                && List.for_all2 assumption_holds params args)
-          in
-          if assumptions_hold then redirect_to new_code_id else apply)))
+    | Some { new_code_id; assumptions } ->
+      let typing_env = DE.typing_env denv in
+      let canonical simple =
+        if TE.mem_simple ~min_name_mode:NM.in_types typing_env simple
+        then
+          match
+            TE.get_canonical_simple_exn ~min_name_mode:NM.in_types typing_env
+              simple
+          with
+          | simple -> Some (Simple.without_coercion simple)
+          | exception Not_found -> None
+        else None
+      in
+      let assumption_holds arg assumption =
+        match assumption with
+        | None -> true
+        | Some simple -> (
+          match canonical arg, canonical simple with
+          | Some arg, Some simple -> Simple.equal arg simple
+          | None, _ | _, None -> false)
+      in
+      let args = Apply.args apply in
+      if
+        List.compare_lengths args assumptions = 0
+        && List.for_all2 assumption_holds args assumptions
+      then (
+        (match DE.find_code_metadata_exn denv new_code_id with
+        | exception Not_found ->
+          Misc.fatal_errorf
+            "Code ID %a, the specialisation of %a, is not in scope for:@ %a"
+            Code_id.print new_code_id Code_id.print code_id Apply.print apply
+        | _code_metadata -> ());
+        Apply.with_call_kind apply (Call_kind.direct_function_call new_code_id))
+      else apply)
   | Some _, _
   | ( None,
       ( Function

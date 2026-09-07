@@ -809,6 +809,7 @@ let sets_of_closures env set1 set2 : Set_of_closures.t Comparison.t =
    * similar (and less worrisome) with function slots. *)
   let value_slots_by_value set =
     Value_slot.Map.bindings (Set_of_closures.value_slots set)
+    @ Value_slot.Map.bindings (Set_of_closures.specialised_value_slots set)
     |> List.map (fun (var, value) ->
         Value_slot.kind var, subst_simple env value, var)
   in

@@ -50,24 +50,22 @@ end
 
 module Code_specialisation = struct
   type t =
-    | Within_set_of_closures of Code_id.t
-    | Outside_set_of_closures of
-        { new_code_id : Code_id.t;
-          specialised_value_slots : Simple.t Value_slot.Map.t
-        }
+    { new_code_id : Code_id.t;
+      assumptions : Simple.t option list
+    }
 
-  let print ppf t =
-    match t with
-    | Within_set_of_closures new_code_id ->
-      Format.fprintf ppf "@[<hov 1>(Within_set_of_closures@ %a)@]" Code_id.print
-        new_code_id
-    | Outside_set_of_closures { new_code_id; specialised_value_slots } ->
-      Format.fprintf ppf
-        "@[<hov 1>(Outside_set_of_closures@ @[<hov 1>(new_code_id@ %a)@]@ \
-         @[<hov 1>(specialised_value_slots@ %a)@])@]"
-        Code_id.print new_code_id
-        (Value_slot.Map.print Simple.print)
-        specialised_value_slots
+  let print_assumption ppf assumption =
+    match assumption with
+    | None -> Format.pp_print_string ppf "_"
+    | Some simple -> Simple.print ppf simple
+
+  let print ppf { new_code_id; assumptions } =
+    Format.fprintf ppf
+      "@[<hov 1>(@[<hov 1>(new_code_id@ %a)@]@ @[<hov 1>(assumptions@ \
+       (%a))@])@]"
+      Code_id.print new_code_id
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space print_assumption)
+      assumptions
 end
 
 type t =

@@ -1,5 +1,5 @@
 (* TEST
-   modules = "specialise_lifted_function_chain_lib.ml specialise_lifted_function_chain_mid.ml";
+   modules = "specialise_lifted_function_lib.ml specialise_lifted_function_chain_mid.ml";
    flambda2;
    flags += "-O4";
    { native; }

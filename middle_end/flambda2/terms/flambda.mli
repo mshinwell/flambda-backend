@@ -547,10 +547,12 @@ module Function_params_and_body : sig
       'a) ->
     'a
 
-  (** The occurrences (as projections) of the value slots mentioned by the
+  (** The occurrences (as projections) of the value slots mentioned by the given
       specialised parameters. These must be included in the free names of any
-      code containing this abstraction, so that the slots are kept. *)
-  val free_names_of_specialised_params : t -> Name_occurrences.t
+      code whose abstraction has these specialised parameters, so that the slots
+      are kept. *)
+  val free_names_of_specialised_params :
+    Value_slot.t Variable.Map.t -> Name_occurrences.t
 
   (** Choose members of the alpha-equivalence classes of two definitions using
       the same names for the return continuation, the exception continuation,

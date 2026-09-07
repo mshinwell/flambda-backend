@@ -1097,9 +1097,7 @@ module Function_params_and_body = struct
       ~my_alloc_mode:(BFF.my_alloc_mode bff) ~my_depth:(BFF.my_depth bff)
       ~free_names_of_body:free_names ~specialised_params
 
-  let free_names_of_specialised_params t =
-    let open A in
-    let<> _bff, { expr = _; free_names = _; specialised_params } = t.abst in
+  let free_names_of_specialised_params specialised_params =
     Variable.Map.fold
       (fun _param value_slot free_names ->
         Name_occurrences.add_value_slot_in_projection free_names value_slot

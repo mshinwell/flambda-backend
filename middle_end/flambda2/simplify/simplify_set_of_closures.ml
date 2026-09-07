@@ -35,45 +35,35 @@ let add_specialised_param_equations denv ~params ~specialised_params
   if Variable.Map.is_empty specialised_params
   then denv, []
   else
-    let kinds =
-      List.fold_left
-        (fun kinds param ->
-          Variable.Map.add (BP.var param)
-            (K.With_subkind.kind (BP.kind param))
-            kinds)
-        Variable.Map.empty
-        (Bound_parameters.to_list params)
-    in
-    Variable.Map.fold
-      (fun param value_slot (denv, used_slots) ->
-        match Value_slot.Map.find_opt value_slot specialised_value_slots with
+    List.fold_left
+      (fun (denv, used_slots) param ->
+        let param_var = BP.var param in
+        match Variable.Map.find_opt param_var specialised_params with
         | None -> denv, used_slots
-        | Some simple ->
-          let kind =
-            match Variable.Map.find_opt param kinds with
-            | Some kind -> kind
-            | None ->
+        | Some value_slot -> (
+          match Value_slot.Map.find_opt value_slot specialised_value_slots with
+          | None -> denv, used_slots
+          | Some simple ->
+            let kind = K.With_subkind.kind (BP.kind param) in
+            let simple_kind =
+              Simple.pattern_match simple
+                ~const:(fun const -> Reg_width_const.kind const)
+                ~name:(fun name ~coercion:_ ->
+                  T.kind (TE.find (DE.typing_env denv) name None))
+            in
+            if not (K.equal kind simple_kind)
+            then
               Misc.fatal_errorf
-                "Specialised parameter %a is not a parameter of code ID %a"
-                Variable.print param Code_id.print code_id
-          in
-          let simple_kind =
-            Simple.pattern_match simple
-              ~const:(fun const -> Reg_width_const.kind const)
-              ~name:(fun name ~coercion:_ ->
-                T.kind (TE.find (DE.typing_env denv) name None))
-          in
-          if not (K.equal kind simple_kind)
-          then
-            Misc.fatal_errorf
-              "Specialised parameter %a of code ID %a has kind %a but value \
-               slot %a holds %a, of kind %a"
-              Variable.print param Code_id.print code_id K.print kind
-              Value_slot.print value_slot Simple.print simple K.print
-              simple_kind;
-          let ty = T.alias_type_of kind simple in
-          DE.add_equation_on_variable denv param ty, value_slot :: used_slots)
-      specialised_params (denv, [])
+                "Specialised parameter %a of code ID %a has kind %a but value \
+                 slot %a holds %a, of kind %a"
+                Variable.print param_var Code_id.print code_id K.print kind
+                Value_slot.print value_slot Simple.print simple K.print
+                simple_kind;
+            let ty = T.alias_type_of kind simple in
+            ( DE.add_equation_on_variable denv param_var ty,
+              value_slot :: used_slots )))
+      (denv, [])
+      (Bound_parameters.to_list params)
 
 let dacc_inside_function context ~outer_dacc ~params ~my_closure ~my_alloc_mode
     ~my_depth function_slot_opt ~closure_bound_names_inside_function
@@ -335,10 +325,9 @@ let simplify_function_body context ~outer_dacc function_slot_opt
           else Non_recursive
     in
     let free_names_of_code =
-      Variable.Map.fold
-        (fun _param value_slot free_names ->
-          NO.add_value_slot_in_projection free_names value_slot NM.normal)
-        specialised_params free_names_of_body
+      NO.union free_names_of_body
+        (Function_params_and_body.free_names_of_specialised_params
+           specialised_params)
       |> NO.remove_continuation ~continuation:return_continuation
       |> NO.remove_continuation ~continuation:exn_continuation
       |> NO.remove_var ~var:my_closure
@@ -745,30 +734,12 @@ let simplify_set_of_closures0 outer_dacc context set_of_closures alloc_mode
     DA.add_code_ids_to_never_delete dacc code_ids_to_never_delete_this_set
   in
   let dacc =
-    (* Record, for the scope of the binding of the set of closures, that the new
-       versions of the code were simplified under the assumptions given by the
-       specialised value slots. Direct calls with no callee to the old code may
-       then be redirected to the new code (see [Simplify_apply_expr]). *)
-    DA.map_denv dacc ~f:(fun denv ->
-        List.fold_left2
-          (fun denv (_function_slot, old_decl) (_, new_decl) ->
-            match
-              ( (old_decl
-                  : Function_declarations.code_id_in_function_declaration),
-                (new_decl
-                  : Function_declarations.code_id_in_function_declaration) )
-            with
-            | ( Code_id { code_id = old_code_id; _ },
-                Code_id { code_id = new_code_id; _ } )
-              when not (Code_id.equal old_code_id new_code_id) ->
-              DE.add_code_specialisation denv ~old_code_id
-                (Outside_set_of_closures
-                   { new_code_id; specialised_value_slots })
-            | (Deleted _ | Code_id _), (Deleted _ | Code_id _) -> denv)
-          denv
-          (Function_slot.Lmap.bindings
-             (Function_declarations.funs_in_order function_decls))
-          (Function_slot.Lmap.bindings all_function_decls_in_set))
+    (* Record, for the scope of the binding of the set of closures, the
+       assumptions under which the new versions of the code were simplified, so
+       that direct calls with no callee to the old code may be redirected to the
+       new code (see [Simplify_apply_expr]). *)
+    DA.map_denv dacc
+      ~f:(C.record_code_specialisations (C.code_specialisations context))
   in
   let closure_types_by_bound_name =
     let closure_types_via_aliases =
@@ -860,6 +831,7 @@ let simplify_and_lift_set_of_closures dacc ~closure_bound_vars_inverse
         [set_of_closures, Alloc_mode.For_allocations.as_type alloc_mode]
       ~closure_bound_names_all_sets:[closure_bound_names]
       ~value_slot_types_all_sets:[value_slot_types]
+      ~specialised_value_slots_all_sets:[specialised_value_slots]
       ~specialised_value_slot_types_all_sets:[specialised_value_slot_types]
   in
   let closure_bound_names_inside =
@@ -943,6 +915,7 @@ let simplify_non_lifted_set_of_closures0 dacc bound_vars ~closure_bound_vars
         [set_of_closures, Alloc_mode.For_allocations.as_type alloc_mode]
       ~closure_bound_names_all_sets:[closure_bound_names]
       ~value_slot_types_all_sets:[value_slot_types]
+      ~specialised_value_slots_all_sets:[specialised_value_slots]
       ~specialised_value_slot_types_all_sets:[specialised_value_slot_types]
   in
   let closure_bound_names_inside =
@@ -1054,7 +1027,7 @@ let type_value_slots_and_make_lifting_decision_for_one_set dacc
      closure declaration. (Such deletions end up occurring during the upwards
      traversal and during [To_cmm], by which time the necessary information is
      available.) *)
-  let value_slots, value_slot_types, symbol_projections =
+  let simplify_value_slots value_slots symbol_projections =
     Value_slot.Map.fold
       (fun value_slot env_entry
            (value_slots, value_slot_types, symbol_projections) ->
@@ -1084,23 +1057,19 @@ let type_value_slots_and_make_lifting_decision_for_one_set dacc
           Value_slot.Map.add value_slot ty value_slot_types
         in
         value_slots, value_slot_types, symbol_projections)
+      value_slots
+      (Value_slot.Map.empty, Value_slot.Map.empty, symbol_projections)
+  in
+  let value_slots, value_slot_types, symbol_projections =
+    simplify_value_slots
       (Set_of_closures.value_slots set_of_closures)
-      (Value_slot.Map.empty, Value_slot.Map.empty, Variable.Map.empty)
+      Variable.Map.empty
   in
-  let specialised_value_slots_and_types =
-    Value_slot.Map.map
-      (fun simple ->
-        let ty, simple =
-          S.simplify_simple dacc simple ~min_name_mode:name_mode_of_bound_vars
-        in
-        simple, ty)
+  let specialised_value_slots, specialised_value_slot_types, symbol_projections
+      =
+    simplify_value_slots
       (Set_of_closures.specialised_value_slots set_of_closures)
-  in
-  let specialised_value_slots =
-    Value_slot.Map.map fst specialised_value_slots_and_types
-  in
-  let specialised_value_slot_types =
-    Value_slot.Map.map snd specialised_value_slots_and_types
+      symbol_projections
   in
   let can_lift_coercion coercion =
     NO.no_variables (Coercion.free_names coercion)
@@ -1156,7 +1125,8 @@ let type_value_slots_and_make_lifting_decision_for_one_set dacc
          ~const:(fun _ -> true)
          ~symbol:(fun _ ~coercion:_ -> true)
          ~var:(fun var ~coercion:_ ->
-           DE.is_defined_at_toplevel (DA.denv dacc) var)
+           Variable.Map.mem var symbol_projections
+           || DE.is_defined_at_toplevel (DA.denv dacc) var)
   in
   let can_lift =
     Name_mode.is_normal name_mode_of_bound_vars
@@ -1288,6 +1258,11 @@ let simplify_lifted_sets_of_closures dacc ~all_sets_of_closures_and_symbols
       (fun (_, value_slot_types, _, _) -> value_slot_types)
       value_slots_and_types_all_sets
   in
+  let specialised_value_slots_all_sets =
+    List.map
+      (fun (_, _, specialised_value_slots, _) -> specialised_value_slots)
+      value_slots_and_types_all_sets
+  in
   let specialised_value_slot_types_all_sets =
     List.map
       (fun (_, _, _, specialised_value_slot_types) ->
@@ -1297,7 +1272,8 @@ let simplify_lifted_sets_of_closures dacc ~all_sets_of_closures_and_symbols
   let context =
     C.create ~dacc_prior_to_sets:dacc ~simplify_function_body
       ~all_sets_of_closures ~closure_bound_names_all_sets
-      ~value_slot_types_all_sets ~specialised_value_slot_types_all_sets
+      ~value_slot_types_all_sets ~specialised_value_slots_all_sets
+      ~specialised_value_slot_types_all_sets
   in
   let closure_bound_names_inside_functions_all_sets =
     C.closure_bound_names_inside_functions_all_sets context

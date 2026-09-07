@@ -129,14 +129,20 @@ let record_set_of_closures_deps denv names_and_function_slots set_of_closures
   Acc.add_set_of_closures acc names_and_code_ids;
   Function_slot.Lmap.iter
     (fun _function_slot function_slot_name ->
-      Value_slot.Map.iter
-        (fun value_slot simple ->
-          let from = Acc.simple_to_node acc ~denv simple in
-          Acc.add_constructor_dep acc
-            ~base:(Code_id_or_name.name function_slot_name)
-            (Field.value_slot value_slot)
-            ~from)
+      let add_value_slot_dep value_slot simple =
+        let from = Acc.simple_to_node acc ~denv simple in
+        Acc.add_constructor_dep acc
+          ~base:(Code_id_or_name.name function_slot_name)
+          (Field.value_slot value_slot)
+          ~from
+      in
+      Value_slot.Map.iter add_value_slot_dep
         (Set_of_closures.value_slots set_of_closures);
+      (* The specialised value slots are never projected, so this does not keep
+         their contents alive; if the contents no longer exist after rebuilding,
+         the slots are dropped (see [Rebuild.rewrite_specialised_simple]). *)
+      Value_slot.Map.iter add_value_slot_dep
+        (Set_of_closures.specialised_value_slots set_of_closures);
       Function_slot.Lmap.iter
         (fun function_slot name ->
           Acc.add_constructor_dep acc
@@ -144,18 +150,7 @@ let record_set_of_closures_deps denv names_and_function_slots set_of_closures
             (Field.function_slot function_slot)
             ~from:(Code_id_or_name.name name))
         names_and_function_slots)
-    names_and_function_slots;
-  (* The specialised value slots are not read at runtime, but the values they
-     hold must stay alive as long as the set of closures does, so that they can
-     still be used by a later run of the simplifier. *)
-  Value_slot.Map.iter
-    (fun _value_slot simple ->
-      let from = Acc.simple_to_node acc ~denv simple in
-      Function_slot.Lmap.iter
-        (fun _function_slot name ->
-          Acc.add_use_dep acc ~to_:(Code_id_or_name.name name) ~from)
-        names_and_function_slots)
-    (Set_of_closures.specialised_value_slots set_of_closures)
+    names_and_function_slots
 
 let traverse_prim denv acc ~bound_pattern (prim : Flambda_primitive.t) ~default
     ~(default_bp : (Code_id_or_name.t -> unit) -> unit) =

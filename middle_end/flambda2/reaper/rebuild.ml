@@ -49,6 +49,34 @@ type should_preserve_direct_calls =
   | No
   | Auto
 
+(* Value slots indexed by a path of fields (see
+   [specialised_value_slot_for_leaf]). *)
+module Leaf_slots = struct
+  type t =
+    { here : Value_slot.t option;
+      nested : t Field.Map.t
+    }
+
+  let empty = { here = None; nested = Field.Map.empty }
+
+  let rec find_opt t path =
+    match path with
+    | [] -> t.here
+    | field :: path -> (
+      match Field.Map.find_opt field t.nested with
+      | None -> None
+      | Some t -> find_opt t path)
+
+  let rec add t path slot =
+    match path with
+    | [] -> { t with here = Some slot }
+    | field :: path ->
+      let nested_t =
+        Option.value (Field.Map.find_opt field t.nested) ~default:empty
+      in
+      { t with nested = Field.Map.add field (add nested_t path slot) t.nested }
+end
+
 type env =
   { machine_width : Target_system.Machine_width.t;
     uses : Unboxing_analysis.result;
@@ -70,10 +98,10 @@ type env =
         (* Variables bound to the sets of closures left behind when unboxing
            (see [rebuild_specialisation_carrier]), indexed by the variables
            bound to the original sets. *)
-    nested_specialised_slots : (string, Value_slot.t) Hashtbl.t
+    nested_specialised_slots : Leaf_slots.t Value_slot.Map.t ref
         (* Specialised value slots created for the parameters corresponding to
-           unboxed value slots, or fields thereof (see
-           [specialised_value_slot_for_leaf]). *)
+           unboxed value slots, or fields thereof, indexed by the value slot and
+           the path of fields (see [specialised_value_slot_for_leaf]). *)
   }
 
 type rebuild_result =
@@ -299,11 +327,9 @@ let function_params_and_body_free_names fpb =
         | Known f -> f
       in
       let f =
-        Variable.Map.fold
-          (fun _param value_slot f ->
-            Name_occurrences.add_value_slot_in_projection f value_slot
-              Name_mode.normal)
-          specialised_params f
+        Name_occurrences.union f
+          (Function_params_and_body.free_names_of_specialised_params
+             specialised_params)
       in
       let f =
         Name_occurrences.remove_continuation f ~continuation:return_continuation
@@ -451,13 +477,12 @@ let unboxed_closure_leaves (fields : Variable.t Unboxed_fields.t) =
    [rebuild_specialisation_carrier]). The slot must be the same for all the
    functions of a given set of closures, hence the memoisation. *)
 let specialised_value_slot_for_leaf env value_slot (nested : Field.t list) =
-  let key =
-    Format.asprintf "%a%a" Value_slot.print value_slot
-      (Format.pp_print_list (fun ppf field ->
-           Format.fprintf ppf ".%a" Field.print field))
-      nested
+  let leaf_slots =
+    Option.value
+      (Value_slot.Map.find_opt value_slot !(env.nested_specialised_slots))
+      ~default:Leaf_slots.empty
   in
-  match Hashtbl.find_opt env.nested_specialised_slots key with
+  match Leaf_slots.find_opt leaf_slots nested with
   | Some slot -> slot
   | None ->
     let print_field ppf field =
@@ -479,7 +504,10 @@ let specialised_value_slot_for_leaf env value_slot (nested : Field.t list) =
         (Current_unit.get_cu_exn ())
         ~name ~is_always_immediate:false kind
     in
-    Hashtbl.replace env.nested_specialised_slots key slot;
+    env.nested_specialised_slots
+      := Value_slot.Map.add value_slot
+           (Leaf_slots.add leaf_slots nested slot)
+           !(env.nested_specialised_slots);
     slot
 
 (* The variable holding the given nested field of an unboxed value. *)
@@ -618,6 +646,32 @@ let size_of_set_of_closures env res set_of_closures =
          })
        set_of_closures)
 
+(* The declaration of a function in a rebuilt set of closures: deleted if the
+   function is not used, and otherwise marked as only being fully applied if its
+   calling convention has changed. *)
+let rewrite_function_decl env
+    (decl : Function_declarations.code_id_in_function_declaration) ~is_used :
+    Function_declarations.code_id_in_function_declaration =
+  match decl with
+  | Deleted _ -> decl
+  | Code_id { code_id; only_full_applications } ->
+    if is_used
+    then
+      let changed_calling_convention =
+        not (Analysis.cannot_change_calling_convention env.uses code_id)
+      in
+      Code_id
+        { code_id;
+          only_full_applications =
+            only_full_applications || changed_calling_convention
+        }
+    else
+      let code_metadata = env.get_code_metadata code_id in
+      Deleted
+        { function_slot_size = Code_metadata.function_slot_size code_metadata;
+          dbg = Code_metadata.dbg code_metadata
+        }
+
 let rewrite_set_of_closures env res ~(bound : Name.t list) ~is_phantom
     ({ Rev_expr.function_decls; value_slots; specialised_value_slots } :
       Rev_expr.rev_set_of_closures) =
@@ -718,31 +772,11 @@ let rewrite_set_of_closures env res ~(bound : Name.t list) ~is_phantom
       in
       value_slots, function_slots
   in
-  let open Function_declarations in
   let function_decls =
     List.map2
-      (fun bound_name (function_slot, code_id) ->
-        let code_id =
-          match code_id with
-          | Deleted _ -> code_id
-          | Code_id { code_id; only_full_applications } ->
-            if code_is_used bound_name
-            then
-              let changed_calling_convention =
-                not (Analysis.cannot_change_calling_convention env.uses code_id)
-              in
-              Code_id
-                { code_id;
-                  only_full_applications =
-                    only_full_applications || changed_calling_convention
-                }
-            else
-              let code_metadata = env.get_code_metadata code_id in
-              Deleted
-                { function_slot_size =
-                    Code_metadata.function_slot_size code_metadata;
-                  dbg = Code_metadata.dbg code_metadata
-                }
+      (fun bound_name (function_slot, decl) ->
+        let decl =
+          rewrite_function_decl env decl ~is_used:(code_is_used bound_name)
         in
         let function_slot =
           match function_slot_rewrites with
@@ -756,7 +790,7 @@ let rewrite_set_of_closures env res ~(bound : Name.t list) ~is_phantom
               Misc.fatal_errorf "Could not find rewritten function slot for %a"
                 Function_slot.print function_slot)
         in
-        function_slot, code_id)
+        function_slot, decl)
       bound
       (Function_slot.Lmap.bindings
          (Function_declarations.funs_in_order function_decls))
@@ -1817,8 +1851,11 @@ let rebuild_singleton_binding_which_is_being_unboxed env bv
    parameter corresponds to which slot (see [rebuild_function_params_and_body]).
    Direct calls to the lifted functions that used the original closures as
    callee use the new set of closures instead (see [rebuild_apply]); the calls
-   inside the functions themselves have no callee. Since the set of closures is
-   closed, [To_cmm] allocates it statically. *)
+   inside the functions themselves have no callee. The set of closures is needed
+   even if no call uses it as callee: it is by simplifying its binding that a
+   later run of the simplifier learns the assumptions and redirects the calls
+   with no callee. Since the set of closures is closed, [To_cmm] allocates it
+   statically. *)
 let rebuild_specialisation_carrier env res bvs
     ~(set_of_closures : Rev_expr.rev_set_of_closures) ~alloc_mode ~hole =
   let value_slots = set_of_closures.value_slots in
@@ -1838,58 +1875,53 @@ let rebuild_specialisation_carrier env res bvs
   let has_specialised_value_slots =
     not (Value_slot.Map.is_empty set_of_closures.specialised_value_slots)
   in
-  if
-    not
-      (set_of_closures_gets_carrier env ~code_ids ~has_specialised_value_slots)
-  then hole, res
-  else
-    let function_decls =
-      List.map
-        (fun ( function_slot,
-               (decl : Function_declarations.code_id_in_function_declaration) )
-           ->
-          match decl with
-          | Deleted _ -> function_slot, decl
-          | Code_id { code_id; only_full_applications } ->
-            if not (is_code_id_used env code_id)
-            then
-              let code_metadata = env.get_code_metadata code_id in
-              ( function_slot,
-                Function_declarations.Deleted
-                  { function_slot_size =
-                      Code_metadata.function_slot_size code_metadata;
-                    dbg = Code_metadata.dbg code_metadata
-                  } )
-            else
-              let changed_calling_convention =
-                not (Analysis.cannot_change_calling_convention env.uses code_id)
-              in
-              ( function_slot,
-                Function_declarations.Code_id
-                  { code_id;
-                    only_full_applications =
-                      only_full_applications || changed_calling_convention
-                  } ))
-        function_decls
-    in
+  (* Functions that are never called are left out: the closures are only ever
+     used as callees, so the layout of the set does not matter. *)
+  let function_decls_and_bvs =
+    List.filter_map
+      (fun ( ( function_slot,
+               (decl : Function_declarations.code_id_in_function_declaration) ),
+             bv ) ->
+        match decl with
+        | Deleted _ -> None
+        | Code_id { code_id; only_full_applications = _ } ->
+          if is_code_id_used env code_id
+          then
+            Some
+              ((function_slot, rewrite_function_decl env decl ~is_used:true), bv)
+          else None)
+      (List.combine function_decls bvs)
+  in
+  match function_decls_and_bvs with
+  | [] -> hole, res
+  | _ :: _
+    when not
+           (set_of_closures_gets_carrier env ~code_ids
+              ~has_specialised_value_slots) ->
+    hole, res
+  | _ :: _ ->
+    let function_decls, bvs = List.split function_decls_and_bvs in
     let specialised_value_slots =
       List.fold_left
-        (fun slots code_id ->
-          match
-            Unboxing_analysis.my_closure_decision env.calling_convention_changes
-              code_id
-          with
-          | None | Some Keep_my_closure -> slots
-          | Some (Unbox_my_closure fields) ->
-            Value_slot.Map.union
-              (fun _ simple _ -> Some simple)
-              slots
-              (specialised_value_slots_of_unboxed_closure env ~value_slots
-                 fields))
+        (fun slots
+             (_, (decl : Function_declarations.code_id_in_function_declaration))
+           ->
+          match decl with
+          | Deleted _ -> slots
+          | Code_id { code_id; only_full_applications = _ } -> (
+            match
+              Unboxing_analysis.my_closure_decision
+                env.calling_convention_changes code_id
+            with
+            | None | Some Keep_my_closure -> slots
+            | Some (Unbox_my_closure fields) ->
+              Value_slot.Map.union_left_biased slots
+                (specialised_value_slots_of_unboxed_closure env ~value_slots
+                   fields)))
         (Value_slot.Map.filter_map
            (fun _ simple -> rewrite_specialised_simple env simple)
            set_of_closures.specialised_value_slots)
-        code_ids
+        function_decls
     in
     let set_of_closures =
       Set_of_closures.create ~specialised_value_slots
@@ -2737,8 +2769,7 @@ and rebuild_function_params_and_body (env : env) res code_metadata
       match my_closure_decision with
       | Delete | Keep _ -> specialised_params
       | Unbox fields ->
-        Variable.Map.union
-          (fun _ slot _ -> Some slot)
+        Variable.Map.disjoint_union
           (specialised_params_of_unboxed_closure env fields)
           specialised_params
     in
@@ -2917,7 +2948,7 @@ let rebuild ~machine_width ~(code_deps : Traverse_acc.code_dep Code_id.Map.t)
       types_rewrite_context;
       dynamic_sets_of_closures;
       carrier_vars = ref Variable.Map.empty;
-      nested_specialised_slots = Hashtbl.create 7
+      nested_specialised_slots = ref Value_slot.Map.empty
     }
   in
   let res =

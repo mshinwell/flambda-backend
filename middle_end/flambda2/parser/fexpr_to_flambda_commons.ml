@@ -183,11 +183,18 @@ let fresh_value_slot ?is_specialised env { Fexpr.txt = name; loc = _ } kind =
   WT.add env.vars_within_closures name c;
   c
 
-let fresh_or_existing_value_slot ?is_specialised env
+let fresh_or_existing_value_slot ?(is_specialised = false) env
     ({ Fexpr.txt = name; _ } as id) kind =
   match WT.find_opt env.vars_within_closures name with
-  | None -> fresh_value_slot ?is_specialised env id kind
-  | Some value_slot -> value_slot
+  | None -> fresh_value_slot ~is_specialised env id kind
+  | Some value_slot ->
+    if not (Bool.equal is_specialised (Value_slot.is_specialised value_slot))
+    then
+      Misc.fatal_errorf
+        "Value slot %s is used both as a specialised and as an ordinary value \
+         slot"
+        name;
+    value_slot
 
 let print_scoped_location ppf loc =
   match (loc : Lambda.scoped_location) with

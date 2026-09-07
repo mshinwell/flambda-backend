@@ -81,6 +81,25 @@ let is_empty { function_decls; value_slots; specialised_value_slots = _ } =
 
 let create ?(specialised_value_slots = Value_slot.Map.empty) ~value_slots
     function_decls =
+  if Flambda_features.check_invariants ()
+  then (
+    Value_slot.Map.iter
+      (fun value_slot _ ->
+        if not (Value_slot.is_specialised value_slot)
+        then
+          Misc.fatal_errorf
+            "Value slot %a used as a specialised value slot was not created as \
+             such"
+            Value_slot.print value_slot)
+      specialised_value_slots;
+    Value_slot.Map.iter
+      (fun value_slot _ ->
+        if Value_slot.is_specialised value_slot
+        then
+          Misc.fatal_errorf
+            "Specialised value slot %a cannot be used as an ordinary value slot"
+            Value_slot.print value_slot)
+      value_slots);
   { function_decls; value_slots; specialised_value_slots }
 
 let function_decls t = t.function_decls
@@ -88,9 +107,6 @@ let function_decls t = t.function_decls
 let value_slots t = t.value_slots
 
 let specialised_value_slots t = t.specialised_value_slots
-
-let with_specialised_value_slots t specialised_value_slots =
-  { t with specialised_value_slots }
 
 let is_closed t = Value_slot.Map.is_empty t.value_slots
 
@@ -153,46 +169,29 @@ let apply_renaming
   let function_decls' =
     Function_declarations.apply_renaming function_decls renaming
   in
-  let rename_slots slots changed =
-    Value_slot.Map.filter_map
-      (fun var simple ->
-        if Renaming.value_slot_is_used renaming var
-        then (
-          let simple' = Simple.apply_renaming simple renaming in
-          if not (simple == simple') then changed := true;
-          Some simple')
-        else (
-          changed := true;
-          None))
-      slots
+  let rename_slots slots =
+    let changed = ref false in
+    let slots' =
+      Value_slot.Map.filter_map
+        (fun var simple ->
+          if Renaming.value_slot_is_used renaming var
+          then (
+            let simple' = Simple.apply_renaming simple renaming in
+            if not (simple == simple') then changed := true;
+            Some simple')
+          else (
+            changed := true;
+            None))
+        slots
+    in
+    if !changed then slots' else slots
   in
-  let specialised_changed = ref false in
-  let specialised_value_slots' =
-    rename_slots specialised_value_slots specialised_changed
-  in
-  let specialised_value_slots' =
-    if !specialised_changed
-    then specialised_value_slots'
-    else specialised_value_slots
-  in
-  let changed = ref false in
-  let value_slots' =
-    Value_slot.Map.filter_map
-      (fun var simple ->
-        if Renaming.value_slot_is_used renaming var
-        then (
-          let simple' = Simple.apply_renaming simple renaming in
-          if not (simple == simple') then changed := true;
-          Some simple')
-        else (
-          changed := true;
-          None))
-      value_slots
-  in
+  let value_slots' = rename_slots value_slots in
+  let specialised_value_slots' = rename_slots specialised_value_slots in
   if
     function_decls == function_decls'
+    && value_slots == value_slots'
     && specialised_value_slots == specialised_value_slots'
-    && not !changed
   then t
   else
     { function_decls = function_decls';

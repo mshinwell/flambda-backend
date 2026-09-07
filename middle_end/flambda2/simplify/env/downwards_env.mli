@@ -276,20 +276,16 @@ val set_has_seen_a_non_liftable_continuation : t -> t
     [Function_params_and_body] and [Set_of_closures.specialised_value_slots]. *)
 module Code_specialisation : sig
   type t =
-    | Within_set_of_closures of Code_id.t
-        (** Recorded while simplifying the bodies of the functions of the set of
-            closures that produced the new version: any such call is a recursive
-            call through the set's own closures, so it is redirected
-            unconditionally, just as calls with a callee are via the closure
-            types. *)
-    | Outside_set_of_closures of
-        { new_code_id : Code_id.t;
-          specialised_value_slots : Simple.t Value_slot.Map.t
-        }
-        (** Recorded for the scope of the binding of the set of closures. A call
-            is redirected only if its arguments provably satisfy the assumptions
-            under which [new_code_id] was simplified (since several sets of
-            closures for the same code may be in scope). *)
+    { new_code_id : Code_id.t;
+      assumptions : Simple.t option list
+          (** For each parameter of the code, in order, the value that the
+              corresponding argument must be known to be equal to for a call to
+              be redirected, [new_code_id] having been simplified under the
+              assumption that the parameter holds that value. This is checked
+              even inside the functions of the set of closures that produced the
+              new version, since inlining may bring calls made under different
+              assumptions into scope. *)
+    }
 end
 
 val add_code_specialisation :

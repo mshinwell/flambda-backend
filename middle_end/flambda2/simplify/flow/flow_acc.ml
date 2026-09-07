@@ -438,7 +438,13 @@ let record_lifted_constant_definition_aux ~being_defined elt definition =
           (Function_declarations.free_names
              (Set_of_closures.function_decls set_of_closures))
       in
-      let value_slots = Set_of_closures.value_slots set_of_closures in
+      let value_slots =
+        (* The contents of the specialised value slots are required, like those
+           of the ordinary value slots, if the slots are used. *)
+        Value_slot.Map.disjoint_union
+          (Set_of_closures.value_slots set_of_closures)
+          (Set_of_closures.specialised_value_slots set_of_closures)
+      in
       Function_slot.Lmap.fold
         (record_lifted_function_slot_aux ~free_names ~value_slots)
         closure_symbols_with_types elt

@@ -4,4 +4,4 @@
    survive into the inlinable body of [my_map]. *)
 
 let[@inline] my_map (f @ local) (l @ local) = exclave_
-  Specialise_lifted_function_chain_lib.map_stack f l
+  Specialise_lifted_function_lib.map_stack f l

@@ -49,8 +49,6 @@ val value_slots : t -> Simple.t Value_slot.Map.t
     not project these slots. Dropping any of them is always sound. *)
 val specialised_value_slots : t -> Simple.t Value_slot.Map.t
 
-val with_specialised_value_slots : t -> Simple.t Value_slot.Map.t -> t
-
 (** Returns true iff the given set of closures has no value slots. *)
 val is_closed : t -> bool
 
