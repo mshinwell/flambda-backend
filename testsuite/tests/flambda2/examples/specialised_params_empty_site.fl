@@ -3,7 +3,7 @@
  ocamlopt_flags += " -flambda2-reaper -dflambda-invariants";
  flambda2;
  setup-simple-build-env;
- fexpr with dump-raw, dump-simplify, dump-reaper;
+ fexpr with dump-simplify, dump-reaper;
 *)
 
 (* A specialisation site remains useful after its synthetic slots are removed.

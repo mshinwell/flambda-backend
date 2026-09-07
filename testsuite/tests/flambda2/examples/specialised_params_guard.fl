@@ -3,7 +3,7 @@
  ocamlopt_flags += " -dflambda-invariants";
  flambda2;
  setup-simple-build-env;
- fexpr with dump-raw, dump-simplify;
+ fexpr with dump-simplify;
 *)
 
 (* Only the call whose argument is known to equal [$square] may use the

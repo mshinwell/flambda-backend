@@ -4,7 +4,7 @@
  flambda2;
  setup-simple-build-env;
  {
-   fexpr with dump-raw, dump-simplify;
+   fexpr with dump-simplify;
  }{
    ocamlopt_flags += " -g -flambda2-expert-phantom-lets";
    fexpr_reference_suffix = "debug.reference";
