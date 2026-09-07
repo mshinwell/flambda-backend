@@ -114,6 +114,7 @@ let find_code_characteristics find_code_metadata code_id :
 let create_set_of_closures are_rebuilding ~find_code_metadata set =
   let set =
     Set_of_closures.create
+      ~specialised_value_slots:(Set_of_closures.specialised_value_slots set)
       ~value_slots:(Set_of_closures.value_slots set)
       (Set_of_closures.function_decls set)
   in
@@ -474,7 +475,7 @@ module Group = struct
          ~return_continuation:(Continuation.create ())
          ~exn_continuation:(Continuation.create ()) Bound_parameters.empty
          ~body:(Expr.create_invalid Code_not_rebuilt)
-         ~free_names_of_body:Unknown
+         ~free_names_of_body:Unknown ~specialised_params:Variable.Map.empty
          ~my_closure:(Variable.create "my_closure" Flambda_kind.value)
          ~my_alloc_mode:
            (Alloc_mode.For_applications.not_alloc_stack

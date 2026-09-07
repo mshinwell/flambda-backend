@@ -278,7 +278,14 @@ let subst_set_of_closures env set =
         subst_value_slot env var, subst_simple env simple)
     |> Value_slot.Map.of_list
   in
-  Set_of_closures.create ~value_slots decls
+  let specialised_value_slots =
+    Set_of_closures.specialised_value_slots set
+    |> Value_slot.Map.bindings
+    |> List.map (fun (var, simple) ->
+        subst_value_slot env var, subst_simple env simple)
+    |> Value_slot.Map.of_list
+  in
+  Set_of_closures.create ~specialised_value_slots ~value_slots decls
 
 let subst_rec_info_expr _env ri =
   (* Only depth variables can occur in [Rec_info_expr], and we only mess with
@@ -395,10 +402,15 @@ and subst_params_and_body env params_and_body =
         ~my_alloc_mode
         ~my_depth
         ~free_names_of_body
+        ~specialised_params
       ->
       let body = subst_expr env body in
+      let specialised_params =
+        Variable.Map.map (subst_value_slot env) specialised_params
+      in
       Function_params_and_body.create ~return_continuation ~exn_continuation
-        params ~body ~my_closure ~my_alloc_mode ~free_names_of_body ~my_depth)
+        params ~body ~my_closure ~my_alloc_mode ~free_names_of_body ~my_depth
+        ~specialised_params)
 
 and subst_let_cont env (let_cont_expr : Let_cont_expr.t) =
   match let_cont_expr with
@@ -1241,7 +1253,8 @@ and codes env (code1 : Code.t) (code2 : Code.t) =
         |> Comparison.map ~f:(fun body1' ->
             Function_params_and_body.create ~return_continuation
               ~exn_continuation params ~body:body1' ~my_closure ~my_alloc_mode
-              ~my_depth ~free_names_of_body:Unknown))
+              ~my_depth ~free_names_of_body:Unknown
+              ~specialised_params:Variable.Map.empty))
   in
   pairs ~f1:bodies
     ~f2:(options ~f:code_ids ~subst:subst_code_id)

@@ -239,5 +239,21 @@ val sort_code_ids : t -> Code_id.t array
 val add_set_of_closures :
   t -> (Name.t * Code_id.t Or_unknown.t) Function_slot.Lmap.t -> unit
 
+(** A set of closures bound by a [Let], as needed by [Rebuild] to decide whether
+    the set will leave behind a set of closures carrying specialised value slots
+    if it is unboxed. *)
+type dynamic_set_of_closures =
+  { bound_vars : Variable.t list;
+    code_ids : Code_id.t list;  (** Code IDs of the non-deleted functions. *)
+    has_specialised_value_slots : bool
+  }
+
+val add_dynamic_set_of_closures : t -> dynamic_set_of_closures -> unit
+
+(** Indexed by each of the bound variables of the sets. *)
+type dynamic_sets_of_closures = dynamic_set_of_closures Variable.Map.t
+
+val dynamic_sets_of_closures : t -> dynamic_sets_of_closures
+
 val get_all_sets_of_closures :
   t -> (Name.t * Code_id.t Or_unknown.t) Function_slot.Lmap.t list

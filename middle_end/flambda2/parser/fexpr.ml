@@ -367,8 +367,11 @@ and named =
 and fun_decl =
   { code_id : code_id;
     function_slot : function_slot option (* defaults to same name as code id *);
-    alloc : alloc_mode_for_allocations
+    alloc : alloc_mode_for_allocations;
         (* alloc mode for set of closures (ignored except on first binding) *)
+    specialised_value_slots : value_slots option
+        (* value slots not allocated in the closure, but whose contents are
+           recorded for the specialised parameters of the code *)
   }
 
 and let_cont =
@@ -422,6 +425,9 @@ and code_size = int
 
 and params_and_body =
   { params : kinded_parameter list;
+    specialised_params : (variable * value_slot) list;
+        (* parameters known to be equal to the contents of the given value slots
+           of the function's own closure *)
     closure_var : variable;
     region_vars : variable alloc_mode_for_applications;
     depth_var : variable;

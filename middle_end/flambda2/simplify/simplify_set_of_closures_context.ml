@@ -256,6 +256,14 @@ let bind_existing_code_to_new_code_ids denv ~old_to_new_code_ids_all_sets =
         else denv)
     old_to_new_code_ids_all_sets denv
 
+let record_code_specialisations_inside_functions denv_inside_functions
+    ~old_to_new_code_ids_all_sets =
+  Code_id.Map.fold
+    (fun old_code_id new_code_id denv ->
+      DE.add_code_specialisation denv ~old_code_id
+        (Within_set_of_closures new_code_id))
+    old_to_new_code_ids_all_sets denv_inside_functions
+
 let compute_and_erase_depth_variables ~typing_env ~denv_inside_functions
     ~value_slot_types_all_sets =
   (* The purpose of the code below is to compute the set of depth variables that
@@ -351,6 +359,8 @@ let create ~dacc_prior_to_sets ~simplify_function_body ~all_sets_of_closures
     |> bind_closure_types_inside_functions
          ~closure_bound_names_inside_functions_all_sets
          ~closure_types_inside_functions_all_sets
+    |> record_code_specialisations_inside_functions
+         ~old_to_new_code_ids_all_sets
     |> DA.with_denv dacc_prior_to_sets
   in
   { dacc_prior_to_sets;

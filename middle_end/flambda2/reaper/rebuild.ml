@@ -63,7 +63,17 @@ type env =
     should_preserve_direct_calls : should_preserve_direct_calls;
     old_typing_env : Typing_env.t option;
     inside_code_definition : bool;
-    types_rewrite_context : Types_rewriter.rewrite_context
+    types_rewrite_context : Types_rewriter.rewrite_context;
+    dynamic_sets_of_closures :
+      Traverse_acc.dynamic_set_of_closures Variable.Map.t;
+    carrier_vars : Variable.t Variable.Map.t ref;
+        (* Variables bound to the sets of closures left behind when unboxing
+           (see [rebuild_specialisation_carrier]), indexed by the variables
+           bound to the original sets. *)
+    nested_specialised_slots : (string, Value_slot.t) Hashtbl.t
+        (* Specialised value slots created for the parameters corresponding to
+           unboxed value slots, or fields thereof (see
+           [specialised_value_slot_for_leaf]). *)
   }
 
 type rebuild_result =
@@ -277,6 +287,7 @@ let function_params_and_body_free_names fpb =
         ~my_alloc_mode
         ~my_depth
         ~free_names_of_body
+        ~specialised_params
       ->
       let f =
         match free_names_of_body with
@@ -286,6 +297,13 @@ let function_params_and_body_free_names fpb =
              [function_params_and_body_free_names] for %a"
             Continuation.print return_continuation
         | Known f -> f
+      in
+      let f =
+        Variable.Map.fold
+          (fun _param value_slot f ->
+            Name_occurrences.add_value_slot_in_projection f value_slot
+              Name_mode.normal)
+          specialised_params f
       in
       let f =
         Name_occurrences.remove_continuation f ~continuation:return_continuation
@@ -390,8 +408,219 @@ let rewrite_simple_with_debuginfo env (simple : Simple.With_debuginfo.t) =
 let rewrite_simples_with_debuginfo env simples =
   List.map (rewrite_simple_with_debuginfo env) simples
 
+(* Rewrite the contents of a specialised value slot, returning [None] if the
+   value it mentions no longer exists after rebuilding. *)
+let rewrite_specialised_simple env simple =
+  Simple.pattern_match simple
+    ~const:(fun _ -> Some simple)
+    ~name:(fun name ~coercion:_ ->
+      if
+        Option.is_some
+          (Analysis.get_unboxed_fields env.uses (Code_id_or_name.name name))
+        || not (is_name_used env name)
+      then None
+      else Some simple)
+
+(* The leaves of the unboxed fields of a closure, each with the path of fields
+   leading to it (innermost first). The first field of each path (i.e. the last
+   in the list) is a value slot of the closure. *)
+let unboxed_closure_leaves (fields : Variable.t Unboxed_fields.t) =
+  let rec leaves (fields : Variable.t Unboxed_fields.t) ~rev_path acc =
+    Field.Map.fold
+      (fun field (uf : _ Unboxed_fields.u) acc ->
+        match uf with
+        | Not_unboxed var -> (var, field :: rev_path) :: acc
+        | Unboxed fields -> leaves fields ~rev_path:(field :: rev_path) acc)
+      fields acc
+  in
+  List.map
+    (fun (var, rev_path) ->
+      match List.rev rev_path with
+      | [] -> Misc.fatal_error "Empty path in [unboxed_closure_leaves]"
+      | first :: nested -> (
+        match Field.view first with
+        | Value_slot value_slot -> var, value_slot, nested
+        | Block _ | Is_int | Get_tag | Boxed_number _ | Function_slot _
+        | Call_witness _ | Return_of_call _ | Code_id_of_call_witness ->
+          Misc.fatal_errorf "Unexpected field kind %a in unboxed closure"
+            Field.print first))
+    (leaves fields ~rev_path:[] [])
+
+(* The (specialised, see [Value_slot.create]) value slot used to record the
+   contents of a leaf of an unboxed closure (see
+   [rebuild_specialisation_carrier]). The slot must be the same for all the
+   functions of a given set of closures, hence the memoisation. *)
+let specialised_value_slot_for_leaf env value_slot (nested : Field.t list) =
+  let key =
+    Format.asprintf "%a%a" Value_slot.print value_slot
+      (Format.pp_print_list (fun ppf field ->
+           Format.fprintf ppf ".%a" Field.print field))
+      nested
+  in
+  match Hashtbl.find_opt env.nested_specialised_slots key with
+  | Some slot -> slot
+  | None ->
+    let print_field ppf field =
+      Format.fprintf ppf "_field_%a" Field.print_for_variable_name field
+    in
+    let name =
+      Format.asprintf "%s%a"
+        (Value_slot.name value_slot)
+        (Format.pp_print_list print_field)
+        nested
+    in
+    let kind =
+      match nested with
+      | [] -> Value_slot.kind value_slot
+      | _ :: _ -> Field.kind (List.nth nested (List.length nested - 1))
+    in
+    let slot =
+      Value_slot.create ~is_specialised:true
+        (Current_unit.get_cu_exn ())
+        ~name ~is_always_immediate:false kind
+    in
+    Hashtbl.replace env.nested_specialised_slots key slot;
+    slot
+
+(* The variable holding the given nested field of an unboxed value. *)
+let rec find_unboxed_leaf (fields : Variable.t Unboxed_fields.t) nested =
+  match nested with
+  | [] -> None
+  | [field] -> (
+    match Field.Map.find_opt field fields with
+    | Some (Not_unboxed var) -> Some var
+    | Some (Unboxed _) | None -> None)
+  | field :: nested -> (
+    match Field.Map.find_opt field fields with
+    | Some (Unboxed fields) -> find_unboxed_leaf fields nested
+    | Some (Not_unboxed _) | None -> None)
+
+(* The specialised parameters of a function whose closure is being unboxed: each
+   new leading parameter is known to hold the contents of the value slot (or of
+   a field thereof) it was created for. *)
+let specialised_params_of_unboxed_closure env
+    (fields : Variable.t Unboxed_fields.t) =
+  List.fold_left
+    (fun params (var, value_slot, nested) ->
+      Variable.Map.add var
+        (specialised_value_slot_for_leaf env value_slot nested)
+        params)
+    Variable.Map.empty
+    (unboxed_closure_leaves fields)
+
+(* The contents of the specialised value slots introduced by
+   [specialised_params_of_unboxed_closure], for a set of closures whose value
+   slots hold the given simples. *)
+let specialised_value_slots_of_unboxed_closure env ~value_slots
+    (fields : Variable.t Unboxed_fields.t) =
+  List.fold_left
+    (fun slots (_var, value_slot, nested) ->
+      let arg = Value_slot.Map.find value_slot value_slots in
+      let simple =
+        match nested with
+        | [] -> rewrite_specialised_simple env arg
+        | _ :: _ ->
+          if simple_is_unboxable env arg
+          then
+            Option.map Simple.var
+              (find_unboxed_leaf (get_simple_unboxable env arg) nested)
+          else None
+      in
+      match simple with
+      | None -> slots
+      | Some simple ->
+        Value_slot.Map.add
+          (specialised_value_slot_for_leaf env value_slot nested)
+          simple slots)
+    Value_slot.Map.empty
+    (unboxed_closure_leaves fields)
+
+let function_has_unboxed_closure_fields env code_id =
+  is_code_id_used env code_id
+  &&
+  match
+    Unboxing_analysis.my_closure_decision env.calling_convention_changes code_id
+  with
+  | None | Some Keep_my_closure -> false
+  | Some (Unbox_my_closure fields) -> not (Field.Map.is_empty fields)
+
+(* Whether a set of closures that is being unboxed leaves behind a set of
+   closures carrying specialised value slots (see
+   [rebuild_specialisation_carrier]). This must be decided identically when
+   rebuilding the binding of the set and when rebuilding the calls to its
+   functions. *)
+let set_of_closures_gets_carrier env ~code_ids ~has_specialised_value_slots =
+  (* The toplevel of the compilation unit is never simplified again, so a
+     carrier would be useless there. *)
+  env.inside_code_definition
+  && (has_specialised_value_slots
+     || List.exists (function_has_unboxed_closure_fields env) code_ids)
+
+let carrier_var env var =
+  match Variable.Map.find_opt var !(env.carrier_vars) with
+  | Some carrier_var -> carrier_var
+  | None ->
+    let carrier_var = Variable.rename var in
+    env.carrier_vars := Variable.Map.add var carrier_var !(env.carrier_vars);
+    carrier_var
+
+let code_ids_to_remember env res function_decls =
+  if env.inside_code_definition
+  then
+    (* If a closure is defined inside a code definition (let's call it C) it is
+       possible, for other compilation units to need the code of the functions.
+       If the C code is inlined in this other compilation unit, the functions of
+       the closure can be simplified again. Hence it has to be exported
+       (remembered).
+
+       This is an over-approximation: If the current code C cannot be inlined or
+       re-simplified in another compilation unit, this closure can't be
+       resimplified there. Yet the current criterion will still export the code
+       from this closure *)
+    Function_slot.Map.fold
+      (fun _ (decl : Function_declarations.code_id_in_function_declaration) acc
+         ->
+        match decl with
+        | Deleted _ -> acc
+        | Code_id { code_id; _ } -> Code_id.Set.add code_id acc)
+      (Function_declarations.funs function_decls)
+      res.code_ids_to_remember
+  else res.code_ids_to_remember
+
+let add_set_of_closures_to_res env res ~is_phantom set_of_closures =
+  { res with
+    all_slot_offsets =
+      Slot_offsets.add_set_of_closures res.all_slot_offsets ~is_phantom
+        set_of_closures;
+    code_ids_to_remember =
+      code_ids_to_remember env res
+        (Set_of_closures.function_decls set_of_closures)
+  }
+
+let size_of_set_of_closures env res set_of_closures =
+  Cost_metrics.size
+    (Cost_metrics.set_of_closures
+       ~find_code_characteristics:(fun code_id ->
+         let code_metadata =
+           if Current_unit.is_current (Code_id.get_compilation_unit code_id)
+           then
+             match Code_id.Map.find code_id res.all_code with
+             | exception Not_found ->
+               Misc.fatal_errorf
+                 "When rebuilding set of closures %a, code_id %a not found in \
+                  [all_code]"
+                 Set_of_closures.print set_of_closures Code_id.print code_id
+             | code -> Code.code_metadata code
+           else env.get_code_metadata code_id
+         in
+         { cost_metrics = Code_metadata.cost_metrics code_metadata;
+           function_slot_size = Code_metadata.function_slot_size code_metadata
+         })
+       set_of_closures)
+
 let rewrite_set_of_closures env res ~(bound : Name.t list) ~is_phantom
-    ({ Rev_expr.function_decls; value_slots } : Rev_expr.rev_set_of_closures) =
+    ({ Rev_expr.function_decls; value_slots; specialised_value_slots } :
+      Rev_expr.rev_set_of_closures) =
   let slot_is_used slot =
     List.exists
       (fun bound_name ->
@@ -532,40 +761,18 @@ let rewrite_set_of_closures env res ~(bound : Name.t list) ~is_phantom
       (Function_slot.Lmap.bindings
          (Function_declarations.funs_in_order function_decls))
   in
-  let code_ids_to_remember =
-    if env.inside_code_definition
-    then
-      (* If a closure is defined inside a code definition (let's call it C) it
-         is possible, for other compilation units to need the code of the
-         functions. If the C code is inlined in this other compilation unit, the
-         functions of the closure can be simplified again. Hence it has to be
-         exported (remembered).
-
-         This is an over-approximation: If the current code C cannot be inlined
-         or re-simplified in another compilation unit, this closure can't be
-         resimplified there. Yet the current criterion will still export the
-         code from this closure *)
-      List.fold_left
-        (fun code_ids_to_remember (_, decl) ->
-          match decl with
-          | Deleted _ -> code_ids_to_remember
-          | Code_id { code_id; _ } ->
-            Code_id.Set.add code_id code_ids_to_remember)
-        res.code_ids_to_remember function_decls
-    else res.code_ids_to_remember
-  in
   let function_decls =
     Function_declarations.create (Function_slot.Lmap.of_list function_decls)
   in
-  let set_of_closures = Set_of_closures.create ~value_slots function_decls in
-  let res =
-    { res with
-      all_slot_offsets =
-        Slot_offsets.add_set_of_closures res.all_slot_offsets ~is_phantom
-          set_of_closures;
-      code_ids_to_remember
-    }
+  let specialised_value_slots =
+    Value_slot.Map.filter_map
+      (fun _ simple -> rewrite_specialised_simple env simple)
+      specialised_value_slots
   in
+  let set_of_closures =
+    Set_of_closures.create ~specialised_value_slots ~value_slots function_decls
+  in
+  let res = add_set_of_closures_to_res env res ~is_phantom set_of_closures in
   set_of_closures, res
 
 let rewrite_static_const (env : env) ~(bound_to : Symbol.t) (sc : SC.t) =
@@ -1290,7 +1497,28 @@ let rebuild_apply env apply =
             (* The unboxed fields of the closure are passed at the front of the
                first argument group, in the same order as the parameters
                introduced in [rebuild_function_params_and_body]. *)
-            get_args_with_kinds env [Unbox fields] [callee], None)
+            let args = get_args_with_kinds env [Unbox fields] [callee] in
+            (* If the callee is (the variable bound to) a closure whose set is
+               leaving behind a carrier of specialised value slots, use the
+               carrier as the callee, so that a later run of the simplifier can
+               redirect the call to the specialised code. *)
+            let callee =
+              Simple.pattern_match callee
+                ~const:(fun _ -> None)
+                ~name:(fun name ~coercion:_ ->
+                  Name.pattern_match name
+                    ~symbol:(fun _ -> None)
+                    ~var:(fun var ->
+                      match
+                        Variable.Map.find_opt var env.dynamic_sets_of_closures
+                      with
+                      | Some { code_ids; has_specialised_value_slots; _ }
+                        when set_of_closures_gets_carrier env ~code_ids
+                               ~has_specialised_value_slots ->
+                        Some (Simple.var (carrier_var env var))
+                      | Some _ | None -> None))
+            in
+            args, callee)
       in
       let params_decisions =
         match
@@ -1574,8 +1802,123 @@ let rebuild_singleton_binding_which_is_being_unboxed env bv
        [rebuild_singleton_binding_which_is_being_unboxed]:@ %a@."
       Named.print defining_expr
 
-let rebuild_set_of_closures_binding_which_is_being_unboxed env bvs
-    ~(set_of_closures : Rev_expr.rev_set_of_closures) ~hole =
+(* When a set of closures is unboxed, each function of the set whose closure was
+   actually used has its calling convention changed so that the (used) value
+   slots are passed as leading parameters: the function has been lambda-lifted.
+   This loses the ability of a later run of the simplifier (in particular in
+   another compilation unit into which the enclosing function is inlined) to
+   specialise the function on the contents of its former value slots, since
+   there is no longer a set of closures to re-simplify.
+
+   To retain that ability, we leave behind a closed set of closures at the point
+   of the original binding, whose specialised value slots record the contents of
+   the value slots that became parameters (together with any specialised value
+   slots the original set already had); the code of each function records which
+   parameter corresponds to which slot (see [rebuild_function_params_and_body]).
+   Direct calls to the lifted functions that used the original closures as
+   callee use the new set of closures instead (see [rebuild_apply]); the calls
+   inside the functions themselves have no callee. Since the set of closures is
+   closed, [To_cmm] allocates it statically. *)
+let rebuild_specialisation_carrier env res bvs
+    ~(set_of_closures : Rev_expr.rev_set_of_closures) ~alloc_mode ~hole =
+  let value_slots = set_of_closures.value_slots in
+  let function_decls =
+    Function_slot.Lmap.bindings
+      (Function_declarations.funs_in_order set_of_closures.function_decls)
+  in
+  let code_ids =
+    List.filter_map
+      (fun (_, (decl : Function_declarations.code_id_in_function_declaration))
+         ->
+        match decl with
+        | Deleted _ -> None
+        | Code_id { code_id; _ } -> Some code_id)
+      function_decls
+  in
+  let has_specialised_value_slots =
+    not (Value_slot.Map.is_empty set_of_closures.specialised_value_slots)
+  in
+  if
+    not
+      (set_of_closures_gets_carrier env ~code_ids ~has_specialised_value_slots)
+  then hole, res
+  else
+    let function_decls =
+      List.map
+        (fun ( function_slot,
+               (decl : Function_declarations.code_id_in_function_declaration) )
+           ->
+          match decl with
+          | Deleted _ -> function_slot, decl
+          | Code_id { code_id; only_full_applications } ->
+            if not (is_code_id_used env code_id)
+            then
+              let code_metadata = env.get_code_metadata code_id in
+              ( function_slot,
+                Function_declarations.Deleted
+                  { function_slot_size =
+                      Code_metadata.function_slot_size code_metadata;
+                    dbg = Code_metadata.dbg code_metadata
+                  } )
+            else
+              let changed_calling_convention =
+                not (Analysis.cannot_change_calling_convention env.uses code_id)
+              in
+              ( function_slot,
+                Function_declarations.Code_id
+                  { code_id;
+                    only_full_applications =
+                      only_full_applications || changed_calling_convention
+                  } ))
+        function_decls
+    in
+    let specialised_value_slots =
+      List.fold_left
+        (fun slots code_id ->
+          match
+            Unboxing_analysis.my_closure_decision env.calling_convention_changes
+              code_id
+          with
+          | None | Some Keep_my_closure -> slots
+          | Some (Unbox_my_closure fields) ->
+            Value_slot.Map.union
+              (fun _ simple _ -> Some simple)
+              slots
+              (specialised_value_slots_of_unboxed_closure env ~value_slots
+                 fields))
+        (Value_slot.Map.filter_map
+           (fun _ simple -> rewrite_specialised_simple env simple)
+           set_of_closures.specialised_value_slots)
+        code_ids
+    in
+    let set_of_closures =
+      Set_of_closures.create ~specialised_value_slots
+        ~value_slots:Value_slot.Map.empty
+        (Function_declarations.create
+           (Function_slot.Lmap.of_list function_decls))
+    in
+    let bound_pattern =
+      Bound_pattern.set_of_closures
+        (List.map
+           (fun bv ->
+             Bound_var.create
+               (carrier_var env (Bound_var.var bv))
+               Flambda_debug_uid.none Name_mode.normal)
+           bvs)
+    in
+    let res =
+      add_set_of_closures_to_res env res ~is_phantom:false set_of_closures
+    in
+    let size_of_defining_expr =
+      size_of_set_of_closures env res set_of_closures
+    in
+    ( RE.create_let bound_pattern
+        (Named.create_set_of_closures ~alloc_mode set_of_closures)
+        ~size_of_defining_expr ~body:hole,
+      res )
+
+let rebuild_set_of_closures_binding_which_is_being_unboxed env res bvs
+    ~(set_of_closures : Rev_expr.rev_set_of_closures) ~alloc_mode ~hole =
   assert (
     List.for_all
       (fun bv ->
@@ -1585,34 +1928,43 @@ let rebuild_set_of_closures_binding_which_is_being_unboxed env bvs
              (Analysis.get_unboxed_fields env.uses
                 (Code_id_or_name.var (Bound_var.var bv))))
       bvs);
-  List.fold_left
-    (fun hole bv ->
-      if
-        not (Analysis.has_use env.uses (Code_id_or_name.var (Bound_var.var bv)))
-      then hole
-      else
-        let to_bind =
-          Option.get
-            (Analysis.get_unboxed_fields env.uses
-               (Code_id_or_name.var (Bound_var.var bv)))
-        in
-        let value_slots = set_of_closures.value_slots in
-        Field.Map.fold
-          (fun field (var : _ Unboxed_fields.u) hole ->
-            match Field.view field with
-            | Value_slot value_slot ->
-              let arg = Value_slot.Map.find value_slot value_slots in
-              if simple_is_unboxable env arg
-              then bind_fields var (Unboxed (get_simple_unboxable env arg)) hole
-              else bind_field_to_simple var arg hole
-            | Block _ | Is_int | Get_tag | Boxed_number _ | Function_slot _
-            | Call_witness _ | Return_of_call _ | Code_id_of_call_witness ->
-              Misc.fatal_errorf
-                "Unexpected field kind %a when unboxing set of closures \
-                 binding for %a"
-                Field.print field Bound_var.print bv)
-          to_bind hole)
-    hole bvs
+  let hole, res =
+    rebuild_specialisation_carrier env res bvs ~set_of_closures ~alloc_mode
+      ~hole
+  in
+  let expr =
+    List.fold_left
+      (fun hole bv ->
+        if
+          not
+            (Analysis.has_use env.uses (Code_id_or_name.var (Bound_var.var bv)))
+        then hole
+        else
+          let to_bind =
+            Option.get
+              (Analysis.get_unboxed_fields env.uses
+                 (Code_id_or_name.var (Bound_var.var bv)))
+          in
+          let value_slots = set_of_closures.value_slots in
+          Field.Map.fold
+            (fun field (var : _ Unboxed_fields.u) hole ->
+              match Field.view field with
+              | Value_slot value_slot ->
+                let arg = Value_slot.Map.find value_slot value_slots in
+                if simple_is_unboxable env arg
+                then
+                  bind_fields var (Unboxed (get_simple_unboxable env arg)) hole
+                else bind_field_to_simple var arg hole
+              | Block _ | Is_int | Get_tag | Boxed_number _ | Function_slot _
+              | Call_witness _ | Return_of_call _ | Code_id_of_call_witness ->
+                Misc.fatal_errorf
+                  "Unexpected field kind %a when unboxing set of closures \
+                   binding for %a"
+                  Field.print field Bound_var.print bv)
+            to_bind hole)
+      hole bvs
+  in
+  expr, res
 
 let rebuild_singleton_binding_whose_representation_is_being_changed env bp bv
     ~(defining_expr : Named.t) ~hole =
@@ -1810,9 +2162,8 @@ let rebuild_let_expr_holed_set_of_closures env res bvs ~set_of_closures
     ~alloc_mode ~hole =
   if bound_vars_will_be_unboxed env bvs
   then
-    ( rebuild_set_of_closures_binding_which_is_being_unboxed env bvs
-        ~set_of_closures ~hole,
-      res )
+    rebuild_set_of_closures_binding_which_is_being_unboxed env res bvs
+      ~set_of_closures ~alloc_mode ~hole
   else if not (List.exists (fun v -> is_var_used env (Bound_var.var v)) bvs)
   then hole, res
   else
@@ -1827,26 +2178,7 @@ let rebuild_let_expr_holed_set_of_closures env res bvs ~set_of_closures
       rewrite_set_of_closures env res ~bound set_of_closures ~is_phantom
     in
     let size_of_defining_expr =
-      Cost_metrics.size
-        (Cost_metrics.set_of_closures
-           ~find_code_characteristics:(fun code_id ->
-             let code_metadata =
-               if Current_unit.is_current (Code_id.get_compilation_unit code_id)
-               then
-                 match Code_id.Map.find code_id res.all_code with
-                 | exception Not_found ->
-                   Misc.fatal_errorf
-                     "When rebuilding set of closures %a, code_id %a not found \
-                      in [all_code]"
-                     Set_of_closures.print set_of_closures Code_id.print code_id
-                 | code -> Code.code_metadata code
-               else env.get_code_metadata code_id
-             in
-             { cost_metrics = Code_metadata.cost_metrics code_metadata;
-               function_slot_size =
-                 Code_metadata.function_slot_size code_metadata
-             })
-           set_of_closures)
+      size_of_set_of_closures env res set_of_closures
     in
     let expr =
       RE.create_let bound_pattern
@@ -2167,7 +2499,8 @@ and rebuild_function_params_and_body (env : env) res code_metadata
         body;
         my_closure;
         my_alloc_mode;
-        my_depth
+        my_depth;
+        specialised_params
       } =
     params_and_body
   in
@@ -2193,7 +2526,18 @@ and rebuild_function_params_and_body (env : env) res code_metadata
       | Maybe_alloc_stack { alloc_region; region; ghost_region } ->
         [alloc_region; region; ghost_region]
     in
-    let all_vars = region_vars @ (my_closure :: Bound_parameters.vars params) in
+    let all_vars =
+      (* A function whose closure is unused may be called by direct calls with
+         no callee (in particular after lambda lifting by a previous run of the
+         reaper), in which case nothing flows into [my_closure] even though the
+         function is called. *)
+      let my_closure =
+        if Code_metadata.is_my_closure_used code_metadata
+        then [my_closure]
+        else []
+      in
+      region_vars @ my_closure @ Bound_parameters.vars params
+    in
     match List.filter (is_dead_var env) all_vars with
     | [] -> rebuild_expr env res body
     | _ :: _ as dead_vars ->
@@ -2297,7 +2641,7 @@ and rebuild_function_params_and_body (env : env) res code_metadata
        Name_occurrences.print body.free_names; *)
     ( Function_params_and_body.create ~return_continuation ~exn_continuation
         params ~body:body.expr ~free_names_of_body:(Known body.free_names)
-        ~my_closure ~my_alloc_mode ~my_depth,
+        ~my_closure ~my_alloc_mode ~my_depth ~specialised_params,
       code_metadata,
       res )
   | Changing_calling_convention code_id ->
@@ -2378,6 +2722,26 @@ and rebuild_function_params_and_body (env : env) res code_metadata
     in
     let params = List.map fst params_and_modes in
     let modes = List.concat_map snd params_and_modes in
+    let specialised_params =
+      (* Deleted and unboxed parameters lose their annotations; the new leading
+         parameters, which hold the former contents of the closure, gain one
+         each. *)
+      let kept_params =
+        Bound_parameters.var_set (Bound_parameters.create (List.flatten params))
+      in
+      let specialised_params =
+        Variable.Map.filter
+          (fun param _ -> Variable.Set.mem param kept_params)
+          specialised_params
+      in
+      match my_closure_decision with
+      | Delete | Keep _ -> specialised_params
+      | Unbox fields ->
+        Variable.Map.union
+          (fun _ slot _ -> Some slot)
+          (specialised_params_of_unboxed_closure env fields)
+          specialised_params
+    in
     let params_arity =
       let components_for params =
         Flambda_arity.Component_for_creation.Unboxed_product
@@ -2408,7 +2772,7 @@ and rebuild_function_params_and_body (env : env) res code_metadata
     ( Function_params_and_body.create ~return_continuation ~exn_continuation
         (Bound_parameters.create (List.flatten params))
         ~body:body.expr ~free_names_of_body:(Known body.free_names) ~my_closure
-        ~my_alloc_mode ~my_depth,
+        ~my_alloc_mode ~my_depth ~specialised_params,
       code_metadata,
       res )
 
@@ -2496,7 +2860,7 @@ type result =
   }
 
 let rebuild ~machine_width ~(code_deps : Traverse_acc.code_dep Code_id.Map.t)
-    ~ordered_code_ids
+    ~dynamic_sets_of_closures ~ordered_code_ids
     ~(continuation_info : Traverse_acc.continuation_info Continuation.Map.t)
     ~fixed_arity_continuations ~final_typing_env ~types_rewrite_context
     ~calling_convention_changes (solved_dep : Analysis.result) get_code_metadata
@@ -2550,7 +2914,10 @@ let rebuild ~machine_width ~(code_deps : Traverse_acc.code_dep Code_id.Map.t)
       should_preserve_direct_calls;
       old_typing_env = final_typing_env;
       inside_code_definition = false;
-      types_rewrite_context
+      types_rewrite_context;
+      dynamic_sets_of_closures;
+      carrier_vars = ref Variable.Map.empty;
+      nested_specialised_slots = Hashtbl.create 7
     }
   in
   let res =

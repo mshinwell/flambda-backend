@@ -174,18 +174,19 @@ let fresh_or_existing_function_slot env ({ Fexpr.txt = name; loc = _ } as id) =
   | None -> fresh_function_slot env id
   | Some function_slot -> function_slot
 
-let fresh_value_slot env { Fexpr.txt = name; loc = _ } kind =
+let fresh_value_slot ?is_specialised env { Fexpr.txt = name; loc = _ } kind =
   let c =
-    Value_slot.create
+    Value_slot.create ?is_specialised
       (Current_unit.get_cu_exn ())
       ~name ~is_always_immediate:false kind
   in
   WT.add env.vars_within_closures name c;
   c
 
-let fresh_or_existing_value_slot env ({ Fexpr.txt = name; _ } as id) kind =
+let fresh_or_existing_value_slot ?is_specialised env
+    ({ Fexpr.txt = name; _ } as id) kind =
   match WT.find_opt env.vars_within_closures name with
-  | None -> fresh_value_slot env id kind
+  | None -> fresh_value_slot ?is_specialised env id kind
   | Some value_slot -> value_slot
 
 let print_scoped_location ppf loc =

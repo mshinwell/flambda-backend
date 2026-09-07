@@ -94,6 +94,7 @@ let keyword_table =
     "reraise", KWD_RERAISE;
     "set_of_closures", KWD_SET_OF_CLOSURES;
     "size", KWD_SIZE;
+    "specialised", KWD_SPECIALISED;
     "stack", KWD_STACK;
     "succ", KWD_SUCC;
     "stub", KWD_STUB;

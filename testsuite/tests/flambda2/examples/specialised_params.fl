@@ -1,0 +1,48 @@
+(* TEST
+ compile_only = "true";
+ flambda2;
+ setup-simple-build-env;
+ fexpr with dump-raw, dump-simplify;
+*)
+
+(* [loop] is a lambda-lifted recursive function, in the shape produced by the
+   reaper: [f], formerly the value slot [f_slot], is now the first parameter,
+   and the recursive call to [loop] has no callee.  The closed set of closures
+   bound to [carrier] records, in its specialised value slot [f_slot], that the
+   former value slot held [$square]; the code of [loop] records that its
+   parameter [f] is equal to that slot.  The simplifier should produce a version
+   of [loop] specialised on [$square] (inlining [square] into it), and redirect
+   both the call in [map] (through the closure) and the recursive call (through
+   the assumptions) to that new version. *)
+
+let code size(10) square (x : val) my_closure &my_alloc_region my_depth
+      -> k * e : val =
+  let r = %int_barith.`mul` (x, x) in
+  cont k (r)
+in
+let $square = closure square &toplevel.alloc_region in
+let code rec size(50) loop (f : val, l : val) specialised { f = f_slot }
+      my_closure &my_alloc_region my_depth -> k * e : val =
+  let prim = %is_int (l) in
+  switch prim
+    | 0 -> k_cons
+    | 1 -> k (0)
+    where k_cons =
+      ((let x = %block_load.[`0`] (l) in
+        apply &my_alloc_region f (x) -> k_y * e)
+         where k_y (y) =
+           ((let xs = %block_load.[`1`] (l) in
+             apply direct(loop &my_alloc_region) (f, xs) -> k_ys * e)
+              where k_ys (ys) =
+                let block = %block.[`0`].my_alloc_region (y, ys) in
+                cont k (block)))
+in
+let code size(20) map (l : val) my_closure &my_alloc_region my_depth -> k * e : val =
+  let carrier =
+    closure loop @loop &my_alloc_region specialised { f_slot = $square }
+  in
+  apply direct(loop &my_alloc_region) carrier ($square, l) -> k * e
+in
+let $map = closure map &toplevel.alloc_region in
+let $camlSpecialised_params = Block 0 ($map) in
+cont done ($camlSpecialised_params)

@@ -177,6 +177,7 @@ let make_boxed_const_int (i, m) : static_data =
 %token KWD_RERAISE [@symbol "reraise"]
 %token KWD_SET_OF_CLOSURES [@symbol "set_of_closures"]
 %token KWD_SIZE   [@symbol "size"]
+%token KWD_SPECIALISED [@symbol "specialised"]
 %token KWD_STACK  [@symbol "stack"]
 %token KWD_SUCC   [@symbol "succ"]
 %token KWD_STUB   [@symbol "stub"]
@@ -298,6 +299,7 @@ deleted_code:
 code:
   | header = code_header;
     params = kinded_args;
+    specialised_params = code_specialised_params_opt;
     closure_var = variable;
     region_vars = alloc_mode_for_function_params;
     depth_var = variable;
@@ -316,8 +318,8 @@ code:
         if result_mode then Maybe_alloc_stack else Not_alloc_stack
       in
       { id; newer_version_of; param_arity = None; ret_arity; recursive; inline;
-        params_and_body = { params; closure_var; region_vars; depth_var;
-                            ret_cont; exn_cont; body };
+        params_and_body = { params; specialised_params; closure_var;
+                            region_vars; depth_var; ret_cont; exn_cont; body };
         code_size; is_tupled; stub; loopify; result_mode; } }
 ;
 
@@ -622,7 +624,28 @@ fun_decl:
   | KWD_CLOSURE; code_id = code_id;
     function_slot = function_slot_opt;
     alloc = alloc_mode_for_allocations;
-    { { code_id; function_slot; alloc; } }
+    specialised_value_slots = specialised_value_slots_opt;
+    { { code_id; function_slot; alloc; specialised_value_slots; } }
+;
+
+specialised_value_slots_opt:
+  | { None }
+  | KWD_SPECIALISED LBRACE;
+      elements = separated_list(SEMICOLON, value_slot);
+    RBRACE;
+    { Some elements }
+;
+
+code_specialised_params_opt:
+  | { [] }
+  | KWD_SPECIALISED LBRACE;
+      params = separated_list(SEMICOLON, code_specialised_param);
+    RBRACE;
+    { params }
+;
+
+code_specialised_param:
+  | param = variable; EQUAL; slot = value_slot_for_projection; { param, slot }
 ;
 
 apply_expr:

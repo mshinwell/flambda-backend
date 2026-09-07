@@ -26,15 +26,30 @@ val print_with_extra_fields :
 val is_empty : t -> bool
 
 (** Create a set of closures given the code for its functions and the closure
-    variables. *)
+    variables. See below regarding [specialised_value_slots]. *)
 val create :
-  value_slots:Simple.t Value_slot.Map.t -> Function_declarations.t -> t
+  ?specialised_value_slots:Simple.t Value_slot.Map.t ->
+  value_slots:Simple.t Value_slot.Map.t ->
+  Function_declarations.t ->
+  t
 
 (** The function declarations associated with the set of closures. *)
 val function_decls : t -> Function_declarations.t
 
 (** The values of each value slot (the environment, or captured variables). *)
 val value_slots : t -> Simple.t Value_slot.Map.t
+
+(** Value slots which are not allocated in the closures, but whose contents are
+    nonetheless recorded, because some parameters of the functions in the set
+    are known to be equal to them (see [Function_params_and_body.create]). Such
+    slots arise when the reaper lambda-lifts a function: a value slot that is
+    turned into a parameter is moved here, so that the function can still be
+    specialised on it if the set of closures is simplified again (typically in
+    another compilation unit, after inlining). The code of the functions must
+    not project these slots. Dropping any of them is always sound. *)
+val specialised_value_slots : t -> Simple.t Value_slot.Map.t
+
+val with_specialised_value_slots : t -> Simple.t Value_slot.Map.t -> t
 
 (** Returns true iff the given set of closures has no value slots. *)
 val is_closed : t -> bool

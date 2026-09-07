@@ -19,7 +19,10 @@ module type S = sig
 
   module Lmap : Lmap.S with type key = t
 
+  (** A specialised slot (see [Set_of_closures.specialised_value_slots]) is
+      never allocated in a closure, and so never has an offset. *)
   val create :
+    ?is_specialised:bool ->
     Compilation_unit.t ->
     name:string ->
     is_always_immediate:bool ->
@@ -41,6 +44,8 @@ module type S = sig
   val kind : t -> Flambda_kind.t
 
   val is_always_immediate : t -> bool
+
+  val is_specialised : t -> bool
 
   val rename : t -> t
 end

@@ -262,8 +262,32 @@ module Acc = struct
       } )
 end
 
+let convert_value_slots ?is_specialised env (value_slots : Fexpr.value_slots) =
+  let convert ({ var; value; kind } : Fexpr.one_value_slot) =
+    let kind =
+      match kind with
+      | None -> Flambda_kind.value
+      | Some naked_number_kind -> Flambda_kind.naked_number naked_number_kind
+    in
+    let value_slot =
+      fresh_or_existing_value_slot ?is_specialised env var kind
+    in
+    if not (Flambda_kind.equal (Value_slot.kind value_slot) kind)
+    then
+      (* This can happen if an occurrence of the value slot, such as a
+         projection (which assumes kind [Value], see [Fexpr_prim]), was
+         encountered before this definition. *)
+      Misc.fatal_errorf
+        "Value slot %s: kind %a does not match kind %a of a previous \
+         occurrence of this slot"
+        var.txt Flambda_kind.print kind Flambda_kind.print
+        (Value_slot.kind value_slot);
+    value_slot, simple env value
+  in
+  List.map convert value_slots |> Value_slot.Map.of_list
+
 let set_of_closures env fun_decls value_slots =
-  let fun_decls : Function_declarations.t =
+  let fun_decls_flambda : Function_declarations.t =
     let translate_fun_decl (fun_decl : Fexpr.fun_decl) :
         Function_slot.t * Code_id.t =
       let code_id = find_code_id env fun_decl.code_id in
@@ -281,30 +305,22 @@ let set_of_closures env fun_decls value_slots =
            Code_id { code_id; only_full_applications = false })
     |> Function_declarations.create
   in
-  let value_slots = Option.value value_slots ~default:[] in
-  let value_slots : Simple.t Value_slot.Map.t =
-    let convert ({ var; value; kind } : Fexpr.one_value_slot) =
-      let kind =
-        match kind with
-        | None -> Flambda_kind.value
-        | Some naked_number_kind -> Flambda_kind.naked_number naked_number_kind
-      in
-      let value_slot = fresh_or_existing_value_slot env var kind in
-      if not (Flambda_kind.equal (Value_slot.kind value_slot) kind)
-      then
-        (* This can happen if an occurrence of the value slot, such as a
-           projection (which assumes kind [Value], see [Fexpr_prim]), was
-           encountered before this definition. *)
-        Misc.fatal_errorf
-          "Value slot %s: kind %a does not match kind %a of a previous \
-           occurrence of this slot"
-          var.txt Flambda_kind.print kind Flambda_kind.print
-          (Value_slot.kind value_slot);
-      value_slot, simple env value
-    in
-    List.map convert value_slots |> Value_slot.Map.of_list
+  let specialised_value_slots =
+    List.fold_left
+      (fun slots (fun_decl : Fexpr.fun_decl) ->
+        match fun_decl.specialised_value_slots with
+        | None -> slots
+        | Some elements ->
+          Value_slot.Map.union
+            (fun _ simple _ -> Some simple)
+            slots
+            (convert_value_slots ~is_specialised:true env elements))
+      Value_slot.Map.empty fun_decls
   in
-  Set_of_closures.create ~value_slots fun_decls
+  let value_slots =
+    convert_value_slots env (Option.value value_slots ~default:[])
+  in
+  Set_of_closures.create ~specialised_value_slots ~value_slots fun_decls_flambda
 
 let apply_cont env acc ({ cont; args; trap_action } : Fexpr.apply_cont) =
   let trap_action : Trap_action.t option =
@@ -704,6 +720,7 @@ let rec expr env acc (e : Fexpr.expr) : _ * Flambda.Expr.t =
               is_my_closure_used,
               acc ) =
           let { Fexpr.params;
+                specialised_params;
                 closure_var;
                 region_vars;
                 depth_var;
@@ -760,12 +777,35 @@ let rec expr env acc (e : Fexpr.expr) : _ * Flambda.Expr.t =
           let acc = Acc.push_closure_info acc ~code_id in
           let acc, body = expr env acc body in
           let _closure_info, acc = Acc.pop_closure_info acc in
+          let specialised_params =
+            List.fold_left
+              (fun specialised_params ((param : Fexpr.variable), slot) ->
+                let var = find_var env param in
+                let kind =
+                  match
+                    List.find_opt
+                      (fun bp -> Variable.equal (Bound_parameter.var bp) var)
+                      params
+                  with
+                  | Some bp ->
+                    Flambda_kind.With_subkind.kind (Bound_parameter.kind bp)
+                  | None ->
+                    Misc.fatal_errorf
+                      "Specialised parameter %s is not a parameter of the code"
+                      param.txt
+                in
+                Variable.Map.add var
+                  (fresh_or_existing_value_slot ~is_specialised:true env slot
+                     kind)
+                  specialised_params)
+              Variable.Map.empty specialised_params
+          in
           let params_and_body =
             Flambda.Function_params_and_body.create ~return_continuation
               ~exn_continuation
               (Bound_parameters.create params)
               ~body ~my_closure ~my_alloc_mode ~my_depth
-              ~free_names_of_body:Unknown
+              ~free_names_of_body:Unknown ~specialised_params
           in
           let free_names =
             (* CR mshinwell: This needs fixing XXX *)

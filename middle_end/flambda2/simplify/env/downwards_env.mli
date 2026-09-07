@@ -268,3 +268,31 @@ val denv_for_lifted_continuation : denv_for_join:t -> denv:t -> t
 val has_seen_a_non_liftable_continuation : t -> bool
 
 val set_has_seen_a_non_liftable_continuation : t -> t
+
+(** Direct calls with no callee to a code ID for which a specialisation is
+    recorded may be redirected to the new version of the code (see
+    [Simplify_apply_expr]). Such calls arise from lambda lifting by the reaper,
+    which records the assumptions made about the parameters via
+    [Function_params_and_body] and [Set_of_closures.specialised_value_slots]. *)
+module Code_specialisation : sig
+  type t =
+    | Within_set_of_closures of Code_id.t
+        (** Recorded while simplifying the bodies of the functions of the set of
+            closures that produced the new version: any such call is a recursive
+            call through the set's own closures, so it is redirected
+            unconditionally, just as calls with a callee are via the closure
+            types. *)
+    | Outside_set_of_closures of
+        { new_code_id : Code_id.t;
+          specialised_value_slots : Simple.t Value_slot.Map.t
+        }
+        (** Recorded for the scope of the binding of the set of closures. A call
+            is redirected only if its arguments provably satisfy the assumptions
+            under which [new_code_id] was simplified (since several sets of
+            closures for the same code may be in scope). *)
+end
+
+val add_code_specialisation :
+  t -> old_code_id:Code_id.t -> Code_specialisation.t -> t
+
+val find_code_specialisation : t -> Code_id.t -> Code_specialisation.t option

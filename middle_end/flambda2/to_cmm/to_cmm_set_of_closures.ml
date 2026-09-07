@@ -590,6 +590,7 @@ let params_and_body env res code_id p ~result_arity ~fun_dbg
         ~my_alloc_mode
         ~my_depth:_
         ~free_names_of_body:_
+        ~specialised_params:_
       ->
       try
         params_and_body0 env res code_id ~result_arity ~fun_dbg
