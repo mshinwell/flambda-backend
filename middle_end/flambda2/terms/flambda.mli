@@ -576,6 +576,8 @@ module Function_params_and_body : sig
       Bound_parameters.t ->
       body1:expr ->
       body2:expr ->
+      specialised_params1:Value_slot.t Variable.Map.t ->
+      specialised_params2:Value_slot.t Variable.Map.t ->
       my_closure:Variable.t ->
       my_alloc_mode:Alloc_mode.For_applications.t ->
       my_depth:Variable.t ->

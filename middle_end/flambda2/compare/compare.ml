@@ -183,13 +183,13 @@ module Env = struct
   let add_function_slot t function_slot1 function_slot2 =
     t.function_slots
       <- Function_slot.Map.add function_slot1 function_slot2 t.function_slots;
-    t.function_slots
+    t.function_slots_rev
       <- Function_slot.Map.add function_slot2 function_slot1
            t.function_slots_rev
 
   let add_value_slot t value_slot1 value_slot2 =
     t.value_slots <- Value_slot.Map.add value_slot1 value_slot2 t.value_slots;
-    t.value_slots
+    t.value_slots_rev
       <- Value_slot.Map.add value_slot2 value_slot1 t.value_slots_rev
 
   let find_symbol t sym = Symbol.Map.find_opt sym t.symbols
@@ -285,7 +285,9 @@ let subst_set_of_closures env set =
         subst_value_slot env var, subst_simple env simple)
     |> Value_slot.Map.of_list
   in
-  Set_of_closures.create ~synthetic_value_slots ~value_slots decls
+  Set_of_closures.create
+    ~is_specialisation_site:(Set_of_closures.is_specialisation_site set)
+    ~synthetic_value_slots ~value_slots decls
 
 let subst_rec_info_expr _env ri =
   (* Only depth variables can occur in [Rec_info_expr], and we only mess with
@@ -591,17 +593,49 @@ let function_slots env function_slot1 function_slot2 :
       Equivalent)
 
 let value_slots env value_slot1 value_slot2 : Value_slot.t Comparison.t =
-  match Env.find_value_slot env value_slot1 with
-  | Some value_slot ->
-    if Value_slot.equal value_slot value_slot2
-    then Equivalent
-    else Different { approximant = value_slot }
-  | None -> (
-    match Env.find_value_slot_rev env value_slot2 with
-    | Some _ -> Different { approximant = value_slot1 }
-    | None ->
-      Env.add_value_slot env value_slot1 value_slot2;
-      Equivalent)
+  if
+    not
+      (Flambda_kind.equal
+         (Value_slot.kind value_slot1)
+         (Value_slot.kind value_slot2)
+      && Bool.equal
+           (Value_slot.is_synthetic value_slot1)
+           (Value_slot.is_synthetic value_slot2))
+  then Different { approximant = subst_value_slot env value_slot1 }
+  else
+    match Env.find_value_slot env value_slot1 with
+    | Some value_slot ->
+      if Value_slot.equal value_slot value_slot2
+      then Equivalent
+      else Different { approximant = value_slot }
+    | None -> (
+      match Env.find_value_slot_rev env value_slot2 with
+      | Some _ -> Different { approximant = value_slot1 }
+      | None ->
+        Env.add_value_slot env value_slot1 value_slot2;
+        Equivalent)
+
+let specialised_params env params1 params2 :
+    Value_slot.t Variable.Map.t Comparison.t =
+  let ok = ref true in
+  let approximant =
+    Variable.Map.merge
+      (fun _param slot1 slot2 ->
+        match slot1, slot2 with
+        | None, None -> None
+        | None, Some _ ->
+          ok := false;
+          None
+        | Some slot1, None ->
+          ok := false;
+          Some (subst_value_slot env slot1)
+        | Some slot1, Some slot2 ->
+          Some
+            (value_slots env slot1 slot2
+            |> Comparison.chain ~ok ~if_equivalent:slot2))
+      params1 params2
+  in
+  if !ok then Equivalent else Different { approximant }
 
 let coercions _env coercion1 coercion2 : Coercion.t Comparison.t =
   (* Coercions only contain variables, not symbols, so we can just compare *)
@@ -811,22 +845,36 @@ let sets_of_closures env set1 set2 : Set_of_closures.t Comparison.t =
     Value_slot.Map.bindings (Set_of_closures.value_slots set)
     @ Value_slot.Map.bindings (Set_of_closures.synthetic_value_slots set)
     |> List.map (fun (var, value) ->
-        Value_slot.kind var, subst_simple env value, var)
+        ( Value_slot.is_synthetic var,
+          Value_slot.kind var,
+          subst_simple env value,
+          var ))
   in
   (* We want to process the whole map to find new correspondences between
    * value slots, so we need to remember whether we've found any mismatches *)
-  let ok = ref true in
+  let ok =
+    ref
+      (Bool.equal
+         (Set_of_closures.is_specialisation_site set1)
+         (Set_of_closures.is_specialisation_site set2))
+  in
   let () =
-    let compare (kind1, value1, _var1) (kind2, value2, _var2) =
-      let c = Flambda_kind.compare kind1 kind2 in
-      if c = 0 then Simple.compare value1 value2 else c
+    let compare (synthetic1, kind1, value1, _var1)
+        (synthetic2, kind2, value2, _var2) =
+      let c = Bool.compare synthetic1 synthetic2 in
+      if c <> 0
+      then c
+      else
+        let c = Flambda_kind.compare kind1 kind2 in
+        if c = 0 then Simple.compare value1 value2 else c
     in
     iter2_merged (value_slots_by_value set1) (value_slots_by_value set2)
       ~compare ~f:(fun elt1 elt2 ->
         match elt1, elt2 with
         | None, None -> ()
         | Some _, None | None, Some _ -> ok := false
-        | Some (_kind1, _value1, var1), Some (_kind2, _value2, var2) -> (
+        | ( Some (_synthetic1, _kind1, _value1, var1),
+            Some (_synthetic2, _kind2, _value2, var2) ) -> (
           match value_slots env var1 var2 with
           | Equivalent -> ()
           | Different { approximant = _ } -> ok := false))
@@ -1246,16 +1294,19 @@ and codes env (code1 : Code.t) (code2 : Code.t) =
           params
           ~body1
           ~body2
+          ~specialised_params1
+          ~specialised_params2
           ~my_closure
           ~my_alloc_mode
           ~my_depth
         ->
-        exprs env body1 body2
-        |> Comparison.map ~f:(fun body1' ->
+        pairs ~f1:specialised_params ~f2:exprs env
+          (specialised_params1, body1)
+          (specialised_params2, body2)
+        |> Comparison.map ~f:(fun (specialised_params, body) ->
             Function_params_and_body.create ~return_continuation
-              ~exn_continuation params ~body:body1' ~my_closure ~my_alloc_mode
-              ~my_depth ~free_names_of_body:Unknown
-              ~specialised_params:Variable.Map.empty))
+              ~exn_continuation params ~body ~my_closure ~my_alloc_mode
+              ~my_depth ~free_names_of_body:Unknown ~specialised_params))
   in
   pairs ~f1:bodies
     ~f2:(options ~f:code_ids ~subst:subst_code_id)
@@ -1418,7 +1469,18 @@ let flambda_units u1 u2 =
   let env = Env.create () in
   let body1 = Expr.apply_renaming (Flambda_unit.body u1) (mk_renaming u1) in
   let body2 = Expr.apply_renaming (Flambda_unit.body u2) (mk_renaming u2) in
-  exprs env body1 body2
+  let comparison =
+    match exprs env body1 body2 with
+    | Equivalent as comparison -> comparison
+    | Different _ ->
+      (* A code annotation may precede the set of closures that establishes its
+         slot correspondence. Rebuild the approximant from the original inputs
+         once those correspondences are known. Substituting the first
+         approximant instead could rename slots that were already
+         substituted. *)
+      exprs env body1 body2
+  in
+  comparison
   |> Comparison.map ~f:(fun body ->
       let module_symbol = Flambda_unit.module_symbol u1 in
       Flambda_unit.create ~return_continuation:ret_cont

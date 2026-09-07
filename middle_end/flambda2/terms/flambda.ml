@@ -1108,8 +1108,14 @@ module Function_params_and_body = struct
     A.pattern_match_pair t1.abst t2.abst
       ~f:(fun
           bound_for_function
-          { expr = body1; free_names = _; specialised_params = _ }
-          { expr = body2; free_names = _; specialised_params = _ }
+          { expr = body1;
+            free_names = _;
+            specialised_params = specialised_params1
+          }
+          { expr = body2;
+            free_names = _;
+            specialised_params = specialised_params2
+          }
         ->
         f
           ~return_continuation:
@@ -1117,7 +1123,7 @@ module Function_params_and_body = struct
           ~exn_continuation:
             (Bound_for_function.exn_continuation bound_for_function)
           (Bound_for_function.params bound_for_function)
-          ~body1 ~body2
+          ~body1 ~body2 ~specialised_params1 ~specialised_params2
           ~my_closure:(Bound_for_function.my_closure bound_for_function)
           ~my_alloc_mode:(Bound_for_function.my_alloc_mode bound_for_function)
           ~my_depth:(Bound_for_function.my_depth bound_for_function))
