@@ -178,6 +178,7 @@ let make_boxed_const_int (i, m) : static_data =
 %token KWD_SET_OF_CLOSURES [@symbol "set_of_closures"]
 %token KWD_SIZE   [@symbol "size"]
 %token KWD_SPECIALISED [@symbol "specialised"]
+%token KWD_SYNTHETIC [@symbol "synthetic"]
 %token KWD_STACK  [@symbol "stack"]
 %token KWD_SUCC   [@symbol "succ"]
 %token KWD_STUB   [@symbol "stub"]
@@ -624,13 +625,13 @@ fun_decl:
   | KWD_CLOSURE; code_id = code_id;
     function_slot = function_slot_opt;
     alloc = alloc_mode_for_allocations;
-    specialised_value_slots = specialised_value_slots_opt;
-    { { code_id; function_slot; alloc; specialised_value_slots; } }
+    synthetic_value_slots = synthetic_value_slots_opt;
+    { { code_id; function_slot; alloc; synthetic_value_slots; } }
 ;
 
-specialised_value_slots_opt:
+synthetic_value_slots_opt:
   | { None }
-  | KWD_SPECIALISED LBRACE;
+  | KWD_SYNTHETIC LBRACE;
       elements = separated_list(SEMICOLON, value_slot);
     RBRACE;
     { Some elements }

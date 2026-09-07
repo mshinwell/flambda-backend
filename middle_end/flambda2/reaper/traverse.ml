@@ -138,11 +138,12 @@ let record_set_of_closures_deps denv names_and_function_slots set_of_closures
       in
       Value_slot.Map.iter add_value_slot_dep
         (Set_of_closures.value_slots set_of_closures);
-      (* The specialised value slots are never projected, so this does not keep
+      (* The synthetic value slots are never projected, so this does not keep
          their contents alive; if the contents no longer exist after rebuilding,
-         the slots are dropped (see [Rebuild.rewrite_specialised_simple]). *)
+         the slots are dropped (see
+         [Rebuild.rewrite_synthetic_slot_contents]). *)
       Value_slot.Map.iter add_value_slot_dep
-        (Set_of_closures.specialised_value_slots set_of_closures);
+        (Set_of_closures.synthetic_value_slots set_of_closures);
       Function_slot.Lmap.iter
         (fun function_slot name ->
           Acc.add_constructor_dep acc
@@ -305,10 +306,10 @@ let traverse_set_of_closures denv acc ~(bound_pattern : Bound_pattern.t)
                 Misc.fatal_error "Symbol bound by a dynamic set of closures"))
           (Function_slot.Lmap.data names_and_function_slots);
       code_ids;
-      has_specialised_value_slots =
+      has_synthetic_value_slots =
         not
           (Value_slot.Map.is_empty
-             (Set_of_closures.specialised_value_slots set_of_closures))
+             (Set_of_closures.synthetic_value_slots set_of_closures))
     }
 
 let traverse_static_set_of_closures denv acc ~closure_symbols set_of_closures =
@@ -578,10 +579,10 @@ let rec traverse_let denv acc let_expr : rev_expr =
   let make_set_of_closures set_of_closures =
     let function_decls = Set_of_closures.function_decls set_of_closures in
     let value_slots = Set_of_closures.value_slots set_of_closures in
-    let specialised_value_slots =
-      Set_of_closures.specialised_value_slots set_of_closures
+    let synthetic_value_slots =
+      Set_of_closures.synthetic_value_slots set_of_closures
     in
-    { function_decls; value_slots; specialised_value_slots }
+    { function_decls; value_slots; synthetic_value_slots }
   in
   let named : rev_named =
     match defining_expr with

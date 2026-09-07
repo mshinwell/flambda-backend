@@ -273,7 +273,7 @@ val set_has_seen_a_non_liftable_continuation : t -> t
     recorded may be redirected to the new version of the code (see
     [Simplify_apply_expr]). Such calls arise from lambda lifting by the reaper,
     which records the assumptions made about the parameters via
-    [Function_params_and_body] and [Set_of_closures.specialised_value_slots]. *)
+    [Function_params_and_body] and [Set_of_closures.synthetic_value_slots]. *)
 module Code_specialisation : sig
   type t =
     { new_code_id : Code_id.t;

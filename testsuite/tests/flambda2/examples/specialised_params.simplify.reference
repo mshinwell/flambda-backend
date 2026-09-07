@@ -26,8 +26,7 @@ let code rec loopify(never) size(29) newer_version_of(loop)
            cont k (block))
 in
 let $camlSpecialised_params__loop_0 =
-  closure loop_1 @loop &toplevel.alloc_region
-    specialised { f_slot = $square }
+  closure loop_1 @loop &toplevel.alloc_region synthetic { f_slot = $square }
 in
 let code loopify(never) size(4) newer_version_of(map)
       map_1 (l : val) my_closure &my_alloc_region my_depth -> k * e : val =

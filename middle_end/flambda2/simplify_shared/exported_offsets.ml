@@ -171,7 +171,7 @@ let reexport_value_slots value_slot_set offsets =
     (fun value_slot offsets ->
       if
         Current_unit.is_current (Value_slot.get_compilation_unit value_slot)
-        || Value_slot.is_specialised value_slot
+        || Value_slot.is_synthetic value_slot
       then offsets
       else
         match value_slot_offset imported_offsets value_slot with

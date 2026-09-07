@@ -73,7 +73,7 @@ and rev_params_and_body =
 and rev_set_of_closures =
   { value_slots : Simple.t Value_slot.Map.t;
     function_decls : Function_declarations.t;
-    specialised_value_slots : Simple.t Value_slot.Map.t
+    synthetic_value_slots : Simple.t Value_slot.Map.t
   }
 
 and cont_handler =

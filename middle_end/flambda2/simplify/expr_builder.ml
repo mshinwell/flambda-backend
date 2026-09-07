@@ -319,10 +319,10 @@ let remove_unused_value_slots uacc static_const =
       let value_slots =
         filter_slots (Set_of_closures.value_slots set_of_closures)
       in
-      let specialised_value_slots =
-        filter_slots (Set_of_closures.specialised_value_slots set_of_closures)
+      let synthetic_value_slots =
+        filter_slots (Set_of_closures.synthetic_value_slots set_of_closures)
       in
-      Set_of_closures.create ~specialised_value_slots ~value_slots
+      Set_of_closures.create ~synthetic_value_slots ~value_slots
         (Set_of_closures.function_decls set_of_closures))
 
 let create_let_symbols uacc lifted_constant ~body =

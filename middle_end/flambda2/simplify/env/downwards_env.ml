@@ -124,8 +124,8 @@ type t =
            that we have not explored yet. *)
     code_specialisations : Code_specialisation.t Code_id.Map.t
         (* For each code ID (the key) whose code has been re-simplified, in the
-           current scope, under the assumptions given by the specialised
-           parameters of a set of closures, the new code ID and the assumptions.
+           current scope, under the assumptions given by the synthetic value
+           slots of a set of closures, the new code ID and the assumptions.
            Direct calls to the key with no callee, whose arguments satisfy the
            assumptions, may be redirected to the new code. *)
   }

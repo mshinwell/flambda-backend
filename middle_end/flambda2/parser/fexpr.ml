@@ -369,7 +369,7 @@ and fun_decl =
     function_slot : function_slot option (* defaults to same name as code id *);
     alloc : alloc_mode_for_allocations;
         (* alloc mode for set of closures (ignored except on first binding) *)
-    specialised_value_slots : value_slots option
+    synthetic_value_slots : value_slots option
         (* value slots not allocated in the closure, but whose contents are
            recorded for the specialised parameters of the code *)
   }

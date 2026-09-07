@@ -262,16 +262,14 @@ module Acc = struct
       } )
 end
 
-let convert_value_slots ?is_specialised env (value_slots : Fexpr.value_slots) =
+let convert_value_slots ?is_synthetic env (value_slots : Fexpr.value_slots) =
   let convert ({ var; value; kind } : Fexpr.one_value_slot) =
     let kind =
       match kind with
       | None -> Flambda_kind.value
       | Some naked_number_kind -> Flambda_kind.naked_number naked_number_kind
     in
-    let value_slot =
-      fresh_or_existing_value_slot ?is_specialised env var kind
-    in
+    let value_slot = fresh_or_existing_value_slot ?is_synthetic env var kind in
     if not (Flambda_kind.equal (Value_slot.kind value_slot) kind)
     then
       (* This can happen if an occurrence of the value slot, such as a
@@ -305,22 +303,22 @@ let set_of_closures env fun_decls value_slots =
            Code_id { code_id; only_full_applications = false })
     |> Function_declarations.create
   in
-  let specialised_value_slots =
+  let synthetic_value_slots =
     List.fold_left
       (fun slots (fun_decl : Fexpr.fun_decl) ->
-        match fun_decl.specialised_value_slots with
+        match fun_decl.synthetic_value_slots with
         | None -> slots
         | Some elements ->
           Value_slot.Map.union
             (fun _ simple _ -> Some simple)
             slots
-            (convert_value_slots ~is_specialised:true env elements))
+            (convert_value_slots ~is_synthetic:true env elements))
       Value_slot.Map.empty fun_decls
   in
   let value_slots =
     convert_value_slots env (Option.value value_slots ~default:[])
   in
-  Set_of_closures.create ~specialised_value_slots ~value_slots fun_decls_flambda
+  Set_of_closures.create ~synthetic_value_slots ~value_slots fun_decls_flambda
 
 let apply_cont env acc ({ cont; args; trap_action } : Fexpr.apply_cont) =
   let trap_action : Trap_action.t option =
@@ -795,8 +793,7 @@ let rec expr env acc (e : Fexpr.expr) : _ * Flambda.Expr.t =
                       param.txt
                 in
                 Variable.Map.add var
-                  (fresh_or_existing_value_slot ~is_specialised:true env slot
-                     kind)
+                  (fresh_or_existing_value_slot ~is_synthetic:true env slot kind)
                   specialised_params)
               Variable.Map.empty specialised_params
           in

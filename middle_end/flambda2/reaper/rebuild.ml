@@ -50,7 +50,7 @@ type should_preserve_direct_calls =
   | Auto
 
 (* Value slots indexed by a path of fields (see
-   [specialised_value_slot_for_leaf]). *)
+   [synthetic_value_slot_for_leaf]). *)
 module Leaf_slots = struct
   type t =
     { here : Value_slot.t option;
@@ -98,10 +98,10 @@ type env =
         (* Variables bound to the sets of closures left behind when unboxing
            (see [rebuild_specialisation_carrier]), indexed by the variables
            bound to the original sets. *)
-    nested_specialised_slots : Leaf_slots.t Value_slot.Map.t ref
+    nested_synthetic_slots : Leaf_slots.t Value_slot.Map.t ref
         (* Specialised value slots created for the parameters corresponding to
            unboxed value slots, or fields thereof, indexed by the value slot and
-           the path of fields (see [specialised_value_slot_for_leaf]). *)
+           the path of fields (see [synthetic_value_slot_for_leaf]). *)
   }
 
 type rebuild_result =
@@ -434,9 +434,17 @@ let rewrite_simple_with_debuginfo env (simple : Simple.With_debuginfo.t) =
 let rewrite_simples_with_debuginfo env simples =
   List.map (rewrite_simple_with_debuginfo env) simples
 
-(* Rewrite the contents of a specialised value slot, returning [None] if the
-   value it mentions no longer exists after rebuilding. *)
-let rewrite_specialised_simple env simple =
+(* Rewrite the contents of a synthetic value slot, returning [None] if the value
+   it mentions no longer exists after rebuilding.
+
+   CR mshinwell: When the value has been unboxed, the slot could instead be
+   replaced by synthetic slots for the unboxed fields, as is done for the value
+   slots of a closure being unboxed (see
+   [synthetic_value_slots_of_unboxed_closure]); the specialised parameters
+   corresponding to such a value would likewise have to be re-expressed on the
+   unboxed leaves (see [rebuild_function_params_and_body]). At present the
+   annotations are dropped in that case. *)
+let rewrite_synthetic_slot_contents env simple =
   Simple.pattern_match simple
     ~const:(fun _ -> Some simple)
     ~name:(fun name ~coercion:_ ->
@@ -472,14 +480,14 @@ let unboxed_closure_leaves (fields : Variable.t Unboxed_fields.t) =
             Field.print first))
     (leaves fields ~rev_path:[] [])
 
-(* The (specialised, see [Value_slot.create]) value slot used to record the
+(* The (synthetic, see [Value_slot.create]) value slot used to record the
    contents of a leaf of an unboxed closure (see
    [rebuild_specialisation_carrier]). The slot must be the same for all the
    functions of a given set of closures, hence the memoisation. *)
-let specialised_value_slot_for_leaf env value_slot (nested : Field.t list) =
+let synthetic_value_slot_for_leaf env value_slot (nested : Field.t list) =
   let leaf_slots =
     Option.value
-      (Value_slot.Map.find_opt value_slot !(env.nested_specialised_slots))
+      (Value_slot.Map.find_opt value_slot !(env.nested_synthetic_slots))
       ~default:Leaf_slots.empty
   in
   match Leaf_slots.find_opt leaf_slots nested with
@@ -500,14 +508,14 @@ let specialised_value_slot_for_leaf env value_slot (nested : Field.t list) =
       | _ :: _ -> Field.kind (List.nth nested (List.length nested - 1))
     in
     let slot =
-      Value_slot.create ~is_specialised:true
+      Value_slot.create ~is_synthetic:true
         (Current_unit.get_cu_exn ())
         ~name ~is_always_immediate:false kind
     in
-    env.nested_specialised_slots
+    env.nested_synthetic_slots
       := Value_slot.Map.add value_slot
            (Leaf_slots.add leaf_slots nested slot)
-           !(env.nested_specialised_slots);
+           !(env.nested_synthetic_slots);
     slot
 
 (* The variable holding the given nested field of an unboxed value. *)
@@ -531,22 +539,22 @@ let specialised_params_of_unboxed_closure env
   List.fold_left
     (fun params (var, value_slot, nested) ->
       Variable.Map.add var
-        (specialised_value_slot_for_leaf env value_slot nested)
+        (synthetic_value_slot_for_leaf env value_slot nested)
         params)
     Variable.Map.empty
     (unboxed_closure_leaves fields)
 
-(* The contents of the specialised value slots introduced by
+(* The contents of the synthetic value slots introduced by
    [specialised_params_of_unboxed_closure], for a set of closures whose value
    slots hold the given simples. *)
-let specialised_value_slots_of_unboxed_closure env ~value_slots
+let synthetic_value_slots_of_unboxed_closure env ~value_slots
     (fields : Variable.t Unboxed_fields.t) =
   List.fold_left
     (fun slots (_var, value_slot, nested) ->
       let arg = Value_slot.Map.find value_slot value_slots in
       let simple =
         match nested with
-        | [] -> rewrite_specialised_simple env arg
+        | [] -> rewrite_synthetic_slot_contents env arg
         | _ :: _ ->
           if simple_is_unboxable env arg
           then
@@ -558,7 +566,7 @@ let specialised_value_slots_of_unboxed_closure env ~value_slots
       | None -> slots
       | Some simple ->
         Value_slot.Map.add
-          (specialised_value_slot_for_leaf env value_slot nested)
+          (synthetic_value_slot_for_leaf env value_slot nested)
           simple slots)
     Value_slot.Map.empty
     (unboxed_closure_leaves fields)
@@ -573,15 +581,15 @@ let function_has_unboxed_closure_fields env code_id =
   | Some (Unbox_my_closure fields) -> not (Field.Map.is_empty fields)
 
 (* Whether a set of closures that is being unboxed leaves behind a set of
-   closures carrying specialised value slots (see
+   closures carrying synthetic value slots (see
    [rebuild_specialisation_carrier]). This must be decided identically when
    rebuilding the binding of the set and when rebuilding the calls to its
    functions. *)
-let set_of_closures_gets_carrier env ~code_ids ~has_specialised_value_slots =
+let set_of_closures_gets_carrier env ~code_ids ~has_synthetic_value_slots =
   (* The toplevel of the compilation unit is never simplified again, so a
      carrier would be useless there. *)
   env.inside_code_definition
-  && (has_specialised_value_slots
+  && (has_synthetic_value_slots
      || List.exists (function_has_unboxed_closure_fields env) code_ids)
 
 let carrier_var env var =
@@ -673,7 +681,7 @@ let rewrite_function_decl env
         }
 
 let rewrite_set_of_closures env res ~(bound : Name.t list) ~is_phantom
-    ({ Rev_expr.function_decls; value_slots; specialised_value_slots } :
+    ({ Rev_expr.function_decls; value_slots; synthetic_value_slots } :
       Rev_expr.rev_set_of_closures) =
   let slot_is_used slot =
     List.exists
@@ -798,13 +806,13 @@ let rewrite_set_of_closures env res ~(bound : Name.t list) ~is_phantom
   let function_decls =
     Function_declarations.create (Function_slot.Lmap.of_list function_decls)
   in
-  let specialised_value_slots =
+  let synthetic_value_slots =
     Value_slot.Map.filter_map
-      (fun _ simple -> rewrite_specialised_simple env simple)
-      specialised_value_slots
+      (fun _ simple -> rewrite_synthetic_slot_contents env simple)
+      synthetic_value_slots
   in
   let set_of_closures =
-    Set_of_closures.create ~specialised_value_slots ~value_slots function_decls
+    Set_of_closures.create ~synthetic_value_slots ~value_slots function_decls
   in
   let res = add_set_of_closures_to_res env res ~is_phantom set_of_closures in
   set_of_closures, res
@@ -1533,7 +1541,7 @@ let rebuild_apply env apply =
                introduced in [rebuild_function_params_and_body]. *)
             let args = get_args_with_kinds env [Unbox fields] [callee] in
             (* If the callee is (the variable bound to) a closure whose set is
-               leaving behind a carrier of specialised value slots, use the
+               leaving behind a carrier of synthetic value slots, use the
                carrier as the callee, so that a later run of the simplifier can
                redirect the call to the specialised code. *)
             let callee =
@@ -1546,9 +1554,9 @@ let rebuild_apply env apply =
                       match
                         Variable.Map.find_opt var env.dynamic_sets_of_closures
                       with
-                      | Some { code_ids; has_specialised_value_slots; _ }
+                      | Some { code_ids; has_synthetic_value_slots; _ }
                         when set_of_closures_gets_carrier env ~code_ids
-                               ~has_specialised_value_slots ->
+                               ~has_synthetic_value_slots ->
                         Some (Simple.var (carrier_var env var))
                       | Some _ | None -> None))
             in
@@ -1845,8 +1853,8 @@ let rebuild_singleton_binding_which_is_being_unboxed env bv
    there is no longer a set of closures to re-simplify.
 
    To retain that ability, we leave behind a closed set of closures at the point
-   of the original binding, whose specialised value slots record the contents of
-   the value slots that became parameters (together with any specialised value
+   of the original binding, whose synthetic value slots record the contents of
+   the value slots that became parameters (together with any synthetic value
    slots the original set already had); the code of each function records which
    parameter corresponds to which slot (see [rebuild_function_params_and_body]).
    Direct calls to the lifted functions that used the original closures as
@@ -1872,8 +1880,8 @@ let rebuild_specialisation_carrier env res bvs
         | Code_id { code_id; _ } -> Some code_id)
       function_decls
   in
-  let has_specialised_value_slots =
-    not (Value_slot.Map.is_empty set_of_closures.specialised_value_slots)
+  let has_synthetic_value_slots =
+    not (Value_slot.Map.is_empty set_of_closures.synthetic_value_slots)
   in
   (* Functions that are never called are left out: the closures are only ever
      used as callees, so the layout of the set does not matter. *)
@@ -1897,11 +1905,11 @@ let rebuild_specialisation_carrier env res bvs
   | _ :: _
     when not
            (set_of_closures_gets_carrier env ~code_ids
-              ~has_specialised_value_slots) ->
+              ~has_synthetic_value_slots) ->
     hole, res
   | _ :: _ ->
     let function_decls, bvs = List.split function_decls_and_bvs in
-    let specialised_value_slots =
+    let synthetic_value_slots =
       List.fold_left
         (fun slots
              (_, (decl : Function_declarations.code_id_in_function_declaration))
@@ -1916,15 +1924,15 @@ let rebuild_specialisation_carrier env res bvs
             | None | Some Keep_my_closure -> slots
             | Some (Unbox_my_closure fields) ->
               Value_slot.Map.union_left_biased slots
-                (specialised_value_slots_of_unboxed_closure env ~value_slots
+                (synthetic_value_slots_of_unboxed_closure env ~value_slots
                    fields)))
         (Value_slot.Map.filter_map
-           (fun _ simple -> rewrite_specialised_simple env simple)
-           set_of_closures.specialised_value_slots)
+           (fun _ simple -> rewrite_synthetic_slot_contents env simple)
+           set_of_closures.synthetic_value_slots)
         function_decls
     in
     let set_of_closures =
-      Set_of_closures.create ~specialised_value_slots
+      Set_of_closures.create ~synthetic_value_slots
         ~value_slots:Value_slot.Map.empty
         (Function_declarations.create
            (Function_slot.Lmap.of_list function_decls))
@@ -2755,9 +2763,9 @@ and rebuild_function_params_and_body (env : env) res code_metadata
     let params = List.map fst params_and_modes in
     let modes = List.concat_map snd params_and_modes in
     let specialised_params =
-      (* Deleted and unboxed parameters lose their annotations; the new leading
-         parameters, which hold the former contents of the closure, gain one
-         each. *)
+      (* Deleted and unboxed parameters lose their annotations (see the CR in
+         [rewrite_synthetic_slot_contents]); the new leading parameters, which
+         hold the former contents of the closure, gain one each. *)
       let kept_params =
         Bound_parameters.var_set (Bound_parameters.create (List.flatten params))
       in
@@ -2948,7 +2956,7 @@ let rebuild ~machine_width ~(code_deps : Traverse_acc.code_dep Code_id.Map.t)
       types_rewrite_context;
       dynamic_sets_of_closures;
       carrier_vars = ref Variable.Map.empty;
-      nested_specialised_slots = ref Value_slot.Map.empty
+      nested_synthetic_slots = ref Value_slot.Map.empty
     }
   in
   let res =

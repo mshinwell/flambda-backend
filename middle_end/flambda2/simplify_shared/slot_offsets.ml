@@ -1116,7 +1116,7 @@ end = struct
                 find_unboxed_slot state value_slot )
             with
             | None, None ->
-              if not (Value_slot.is_specialised value_slot)
+              if not (Value_slot.is_synthetic value_slot)
               then
                 state.used_offsets
                   <- EO.add_value_slot_offset state.used_offsets value_slot
@@ -1126,11 +1126,11 @@ end = struct
           else true)
         value_slots_in_normal_projections
     in
-    (* Specialised value slots (see [Set_of_closures.specialised_value_slots])
-       are never allocated, so they have no offset, but those that are mentioned
-       by some code must be kept when the code is imported. *)
-    let used_specialised_value_slots =
-      Value_slot.Set.filter Value_slot.is_specialised
+    (* Specialised value slots (see [Set_of_closures.synthetic_value_slots]) are
+       never allocated, so they have no offset, but those that are mentioned by
+       some code must be kept when the code is imported. *)
+    let used_synthetic_value_slots =
+      Value_slot.Set.filter Value_slot.is_synthetic
         value_slots_in_normal_projections
     in
     let live_value_slots, live_unboxed_slots =
@@ -1141,7 +1141,7 @@ end = struct
     ( live_function_slots,
       live_unboxed_slots,
       live_value_slots,
-      used_specialised_value_slots )
+      used_synthetic_value_slots )
 
   (* Transform an internal accumulator state for slots into an actual mapping
      that assigns offsets. *)
@@ -1150,7 +1150,7 @@ end = struct
     let ( used_function_slots,
           used_unboxed_slots,
           used_value_slots,
-          used_specialised_value_slots ) =
+          used_synthetic_value_slots ) =
       live_slots state used_slots
     in
     assign_function_slot_offsets ~used_function_slots state;
@@ -1159,7 +1159,7 @@ end = struct
     { used_value_slots =
         Value_slot.Set.union
           (Value_slot.Set.union used_value_slots used_unboxed_slots)
-          used_specialised_value_slots;
+          used_synthetic_value_slots;
       exported_offsets = state.used_offsets
     }
 end

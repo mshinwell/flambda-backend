@@ -278,14 +278,14 @@ let subst_set_of_closures env set =
         subst_value_slot env var, subst_simple env simple)
     |> Value_slot.Map.of_list
   in
-  let specialised_value_slots =
-    Set_of_closures.specialised_value_slots set
+  let synthetic_value_slots =
+    Set_of_closures.synthetic_value_slots set
     |> Value_slot.Map.bindings
     |> List.map (fun (var, simple) ->
         subst_value_slot env var, subst_simple env simple)
     |> Value_slot.Map.of_list
   in
-  Set_of_closures.create ~specialised_value_slots ~value_slots decls
+  Set_of_closures.create ~synthetic_value_slots ~value_slots decls
 
 let subst_rec_info_expr _env ri =
   (* Only depth variables can occur in [Rec_info_expr], and we only mess with
@@ -809,7 +809,7 @@ let sets_of_closures env set1 set2 : Set_of_closures.t Comparison.t =
    * similar (and less worrisome) with function slots. *)
   let value_slots_by_value set =
     Value_slot.Map.bindings (Set_of_closures.value_slots set)
-    @ Value_slot.Map.bindings (Set_of_closures.specialised_value_slots set)
+    @ Value_slot.Map.bindings (Set_of_closures.synthetic_value_slots set)
     |> List.map (fun (var, value) ->
         Value_slot.kind var, subst_simple env value, var)
   in

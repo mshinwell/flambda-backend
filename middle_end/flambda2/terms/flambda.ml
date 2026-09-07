@@ -129,7 +129,7 @@ and function_params_and_body_base =
     free_names : Name_occurrences.t Or_unknown.t;
     specialised_params : Value_slot.t Variable.Map.t
         (* Parameters known to be equal to the contents of the given value slots
-           of the closure (see [Set_of_closures.specialised_value_slots]). The
+           of the closure (see [Set_of_closures.synthetic_value_slots]). The
            slots are not necessarily allocated in the closure; the code must not
            project them. *)
   }

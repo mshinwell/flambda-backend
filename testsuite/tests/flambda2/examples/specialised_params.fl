@@ -8,7 +8,7 @@
 (* [loop] is a lambda-lifted recursive function, in the shape produced by the
    reaper: [f], formerly the value slot [f_slot], is now the first parameter,
    and the recursive call to [loop] has no callee.  The closed set of closures
-   bound to [carrier] records, in its specialised value slot [f_slot], that the
+   bound to [carrier] records, in its synthetic value slot [f_slot], that the
    former value slot held [$square]; the code of [loop] records that its
    parameter [f] is equal to that slot.  The simplifier should produce a version
    of [loop] specialised on [$square] (inlining [square] into it), and redirect
@@ -40,7 +40,7 @@ in
 let code size(20) map (l : val) my_closure &my_alloc_region my_depth
       -> k * e : val =
   let carrier =
-    closure loop @loop &my_alloc_region specialised { f_slot = $square }
+    closure loop @loop &my_alloc_region synthetic { f_slot = $square }
   in
   apply direct(loop &my_alloc_region) carrier ($square, l) -> k * e
 in

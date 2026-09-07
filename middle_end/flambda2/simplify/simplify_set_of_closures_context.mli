@@ -29,8 +29,8 @@ val create :
   all_sets_of_closures:(Set_of_closures.t * Alloc_mode.For_types.t) list ->
   closure_bound_names_all_sets:Bound_name.t Function_slot.Map.t list ->
   value_slot_types_all_sets:T.t Value_slot.Map.t list ->
-  specialised_value_slots_all_sets:Simple.t Value_slot.Map.t list ->
-  specialised_value_slot_types_all_sets:T.t Value_slot.Map.t list ->
+  synthetic_value_slots_all_sets:Simple.t Value_slot.Map.t list ->
+  synthetic_value_slot_types_all_sets:T.t Value_slot.Map.t list ->
   t
 
 val create_for_static_stub :
@@ -47,11 +47,11 @@ val dacc_prior_to_sets : t -> DA.t
    code (not just the metadata). *)
 val old_to_new_code_ids_all_sets : t -> Code_id.t Code_id.Map.t
 
-(** The assumptions, given by the specialised value slots of the sets of
-    closures, under which the new versions of the code are simplified, indexed
-    by old code ID. These are recorded in the environment inside the functions,
-    and should also be recorded for the scope of the bindings of the sets of
-    closures using [record_code_specialisations]. *)
+(** The assumptions, given by the synthetic value slots of the sets of closures,
+    under which the new versions of the code are simplified, indexed by old code
+    ID. These are recorded in the environment inside the functions, and should
+    also be recorded for the scope of the bindings of the sets of closures using
+    [record_code_specialisations]. *)
 val code_specialisations : t -> DE.Code_specialisation.t Code_id.Map.t
 
 val record_code_specialisations :

@@ -591,8 +591,8 @@ let fun_decl expr_or_static ppf (decl : fun_decl) =
   Format.fprintf ppf "@[<2>%tclosure%t@ %a%a%a%a@]" expr_or_static
     Flambda_colours.pop code_id decl.code_id pp_at_function_slot
     decl.function_slot alloc_mode_for_allocations decl.alloc
-    (value_slots_with_keyword "specialised" expr_or_static)
-    decl.specialised_value_slots
+    (value_slots_with_keyword "synthetic" expr_or_static)
+    decl.synthetic_value_slots
 
 let named ppf = function
   | (Simple s : named) -> simple ppf s

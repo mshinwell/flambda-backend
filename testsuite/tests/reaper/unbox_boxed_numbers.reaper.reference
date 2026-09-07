@@ -258,7 +258,7 @@ let code loopify(never) size(20) newer_version_of(test_value_slot_10)
   in
   let read =
     closure read_11_1 @read &my_alloc_region &`region`
-      specialised {
+      synthetic {
         b_field_unboxed_int64 : int64 = b_into_b_field_unboxed_int64
       }
   in

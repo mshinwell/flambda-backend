@@ -1458,9 +1458,9 @@ let simplify_effect_op dacc apply (op : Call_kind.Effect.t) ~down_to_up =
 (* Direct calls with no callee arise inside functions that have been
    lambda-lifted by the reaper; the reaper leaves behind a closed set of
    closures recording the values the lifted parameters are known to hold (see
-   [Set_of_closures.specialised_value_slots]), so that the simplifier can
-   recover the specialisation that used to happen via the value slots. Once a
-   new version of the code has been produced from such a set of closures, the
+   [Set_of_closures.synthetic_value_slots]), so that the simplifier can recover
+   the specialisation that used to happen via the value slots. Once a new
+   version of the code has been produced from such a set of closures, the
    callee-less calls to the old code are redirected to it. *)
 let redirect_direct_call_to_specialised_code denv apply =
   match Apply.callee apply, Apply.call_kind apply with

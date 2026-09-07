@@ -523,7 +523,7 @@ module Function_params_and_body : sig
 
       [specialised_params] records parameters that are known to be equal to the
       contents of the given value slots of the function's own closure, as
-      recorded by [Set_of_closures.specialised_value_slots] (these slots are not
+      recorded by [Set_of_closures.synthetic_value_slots] (these slots are not
       necessarily allocated in the closure). *)
   val pattern_match :
     t ->

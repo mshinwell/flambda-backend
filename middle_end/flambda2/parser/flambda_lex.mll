@@ -95,6 +95,7 @@ let keyword_table =
     "set_of_closures", KWD_SET_OF_CLOSURES;
     "size", KWD_SIZE;
     "specialised", KWD_SPECIALISED;
+    "synthetic", KWD_SYNTHETIC;
     "stack", KWD_STACK;
     "succ", KWD_SUCC;
     "stub", KWD_STUB;

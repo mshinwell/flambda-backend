@@ -26,9 +26,9 @@ val print_with_extra_fields :
 val is_empty : t -> bool
 
 (** Create a set of closures given the code for its functions and the closure
-    variables. See below regarding [specialised_value_slots]. *)
+    variables. See below regarding [synthetic_value_slots]. *)
 val create :
-  ?specialised_value_slots:Simple.t Value_slot.Map.t ->
+  ?synthetic_value_slots:Simple.t Value_slot.Map.t ->
   value_slots:Simple.t Value_slot.Map.t ->
   Function_declarations.t ->
   t
@@ -47,7 +47,7 @@ val value_slots : t -> Simple.t Value_slot.Map.t
     specialised on it if the set of closures is simplified again (typically in
     another compilation unit, after inlining). The code of the functions must
     not project these slots. Dropping any of them is always sound. *)
-val specialised_value_slots : t -> Simple.t Value_slot.Map.t
+val synthetic_value_slots : t -> Simple.t Value_slot.Map.t
 
 (** Returns true iff the given set of closures has no value slots. *)
 val is_closed : t -> bool
