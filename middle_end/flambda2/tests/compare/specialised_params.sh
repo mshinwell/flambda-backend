@@ -40,6 +40,25 @@ sed 's/closure f/closure specialisation_site f/' empty.fl > empty_site.fl
 sed 's/cont k (x)/cont k (y)/' empty_site.fl > empty_site_different_body.fl
 sed 's/closure f/closure specialisation_site f/' ordinary.fl > malformed_site.fl
 
+sed 's/sy = 1/sy = 0/' specialised.fl > duplicate_values.fl
+sed 's/x = sx; y = sy/y = sy; x = sx/' \
+  duplicate_values.fl > duplicate_values_reordered.fl
+sed 's/sx = 0; sy = 0/sx = 0; sy = 0; sz = 0/' \
+  duplicate_values.fl > mixed_duplicate_values.fl
+sed 's/x = sx; y = sy/y = sy; x = sx/' \
+  mixed_duplicate_values.fl > mixed_duplicate_values_reordered.fl
+sed 's/sz = 0/sz = 1/' \
+  mixed_duplicate_values_reordered.fl > mixed_duplicate_values_changed.fl
+sed 's/sx = 0; sy = 0/sx = 0/' duplicate_values.fl > missing_sy.fl
+sed 's/sx = 0; sy = 0/sy = 0/' duplicate_values.fl > missing_sx.fl
+
+sed -e 's/y : val/y : float/' -e 's/sy = 1/sy : float = 1.0/' \
+  specialised.fl > mixed_kinds.fl
+sed 's/cont k (x)/cont k (0)/' mixed_kinds.fl > mixed_kinds_different_body.fl
+sed 's/sx = 0; sy = 1/sx = $f; sy = $f/' specialised.fl > cyclic.fl
+sed -e 's/\$f/\$g/g' -e 's/sx/su/g' \
+    -e 's/sy =/sv =/g' -e 's/= sy/= sv/g' cyclic.fl > cyclic_renamed.fl
+
 failures=0
 check_comparison () {
   name=$1
@@ -85,6 +104,16 @@ check_both_directions 'alpha-renamed parameters and slots' 0 \
 check_both_directions 'reordered annotation entries' 0 specialised.fl reordered.fl
 check_both_directions 'specialisation-site marker' 1 specialised.fl site.fl
 check_both_directions 'empty specialisation-site marker' 1 empty.fl empty_site.fl
+check_both_directions 'reordered equal-valued slots' 0 \
+  duplicate_values.fl duplicate_values_reordered.fl
+check_both_directions 'mapped and unmapped equal-valued slots' 0 \
+  mixed_duplicate_values.fl mixed_duplicate_values_reordered.fl
+check_both_directions 'changed unmapped slot alongside equal-valued slots' 1 \
+  mixed_duplicate_values.fl mixed_duplicate_values_changed.fl
+check_both_directions 'mapped slots missing from the opposite set' 1 \
+  missing_sy.fl missing_sx.fl
+check_both_directions 'alpha-renamed cyclic synthetic slots' 0 \
+  cyclic.fl cyclic_renamed.fl
 
 check_approximant () {
   name=$1
@@ -138,6 +167,21 @@ check_approximant 'marker difference' specialised.fl site.fl
 check_approximant 'marker difference (reverse)' site.fl specialised.fl
 check_approximant 'empty marker difference' empty.fl empty_site.fl
 check_approximant 'empty marker difference (reverse)' empty_site.fl empty.fl
+check_approximant 'equal-valued slot approximant' \
+  missing_one.fl duplicate_values_reordered.fl
+check_approximant 'equal-valued slot approximant (reverse)' \
+  duplicate_values_reordered.fl missing_one.fl
+check_approximant 'changed unmapped slot approximant' \
+  mixed_duplicate_values.fl mixed_duplicate_values_changed.fl
+check_approximant 'changed unmapped slot approximant (reverse)' \
+  mixed_duplicate_values_changed.fl mixed_duplicate_values.fl
+check_approximant 'missing mapped slot approximant' missing_sy.fl missing_sx.fl
+check_approximant 'missing mapped slot approximant (reverse)' \
+  missing_sx.fl missing_sy.fl
+check_approximant 'mixed value/float slot roundtrip' \
+  mixed_kinds.fl mixed_kinds_different_body.fl
+check_approximant 'mixed value/float slot roundtrip (reverse)' \
+  mixed_kinds_different_body.fl mixed_kinds.fl
 
 if "$fldiff" malformed_site.fl malformed_site.fl > unused.fl 2> errors; then
   printf 'FAIL marked site with ordinary value slots was accepted\n'

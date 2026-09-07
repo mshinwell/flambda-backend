@@ -836,11 +836,8 @@ let iter2_merged l1 l2 ~compare ~f =
   go l1 l2
 
 let sets_of_closures env set1 set2 : Set_of_closures.t Comparison.t =
-  (* Need to do unification on value slots and function slots, we we're going to
-   * invert both maps, figuring the value slots with the same value should be
-   * the same.  There is a risk that two value slots will be mapped to the
-   * same value, but that should be rare.  Later, we'll do something
-   * similar (and less worrisome) with function slots. *)
+  (* Respect existing slot correspondences before pairing up slots with equal
+   * values. Later, we'll do something similar with function slots. *)
   let value_slots_by_value set =
     Value_slot.Map.bindings (Set_of_closures.value_slots set)
     @ Value_slot.Map.bindings (Set_of_closures.synthetic_value_slots set)
@@ -868,8 +865,32 @@ let sets_of_closures env set1 set2 : Set_of_closures.t Comparison.t =
         let c = Flambda_kind.compare kind1 kind2 in
         if c = 0 then Simple.compare value1 value2 else c
     in
-    iter2_merged (value_slots_by_value set1) (value_slots_by_value set2)
-      ~compare ~f:(fun elt1 elt2 ->
+    let slots1 = value_slots_by_value set1 in
+    let slots2 = value_slots_by_value set2 in
+    let unmapped_slots find_slot slots other_slots =
+      let other_slots =
+        List.map (fun ((_, _, _, slot) as elt) -> slot, elt) other_slots
+        |> Value_slot.Map.of_list
+      in
+      List.filter
+        (fun ((_, _, _, slot) as elt) ->
+          match find_slot env slot with
+          | None -> true
+          | Some other_slot ->
+            (match Value_slot.Map.find_opt other_slot other_slots with
+            | Some other_elt when compare elt other_elt = 0 -> ()
+            | Some _ | None -> ok := false);
+            false)
+        slots
+    in
+    (* Equal-valued slots may already have been distinguished by projections or
+       specialised parameters. Check those pairs, including missing partners,
+       and only infer new correspondences for globally unmapped slots. *)
+    let unmapped_slots1 = unmapped_slots Env.find_value_slot slots1 slots2 in
+    let unmapped_slots2 =
+      unmapped_slots Env.find_value_slot_rev slots2 slots1
+    in
+    iter2_merged unmapped_slots1 unmapped_slots2 ~compare ~f:(fun elt1 elt2 ->
         match elt1, elt2 with
         | None, None -> ()
         | Some _, None | None, Some _ -> ok := false
