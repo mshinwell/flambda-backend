@@ -437,13 +437,16 @@ let rewrite_simples_with_debuginfo env simples =
 (* Rewrite the contents of a synthetic value slot, returning [None] if the value
    it mentions no longer exists after rebuilding.
 
-   CR mshinwell: When the value has been unboxed, the slot could instead be
+   XCR mshinwell: When the value has been unboxed, the slot could instead be
    replaced by synthetic slots for the unboxed fields, as is done for the value
    slots of a closure being unboxed (see
    [synthetic_value_slots_of_unboxed_closure]); the specialised parameters
    corresponding to such a value would likewise have to be re-expressed on the
    unboxed leaves (see [rebuild_function_params_and_body]). At present the
-   annotations are dropped in that case. *)
+   annotations are dropped in that case.
+
+   aide: Both hints and parameter annotations now use matching unboxed
+   leaves. *)
 let rewrite_synthetic_slot_contents env simple =
   Simple.pattern_match simple
     ~const:(fun _ -> Some simple)
@@ -455,21 +458,22 @@ let rewrite_synthetic_slot_contents env simple =
       then None
       else Some simple)
 
-(* The leaves of the unboxed fields of a closure, each with the path of fields
-   leading to it (innermost first). The first field of each path (i.e. the last
-   in the list) is a value slot of the closure. *)
-let unboxed_closure_leaves (fields : Variable.t Unboxed_fields.t) =
+(* Leaf variables and their field paths, outermost first. *)
+let unboxed_leaves (fields : Variable.t Unboxed_fields.t) =
   let rec leaves (fields : Variable.t Unboxed_fields.t) ~rev_path acc =
     Field.Map.fold
       (fun field (uf : _ Unboxed_fields.u) acc ->
         match uf with
-        | Not_unboxed var -> (var, field :: rev_path) :: acc
+        | Not_unboxed var -> (var, List.rev (field :: rev_path)) :: acc
         | Unboxed fields -> leaves fields ~rev_path:(field :: rev_path) acc)
       fields acc
   in
+  leaves fields ~rev_path:[] []
+
+let unboxed_closure_leaves fields =
   List.map
-    (fun (var, rev_path) ->
-      match List.rev rev_path with
+    (fun (var, path) ->
+      match path with
       | [] -> Misc.fatal_error "Empty path in [unboxed_closure_leaves]"
       | first :: nested -> (
         match Field.view first with
@@ -478,12 +482,10 @@ let unboxed_closure_leaves (fields : Variable.t Unboxed_fields.t) =
         | Call_witness _ | Return_of_call _ | Code_id_of_call_witness ->
           Misc.fatal_errorf "Unexpected field kind %a in unboxed closure"
             Field.print first))
-    (leaves fields ~rev_path:[] [])
+    (unboxed_leaves fields)
 
-(* The (synthetic, see [Value_slot.create]) value slot used to record the
-   contents of a leaf of an unboxed closure (see
-   [rebuild_specialisation_carrier]). The slot must be the same for all the
-   functions of a given set of closures, hence the memoisation. *)
+(* The synthetic slot for a leaf of an unboxed value. Memoisation gives code
+   annotations and specialisation sites the same slot for each field path. *)
 let synthetic_value_slot_for_leaf env value_slot (nested : Field.t list) =
   let leaf_slots =
     Option.value
@@ -517,6 +519,24 @@ let synthetic_value_slot_for_leaf env value_slot (nested : Field.t list) =
            (Leaf_slots.add leaf_slots nested slot)
            !(env.nested_synthetic_slots);
     slot
+
+let rewrite_synthetic_value_slots env slots =
+  Value_slot.Map.fold
+    (fun value_slot simple slots ->
+      if simple_is_unboxable env simple
+      then
+        List.fold_left
+          (fun slots (var, path) ->
+            Value_slot.Map.add
+              (synthetic_value_slot_for_leaf env value_slot path)
+              (Simple.var var) slots)
+          slots
+          (unboxed_leaves (get_simple_unboxable env simple))
+      else
+        match rewrite_synthetic_slot_contents env simple with
+        | None -> slots
+        | Some simple -> Value_slot.Map.add value_slot simple slots)
+    slots Value_slot.Map.empty
 
 (* The variable holding the given nested field of an unboxed value. *)
 let rec find_unboxed_leaf (fields : Variable.t Unboxed_fields.t) nested =
@@ -813,9 +833,7 @@ let rewrite_set_of_closures env res ~(bound : Name.t list) ~is_phantom
     Function_declarations.create (Function_slot.Lmap.of_list function_decls)
   in
   let synthetic_value_slots =
-    Value_slot.Map.filter_map
-      (fun _ simple -> rewrite_synthetic_slot_contents env simple)
-      synthetic_value_slots
+    rewrite_synthetic_value_slots env synthetic_value_slots
   in
   let set_of_closures =
     Set_of_closures.create ~is_specialisation_site ~synthetic_value_slots
@@ -1941,9 +1959,7 @@ let rebuild_specialisation_carrier env res bvs
               Value_slot.Map.union_left_biased slots
                 (synthetic_value_slots_of_unboxed_closure env ~value_slots
                    fields)))
-        (Value_slot.Map.filter_map
-           (fun _ simple -> rewrite_synthetic_slot_contents env simple)
-           set_of_closures.synthetic_value_slots)
+        (rewrite_synthetic_value_slots env set_of_closures.synthetic_value_slots)
         function_decls
     in
     let set_of_closures =
@@ -2750,6 +2766,28 @@ and rebuild_function_params_and_body (env : env) res code_metadata
         params_decision
         (Bound_parameters.to_list params)
     in
+    let specialised_params =
+      List.fold_left2
+        (fun annotations param (decision : Unboxing_analysis.param_decision) ->
+          match
+            Variable.Map.find_opt (Bound_parameter.var param) specialised_params
+          with
+          | None -> annotations
+          | Some value_slot -> (
+            match decision with
+            | Delete -> annotations
+            | Keep (var, _) -> Variable.Map.add var value_slot annotations
+            | Unbox fields ->
+              List.fold_left
+                (fun annotations (var, path) ->
+                  Variable.Map.add var
+                    (synthetic_value_slot_for_leaf env value_slot path)
+                    annotations)
+                annotations (unboxed_leaves fields)))
+        Variable.Map.empty
+        (Bound_parameters.to_list params)
+        params_decision
+    in
     let (my_closure_decision : Unboxing_analysis.param_decision), code_metadata
         =
       match
@@ -2785,17 +2823,6 @@ and rebuild_function_params_and_body (env : env) res code_metadata
     let params = List.map fst params_and_modes in
     let modes = List.concat_map snd params_and_modes in
     let specialised_params =
-      (* Deleted and unboxed parameters lose their annotations (see the CR in
-         [rewrite_synthetic_slot_contents]); the new leading parameters, which
-         hold the former contents of the closure, gain one each. *)
-      let kept_params =
-        Bound_parameters.var_set (Bound_parameters.create (List.flatten params))
-      in
-      let specialised_params =
-        Variable.Map.filter
-          (fun param _ -> Variable.Set.mem param kept_params)
-          specialised_params
-      in
       match my_closure_decision with
       | Delete | Keep _ -> specialised_params
       | Unbox fields ->
