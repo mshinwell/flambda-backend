@@ -323,18 +323,21 @@ end
 module Mutable_unboxing_result = struct
   type t =
     { did_unbox_a_mutable_block : bool;
+      unboxed_vars : Variable.Set.t;
       additional_epa : Continuation_extra_params_and_args.t Continuation.Map.t;
       let_rewrites : Named_rewrite.t Named_rewrite_id.Map.t
     }
 
-  let [@ocamlformat "disable"] print ppf { did_unbox_a_mutable_block; additional_epa; let_rewrites } =
+  let [@ocamlformat "disable"] print ppf { did_unbox_a_mutable_block; unboxed_vars; additional_epa; let_rewrites } =
     Format.fprintf ppf
       "@[<hov 1>(\
          @[<hov 1>(did_unbox_a_mutable_block@ %b)@]@ \
+         @[<hov 1>(unboxed_vars@ %a)@]@ \
          @[<hov 1>(additional_epa@ %a)@]@ \
          @[<hov 1>(let_rewrites@ %a)@]\
        )@]"
       did_unbox_a_mutable_block
+      Variable.Set.print unboxed_vars
       (Continuation.Map.print Continuation_extra_params_and_args.print) additional_epa
       (Named_rewrite_id.Map.print Named_rewrite.print) let_rewrites
 end
@@ -345,19 +348,23 @@ end
 module Flow_result = struct
   type t =
     { data_flow_result : Data_flow_result.t;
+      required_names_without_phantom_roots : Name.Set.t;
       aliases_result : Alias_result.t;
       mutable_unboxing_result : Mutable_unboxing_result.t
     }
 
   let [@ocamlformat "disable"] print ppf
-      { data_flow_result; aliases_result; mutable_unboxing_result; } =
+      { data_flow_result; required_names_without_phantom_roots;
+        aliases_result; mutable_unboxing_result; } =
     Format.fprintf ppf
       "@[<hov 1>(\
          @[<hov 1>(data_flow_result@ %a)@]@ \
+         @[<hov 1>(required_names_without_phantom_roots@ %a)@]@ \
          @[<hov 1>(aliases_result@ %a)@]@ \
          @[<hov 1>(mutable_unboxing_result@ %a)@]\
        )@]"
     Data_flow_result.print data_flow_result
+    Name.Set.print required_names_without_phantom_roots
     Alias_result.print aliases_result
     Mutable_unboxing_result.print mutable_unboxing_result
 end

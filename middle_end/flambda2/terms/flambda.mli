@@ -211,6 +211,10 @@ module Named : sig
 
   val at_most_generative_effects : t -> bool
 
+  (** Whether an unused binding may be deleted. Specialisation sites must be
+      retained for later simplification despite having no runtime effects. *)
+  val can_be_deleted : t -> bool
+
   val fold_code_and_sets_of_closures :
     t ->
     init:'a ->

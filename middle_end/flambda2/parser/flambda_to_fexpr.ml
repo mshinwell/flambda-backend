@@ -228,8 +228,8 @@ let value_slots env map =
       { Fexpr.var; value; kind })
     (map |> Value_slot.Map.bindings)
 
-let function_declaration env code_id function_slot alloc ~synthetic_value_slots
-    : Fexpr.fun_decl =
+let function_declaration env code_id function_slot alloc ~is_specialisation_site
+    ~synthetic_value_slots : Fexpr.fun_decl =
   let code_id = Env.find_code_id_exn env code_id in
   let function_slot = Env.translate_function_slot env function_slot in
   (* Omit the function slot when possible *)
@@ -243,7 +243,12 @@ let function_declaration env code_id function_slot alloc ~synthetic_value_slots
     | [] -> None
     | elts -> Some elts
   in
-  { code_id; function_slot; alloc; synthetic_value_slots }
+  { code_id;
+    is_specialisation_site;
+    function_slot;
+    alloc;
+    synthetic_value_slots
+  }
 
 let set_of_closures env sc alloc =
   let fun_decls =
@@ -257,6 +262,8 @@ let set_of_closures env sc alloc =
           else Value_slot.Map.empty
         in
         function_declaration env fun_decl function_slot alloc
+          ~is_specialisation_site:
+            (i = 0 && Set_of_closures.is_specialisation_site sc)
           ~synthetic_value_slots)
       (Set_of_closures.function_decls sc
       |> Function_declarations.funs_in_order

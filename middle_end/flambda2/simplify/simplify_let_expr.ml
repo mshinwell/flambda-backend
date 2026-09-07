@@ -107,7 +107,30 @@ let rebuild_let simplify_named_result removed_operations ~rewrite_id
                         Simplified_named.create ~machine_width
                           (Named.create_prim prim dbg)
                     }))
-            | Simple _ | Set_of_closures _ | Rec_info _ -> binding))
+            | Set_of_closures (set, _) ->
+              if not (Set_of_closures.is_specialisation_site set)
+              then binding
+              else
+                let required_names =
+                  UA.required_names_without_phantom_roots uacc
+                in
+                let { Flow_types.Mutable_unboxing_result.unboxed_vars; _ } =
+                  UA.mutable_unboxing_result uacc
+                in
+                let simplified_defining_expr =
+                  Simplified_named.filter_synthetic_value_slots
+                    simplified_defining_expr ~f:(fun simple ->
+                      Name_occurrences.fold_names (Simple.free_names simple)
+                        ~init:true ~f:(fun available name ->
+                          available
+                          && Name.Set.mem name required_names
+                          && Name.pattern_match name
+                               ~symbol:(fun _ -> true)
+                               ~var:(fun var ->
+                                 not (Variable.Set.mem var unboxed_vars))))
+                in
+                Keep_binding { kept_binding with simplified_defining_expr }
+            | Simple _ | Rec_info _ -> binding))
         bindings
     in
     (* Phantom let creation *)
@@ -181,18 +204,18 @@ let rebuild_let simplify_named_result removed_operations ~rewrite_id
                 in
                 not is_used, is_used
             in
-            let must_be_kept_for_its_effects =
+            let must_be_kept =
               is_end_region_for_used_region
               || (not is_end_region_for_unused_region)
-                 && not (Named.at_most_generative_effects defining_expr)
+                 && not (Named.can_be_deleted defining_expr)
             in
-            if must_be_kept_for_its_effects
+            if must_be_kept
             then (
               if not (Name_mode.is_normal declared_name_mode)
               then
                 Misc.fatal_errorf
                   "Cannot [Let]-bind non-normal variable(s) to a [Named] that \
-                   has more than generative effects:@ %a@ =@ %a"
+                   cannot be deleted:@ %a@ =@ %a"
                   Bound_pattern.print bound_vars Named.print defining_expr;
               binding_to_place)
             else

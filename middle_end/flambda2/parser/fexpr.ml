@@ -366,6 +366,7 @@ and named =
 
 and fun_decl =
   { code_id : code_id;
+    is_specialisation_site : bool;
     function_slot : function_slot option (* defaults to same name as code id *);
     alloc : alloc_mode_for_allocations;
         (* alloc mode for set of closures (ignored except on first binding) *)

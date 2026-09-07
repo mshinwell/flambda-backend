@@ -28,5 +28,6 @@ val create :
   Flow_types.Continuation_info.t Continuation.Map.t ->
   t
 
-(** Run the required names analysis *)
-val required_names : t -> Flow_types.Data_flow_result.t
+(** Run the required names analysis. Also return a conservative liveness set
+    excluding roots used only for phantom/debug bindings, for weak hints. *)
+val required_names : t -> Flow_types.Data_flow_result.t * Name.Set.t

@@ -186,6 +186,9 @@ end
 module Mutable_unboxing_result : sig
   type t =
     { did_unbox_a_mutable_block : bool;
+      unboxed_vars : Variable.Set.t;
+          (** Variables, including aliases, whose block values are unboxed and
+              cannot be referenced by retained specialisation hints. *)
       additional_epa : Continuation_extra_params_and_args.t Continuation.Map.t;
       let_rewrites : Named_rewrite.t Named_rewrite_id.Map.t
     }
@@ -199,6 +202,7 @@ end
 module Flow_result : sig
   type t =
     { data_flow_result : Data_flow_result.t;
+      required_names_without_phantom_roots : Name.Set.t;
       aliases_result : Alias_result.t;
       mutable_unboxing_result : Mutable_unboxing_result.t
     }

@@ -309,7 +309,9 @@ let traverse_set_of_closures denv acc ~(bound_pattern : Bound_pattern.t)
       has_synthetic_value_slots =
         not
           (Value_slot.Map.is_empty
-             (Set_of_closures.synthetic_value_slots set_of_closures))
+             (Set_of_closures.synthetic_value_slots set_of_closures));
+      is_specialisation_site =
+        Set_of_closures.is_specialisation_site set_of_closures
     }
 
 let traverse_static_set_of_closures denv acc ~closure_symbols set_of_closures =
@@ -582,7 +584,12 @@ let rec traverse_let denv acc let_expr : rev_expr =
     let synthetic_value_slots =
       Set_of_closures.synthetic_value_slots set_of_closures
     in
-    { function_decls; value_slots; synthetic_value_slots }
+    { function_decls;
+      value_slots;
+      synthetic_value_slots;
+      is_specialisation_site =
+        Set_of_closures.is_specialisation_site set_of_closures
+    }
   in
   let named : rev_named =
     match defining_expr with

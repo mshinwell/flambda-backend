@@ -1,0 +1,33 @@
+(* TEST
+ compile_only = "true";
+ ocamlopt_flags += " -flambda2-reaper -dflambda-invariants";
+ flambda2;
+ setup-simple-build-env;
+ fexpr with dump-raw, dump-simplify, dump-reaper;
+*)
+
+(* A specialisation site remains useful after its synthetic slots are removed.
+   With no assumption about [f], the new helper is still generic. The call must
+   nevertheless follow the new code ID, keeping the site live through reaper.
+   The separate site for [unused_helper] must disappear with its dead code. *)
+
+let code inline(never) size(10) helper (f : val, x : val)
+      specialised { f = f_slot }
+      my_closure &my_alloc_region my_depth -> k * e : val =
+  apply &my_alloc_region f (x) -> k * e
+in
+let code inline(never) size(1) unused_helper (x : val)
+      my_closure &my_alloc_region my_depth -> k * e : val =
+  cont k (x)
+in
+let code size(10) map (g : val, x : val)
+      my_closure &my_alloc_region my_depth -> k * e : val =
+  let carrier = closure specialisation_site helper &my_alloc_region in
+  let unused_carrier =
+    closure specialisation_site unused_helper &my_alloc_region
+  in
+  apply direct(helper &my_alloc_region) (g, x) -> k * e
+in
+let $map = closure map &toplevel.alloc_region in
+let $camlSpecialised_params_empty_site = Block 0 ($map) in
+cont done ($camlSpecialised_params_empty_site)

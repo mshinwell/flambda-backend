@@ -352,7 +352,22 @@ let record_let_binding ~rewrite_id ~generate_phantom_lets ~let_bound
       let bound_var = Bound_pattern.must_be_singleton let_bound in
       let var = Bound_var.var bound_var in
       record_var_alias var simple t
-    | Set_of_closures _ | Rec_info _ -> record_var_bindings t free_names
+    | Set_of_closures (set, alloc_mode) ->
+      if Set_of_closures.is_specialisation_site set
+      then
+        (* Sites are runtime-closed. Their synthetic contents are weak hints:
+           they must not keep values alive or make mutable blocks escape.
+           Unavailable hints are removed during the upwards traversal. *)
+        let free_names =
+          Name_occurrences.union
+            (Function_declarations.free_names
+               (Set_of_closures.function_decls set))
+            (Alloc_mode.For_allocations.free_names alloc_mode)
+        in
+        add_used_in_current_handler free_names
+          (record_var_bindings t free_names)
+      else record_var_bindings t free_names
+    | Rec_info _ -> record_var_bindings t free_names
     | Prim (original_prim, _) -> (
       let bound_var = Bound_pattern.must_be_singleton let_bound in
       let var = Bound_var.var bound_var in

@@ -926,8 +926,9 @@ let remove_continuation t ~continuation =
       continuations_in_trap_actions
     }
 
-let greatest_name_mode_var t var =
-  For_names.greatest_name_mode t.names (Name.var var)
+let greatest_name_mode_name t name = For_names.greatest_name_mode t.names name
+
+let greatest_name_mode_var t var = greatest_name_mode_name t (Name.var var)
 
 let downgrade_occurrences_at_strictly_greater_name_mode
     { names;

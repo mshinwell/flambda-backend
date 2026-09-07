@@ -585,12 +585,14 @@ let function_has_unboxed_closure_fields env code_id =
    [rebuild_specialisation_carrier]). This must be decided identically when
    rebuilding the binding of the set and when rebuilding the calls to its
    functions. *)
-let set_of_closures_gets_carrier env ~code_ids ~has_synthetic_value_slots =
-  (* The toplevel of the compilation unit is never simplified again, so a
-     carrier would be useless there. *)
-  env.inside_code_definition
-  && (has_synthetic_value_slots
-     || List.exists (function_has_unboxed_closure_fields env) code_ids)
+let set_of_closures_gets_carrier env ~code_ids ~has_synthetic_value_slots
+    ~is_specialisation_site =
+  (* Preserve existing sites even if their slots have been removed. New sites
+     are only useful inside code that can be simplified again. *)
+  is_specialisation_site
+  || env.inside_code_definition
+     && (has_synthetic_value_slots
+        || List.exists (function_has_unboxed_closure_fields env) code_ids)
 
 let carrier_var env var =
   match Variable.Map.find_opt var !(env.carrier_vars) with
@@ -681,7 +683,11 @@ let rewrite_function_decl env
         }
 
 let rewrite_set_of_closures env res ~(bound : Name.t list) ~is_phantom
-    ({ Rev_expr.function_decls; value_slots; synthetic_value_slots } :
+    ({ Rev_expr.function_decls;
+       value_slots;
+       synthetic_value_slots;
+       is_specialisation_site
+     } :
       Rev_expr.rev_set_of_closures) =
   let slot_is_used slot =
     List.exists
@@ -812,7 +818,8 @@ let rewrite_set_of_closures env res ~(bound : Name.t list) ~is_phantom
       synthetic_value_slots
   in
   let set_of_closures =
-    Set_of_closures.create ~synthetic_value_slots ~value_slots function_decls
+    Set_of_closures.create ~is_specialisation_site ~synthetic_value_slots
+      ~value_slots function_decls
   in
   let res = add_set_of_closures_to_res env res ~is_phantom set_of_closures in
   set_of_closures, res
@@ -1554,9 +1561,15 @@ let rebuild_apply env apply =
                       match
                         Variable.Map.find_opt var env.dynamic_sets_of_closures
                       with
-                      | Some { code_ids; has_synthetic_value_slots; _ }
+                      | Some
+                          { code_ids;
+                            has_synthetic_value_slots;
+                            is_specialisation_site;
+                            _
+                          }
                         when set_of_closures_gets_carrier env ~code_ids
-                               ~has_synthetic_value_slots ->
+                               ~has_synthetic_value_slots
+                               ~is_specialisation_site ->
                         Some (Simple.var (carrier_var env var))
                       | Some _ | None -> None))
             in
@@ -1865,7 +1878,8 @@ let rebuild_singleton_binding_which_is_being_unboxed env bv
    with no callee. Since the set of closures is closed, [To_cmm] allocates it
    statically. *)
 let rebuild_specialisation_carrier env res bvs
-    ~(set_of_closures : Rev_expr.rev_set_of_closures) ~alloc_mode ~hole =
+    ~(set_of_closures : Rev_expr.rev_set_of_closures) ~rename_bound_vars
+    ~alloc_mode ~hole =
   let value_slots = set_of_closures.value_slots in
   let function_decls =
     Function_slot.Lmap.bindings
@@ -1905,7 +1919,8 @@ let rebuild_specialisation_carrier env res bvs
   | _ :: _
     when not
            (set_of_closures_gets_carrier env ~code_ids
-              ~has_synthetic_value_slots) ->
+              ~has_synthetic_value_slots
+              ~is_specialisation_site:set_of_closures.is_specialisation_site) ->
     hole, res
   | _ :: _ ->
     let function_decls, bvs = List.split function_decls_and_bvs in
@@ -1932,7 +1947,7 @@ let rebuild_specialisation_carrier env res bvs
         function_decls
     in
     let set_of_closures =
-      Set_of_closures.create ~synthetic_value_slots
+      Set_of_closures.create ~is_specialisation_site:true ~synthetic_value_slots
         ~value_slots:Value_slot.Map.empty
         (Function_declarations.create
            (Function_slot.Lmap.of_list function_decls))
@@ -1941,9 +1956,12 @@ let rebuild_specialisation_carrier env res bvs
       Bound_pattern.set_of_closures
         (List.map
            (fun bv ->
-             Bound_var.create
-               (carrier_var env (Bound_var.var bv))
-               Flambda_debug_uid.none Name_mode.normal)
+             if rename_bound_vars
+             then
+               Bound_var.create
+                 (carrier_var env (Bound_var.var bv))
+                 Flambda_debug_uid.none Name_mode.normal
+             else bv)
            bvs)
     in
     let res =
@@ -1969,8 +1987,8 @@ let rebuild_set_of_closures_binding_which_is_being_unboxed env res bvs
                 (Code_id_or_name.var (Bound_var.var bv))))
       bvs);
   let hole, res =
-    rebuild_specialisation_carrier env res bvs ~set_of_closures ~alloc_mode
-      ~hole
+    rebuild_specialisation_carrier env res bvs ~set_of_closures
+      ~rename_bound_vars:true ~alloc_mode ~hole
   in
   let expr =
     List.fold_left
@@ -2198,12 +2216,16 @@ let rebuild_make_block_default_case env (bp : Bound_pattern.t)
       (Code_size.prim ~machine_width:env.machine_width prim)
     ~body:hole
 
-let rebuild_let_expr_holed_set_of_closures env res bvs ~set_of_closures
-    ~alloc_mode ~hole =
+let rebuild_let_expr_holed_set_of_closures env res bvs
+    ~(set_of_closures : Rev_expr.rev_set_of_closures) ~alloc_mode ~hole =
   if bound_vars_will_be_unboxed env bvs
   then
     rebuild_set_of_closures_binding_which_is_being_unboxed env res bvs
       ~set_of_closures ~alloc_mode ~hole
+  else if set_of_closures.is_specialisation_site
+  then
+    rebuild_specialisation_carrier env res bvs ~set_of_closures
+      ~rename_bound_vars:false ~alloc_mode ~hole
   else if not (List.exists (fun v -> is_var_used env (Bound_var.var v)) bvs)
   then hole, res
   else

@@ -183,6 +183,8 @@ val remove_code_id_or_symbol : t -> code_id_or_symbol:Code_id_or_symbol.t -> t
 
 val remove_continuation : t -> continuation:Continuation.t -> t
 
+val greatest_name_mode_name : t -> Name.t -> Name_mode.Or_absent.t
+
 val greatest_name_mode_var : t -> Variable.t -> Name_mode.Or_absent.t
 
 val downgrade_occurrences_at_strictly_greater_name_mode : t -> Name_mode.t -> t

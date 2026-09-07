@@ -245,7 +245,8 @@ val add_set_of_closures :
 type dynamic_set_of_closures =
   { bound_vars : Variable.t list;
     code_ids : Code_id.t list;  (** Code IDs of the non-deleted functions. *)
-    has_synthetic_value_slots : bool
+    has_synthetic_value_slots : bool;
+    is_specialisation_site : bool
   }
 
 val add_dynamic_set_of_closures : t -> dynamic_set_of_closures -> unit

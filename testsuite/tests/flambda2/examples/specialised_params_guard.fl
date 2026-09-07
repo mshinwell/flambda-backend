@@ -1,6 +1,6 @@
 (* TEST
  compile_only = "true";
- flags += "-dflambda-invariants";
+ ocamlopt_flags += " -dflambda-invariants";
  flambda2;
  setup-simple-build-env;
  fexpr with dump-raw, dump-simplify;

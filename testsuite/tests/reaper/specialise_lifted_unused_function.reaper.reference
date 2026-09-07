@@ -27,7 +27,9 @@
          -> k1 * k2
          : imm tagged =
    let f_into_f_field_y = y in
-   let f = closure f_1 @f &my_alloc_region synthetic { y = y } in
+   let f =
+     closure specialisation_site f_1 @f &my_alloc_region synthetic { y = y }
+   in
    let inlined_dbg = %inlined_apply () in
    let my_depth_1 = rec_info my_depth in
    let x = n in

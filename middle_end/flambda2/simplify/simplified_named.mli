@@ -45,6 +45,10 @@ val create_with_known_free_names :
   free_names:Name_occurrences.t ->
   t
 
+(** Filter optional specialisation hints, updating free names without changing
+    runtime cost metrics. Non-closure expressions are unchanged. *)
+val filter_synthetic_value_slots : t -> f:(Simple.t -> bool) -> t
+
 val print : Format.formatter -> t -> unit
 
 val cost_metrics : t -> Cost_metrics.t

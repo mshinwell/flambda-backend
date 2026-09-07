@@ -178,6 +178,7 @@ let make_boxed_const_int (i, m) : static_data =
 %token KWD_SET_OF_CLOSURES [@symbol "set_of_closures"]
 %token KWD_SIZE   [@symbol "size"]
 %token KWD_SPECIALISED [@symbol "specialised"]
+%token KWD_SPECIALISATION_SITE [@symbol "specialisation_site"]
 %token KWD_SYNTHETIC [@symbol "synthetic"]
 %token KWD_STACK  [@symbol "stack"]
 %token KWD_SUCC   [@symbol "succ"]
@@ -622,11 +623,14 @@ value_slot:
 ;
 
 fun_decl:
-  | KWD_CLOSURE; code_id = code_id;
+  | KWD_CLOSURE;
+    is_specialisation_site = boption(KWD_SPECIALISATION_SITE);
+    code_id = code_id;
     function_slot = function_slot_opt;
     alloc = alloc_mode_for_allocations;
     synthetic_value_slots = synthetic_value_slots_opt;
-    { { code_id; function_slot; alloc; synthetic_value_slots; } }
+    { { code_id; is_specialisation_site; function_slot; alloc;
+        synthetic_value_slots; } }
 ;
 
 synthetic_value_slots_opt:

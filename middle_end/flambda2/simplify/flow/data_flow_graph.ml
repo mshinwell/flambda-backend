@@ -21,6 +21,7 @@ type t =
     code_id_to_name : Name.Set.t Code_id.Map.t;
     code_id_to_code_id : Code_id.Set.t Code_id.Map.t;
     unconditionally_used : Name.Set.t;
+    phantom_only_roots : Name.Set.t;
     code_id_unconditionally_used : Code_id.Set.t;
     is_toplevel : bool
   }
@@ -153,6 +154,7 @@ let empty code_age_relation is_toplevel ~code_ids_to_never_delete =
     code_id_to_name = Code_id.Map.empty;
     code_id_to_code_id = Code_id.Map.empty;
     unconditionally_used = Name.Set.empty;
+    phantom_only_roots = Name.Set.empty;
     code_id_unconditionally_used = code_ids_to_never_delete
   }
 
@@ -164,6 +166,7 @@ let print ppf
       code_id_to_code_id;
       code_age_relation;
       unconditionally_used;
+      phantom_only_roots = _;
       code_id_unconditionally_used
     } =
   Format.fprintf ppf
@@ -234,18 +237,41 @@ let add_code_id_to_code_id ~src ~dst ({ code_id_to_code_id; _ } as t) =
   { t with code_id_to_code_id }
 
 let add_name_occurrences name_occurrences
-    ({ unconditionally_used; code_id_unconditionally_used; _ } as t) =
-  let unconditionally_used =
+    ({ unconditionally_used;
+       phantom_only_roots;
+       code_id_unconditionally_used;
+       _
+     } as t) =
+  let unconditionally_used, phantom_only_roots =
     Name_occurrences.fold_names name_occurrences
-      ~f:(fun set name -> Name.Set.add name set)
-      ~init:unconditionally_used
+      ~f:(fun (used, phantom_only) name ->
+        let is_normal =
+          match
+            Name_occurrences.greatest_name_mode_name name_occurrences name
+          with
+          | Absent -> false
+          | Present mode -> Name_mode.is_normal mode
+        in
+        let phantom_only =
+          if is_normal
+          then Name.Set.remove name phantom_only
+          else if Name.Set.mem name used
+          then phantom_only
+          else Name.Set.add name phantom_only
+        in
+        Name.Set.add name used, phantom_only)
+      ~init:(unconditionally_used, phantom_only_roots)
   in
   let code_id_unconditionally_used =
     Code_id.Set.union
       (Name_occurrences.code_ids name_occurrences)
       code_id_unconditionally_used
   in
-  { t with unconditionally_used; code_id_unconditionally_used }
+  { t with
+    unconditionally_used;
+    phantom_only_roots;
+    code_id_unconditionally_used
+  }
 
 let add_continuation_info map ~return_continuation ~exn_continuation
     ~used_value_slots _
@@ -429,13 +455,14 @@ let create ~return_continuation ~exn_continuation ~code_age_relation
   in
   t
 
-let required_names
+let required_names0
     ({ code_age_relation = _;
        name_to_name = _;
        name_to_code_id = _;
        code_id_to_name = _;
        code_id_to_code_id = _;
        unconditionally_used;
+       phantom_only_roots = _;
        code_id_unconditionally_used;
        is_toplevel
      } as t) =
@@ -449,3 +476,16 @@ let required_names
       code_id_unconditionally_used;
   Reachable.reachable_names t code_id_queue code_id_unconditionally_used
     Code_id.Set.empty name_queue unconditionally_used
+
+let required_names t =
+  let all_uses = required_names0 t in
+  let without_phantom_roots =
+    if Name.Set.is_empty t.phantom_only_roots
+    then all_uses.required_names
+    else
+      let unconditionally_used =
+        Name.Set.diff t.unconditionally_used t.phantom_only_roots
+      in
+      (required_names0 { t with unconditionally_used }).required_names
+  in
+  all_uses, without_phantom_roots

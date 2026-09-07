@@ -61,11 +61,14 @@ let code loopify(never) size(43) newer_version_of(f_0)
   let `region` = %begin_region () in
   let g_into_g_field_x = x in
   let g_into_g_field_y = y in
-  let g = closure g_1_1 @g &my_alloc_region &`region` synthetic { x = x } in
+  let g =
+    closure specialisation_site g_1_1 @g &my_alloc_region &`region`
+      synthetic { x = x }
+  in
   let u_into_u_field_g_field_x = g_into_g_field_x in
   let u_into_u_field_g_field_y = g_into_g_field_y in
   let u =
-    closure u_4_1 @u &my_alloc_region &`region`
+    closure specialisation_site u_4_1 @u &my_alloc_region &`region`
       synthetic {
         g_field_x = g_into_g_field_x;
         g_field_y = g_into_g_field_y

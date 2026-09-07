@@ -17,13 +17,18 @@
 type t =
   { function_decls : Function_declarations.t;
     value_slots : Simple.t Value_slot.Map.t;
-    synthetic_value_slots : Simple.t Value_slot.Map.t
+    synthetic_value_slots : Simple.t Value_slot.Map.t;
+    is_specialisation_site : bool
   }
+
+let print_specialisation_site ppf is_specialisation_site =
+  if is_specialisation_site then Format.fprintf ppf "@ (specialisation_site)"
 
 let [@ocamlformat "disable"] print_with_extra_fields extra_fields ppf
       { function_decls;
         value_slots;
-        synthetic_value_slots
+        synthetic_value_slots;
+        is_specialisation_site
       } =
   let print_synthetic_value_slots ppf synthetic_value_slots =
     if not (Value_slot.Map.is_empty synthetic_value_slots) then
@@ -34,7 +39,7 @@ let [@ocamlformat "disable"] print_with_extra_fields extra_fields ppf
       %t\
       @[<hov 1>(function_decls@ %a)@]@ \
       @[<hov 1>(value_slots@ %a)@]\
-      %a\
+      %a%a\
       )@]"
     Flambda_colours.prim_constructive
     Flambda_colours.pop
@@ -42,6 +47,7 @@ let [@ocamlformat "disable"] print_with_extra_fields extra_fields ppf
     (Function_declarations.print) function_decls
     (Value_slot.Map.print Simple.print) value_slots
     print_synthetic_value_slots synthetic_value_slots
+    print_specialisation_site is_specialisation_site
 
 let print ppf t = print_with_extra_fields (fun _ppf -> ()) ppf t
 
@@ -55,11 +61,13 @@ include Container_types.Make (struct
   let compare
       { function_decls = function_decls1;
         value_slots = value_slots1;
-        synthetic_value_slots = synthetic_value_slots1
+        synthetic_value_slots = synthetic_value_slots1;
+        is_specialisation_site = is_specialisation_site1
       }
       { function_decls = function_decls2;
         value_slots = value_slots2;
-        synthetic_value_slots = synthetic_value_slots2
+        synthetic_value_slots = synthetic_value_slots2;
+        is_specialisation_site = is_specialisation_site2
       } =
     let c = Function_declarations.compare function_decls1 function_decls2 in
     if c <> 0
@@ -69,20 +77,34 @@ include Container_types.Make (struct
       if c <> 0
       then c
       else
-        Value_slot.Map.compare Simple.compare synthetic_value_slots1
-          synthetic_value_slots2
+        let c =
+          Value_slot.Map.compare Simple.compare synthetic_value_slots1
+            synthetic_value_slots2
+        in
+        if c <> 0
+        then c
+        else Bool.compare is_specialisation_site1 is_specialisation_site2
 
   let equal t1 t2 = compare t1 t2 = 0
 end)
 
-let is_empty { function_decls; value_slots; synthetic_value_slots = _ } =
+let is_empty
+    { function_decls;
+      value_slots;
+      synthetic_value_slots = _;
+      is_specialisation_site = _
+    } =
   Function_declarations.is_empty function_decls
   && Value_slot.Map.is_empty value_slots
 
-let create ?(synthetic_value_slots = Value_slot.Map.empty) ~value_slots
-    function_decls =
+let create ?(is_specialisation_site = false)
+    ?(synthetic_value_slots = Value_slot.Map.empty) ~value_slots function_decls
+    =
   if Flambda_features.check_invariants ()
   then (
+    if is_specialisation_site && not (Value_slot.Map.is_empty value_slots)
+    then
+      Misc.fatal_error "A specialisation site cannot have runtime value slots";
     Value_slot.Map.iter
       (fun value_slot _ ->
         if not (Value_slot.is_synthetic value_slot)
@@ -100,7 +122,9 @@ let create ?(synthetic_value_slots = Value_slot.Map.empty) ~value_slots
             "Specialised value slot %a cannot be used as an ordinary value slot"
             Value_slot.print value_slot)
       value_slots);
-  { function_decls; value_slots; synthetic_value_slots }
+  { function_decls; value_slots; synthetic_value_slots; is_specialisation_site }
+
+let is_specialisation_site t = t.is_specialisation_site
 
 let function_decls t = t.function_decls
 
@@ -114,6 +138,7 @@ let [@ocamlformat "disable"] print ppf
       { function_decls;
         value_slots;
         synthetic_value_slots;
+        is_specialisation_site;
       } =
   let print_synthetic_value_slots ppf synthetic_value_slots =
     if not (Value_slot.Map.is_empty synthetic_value_slots) then
@@ -123,25 +148,32 @@ let [@ocamlformat "disable"] print ppf
   if Value_slot.Map.is_empty value_slots then
     Format.fprintf ppf "@[<hov 1>(%tset_of_closures%t@ \
         @[<hov 1>%a@]\
-        %a\
+        %a%a\
         )@]"
       Flambda_colours.prim_constructive
       Flambda_colours.pop
       (Function_declarations.print) function_decls
       print_synthetic_value_slots synthetic_value_slots
+      print_specialisation_site is_specialisation_site
   else
     Format.fprintf ppf "@[<hov 1>(%tset_of_closures%t@ \
         @[<hov 1>%a@]@ \
         @[<hov 1>(env@ %a)@]\
-        %a\
+        %a%a\
         )@]"
       Flambda_colours.prim_constructive
       Flambda_colours.pop
       Function_declarations.print function_decls
       (Value_slot.Map.print Simple.print) value_slots
       print_synthetic_value_slots synthetic_value_slots
+      print_specialisation_site is_specialisation_site
 
-let free_names { function_decls; value_slots; synthetic_value_slots } =
+let free_names
+    { function_decls;
+      value_slots;
+      synthetic_value_slots;
+      is_specialisation_site = _
+    } =
   let free_names_of_value_slots =
     Value_slot.Map.fold
       (fun value_slot simple free_names ->
@@ -164,8 +196,12 @@ let free_names { function_decls; value_slots; synthetic_value_slots } =
        free_names_of_value_slots)
     free_names_of_synthetic_value_slots
 
-let apply_renaming ({ function_decls; value_slots; synthetic_value_slots } as t)
-    renaming =
+let apply_renaming
+    ({ function_decls;
+       value_slots;
+       synthetic_value_slots;
+       is_specialisation_site
+     } as t) renaming =
   let function_decls' =
     Function_declarations.apply_renaming function_decls renaming
   in
@@ -196,10 +232,16 @@ let apply_renaming ({ function_decls; value_slots; synthetic_value_slots } as t)
   else
     { function_decls = function_decls';
       value_slots = value_slots';
-      synthetic_value_slots = synthetic_value_slots'
+      synthetic_value_slots = synthetic_value_slots';
+      is_specialisation_site
     }
 
-let ids_for_export { function_decls; value_slots; synthetic_value_slots } =
+let ids_for_export
+    { function_decls;
+      value_slots;
+      synthetic_value_slots;
+      is_specialisation_site = _
+    } =
   let function_decls_ids =
     Function_declarations.ids_for_export function_decls
   in

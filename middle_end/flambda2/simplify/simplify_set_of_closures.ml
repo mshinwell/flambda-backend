@@ -777,7 +777,10 @@ let simplify_set_of_closures0 outer_dacc context set_of_closures alloc_mode
   in
   let set_of_closures =
     Function_declarations.create all_function_decls_in_set
-    |> Set_of_closures.create ~synthetic_value_slots ~value_slots
+    |> Set_of_closures.create
+         ~is_specialisation_site:
+           (Set_of_closures.is_specialisation_site set_of_closures)
+         ~synthetic_value_slots ~value_slots
   in
   { set_of_closures; dacc }
 
@@ -1127,7 +1130,11 @@ let type_value_slots_and_make_lifting_decision_for_one_set dacc
            || DE.is_defined_at_toplevel (DA.denv dacc) var)
   in
   let can_lift =
-    Name_mode.is_normal name_mode_of_bound_vars
+    (* Keep specialisation sites at their lexical binding: lifting them out of a
+       function would prevent inlining from revisiting them. [To_cmm] still
+       allocates their closed sets statically. *)
+    (not (Set_of_closures.is_specialisation_site set_of_closures))
+    && Name_mode.is_normal name_mode_of_bound_vars
     && Value_slot.Map.for_all value_slot_permits_lifting value_slots
     && Value_slot.Map.for_all
          (fun _ simple -> synthetic_value_slot_permits_lifting simple)

@@ -47,7 +47,8 @@ type apply_dep =
 type dynamic_set_of_closures =
   { bound_vars : Variable.t list;
     code_ids : Code_id.t list;
-    has_synthetic_value_slots : bool
+    has_synthetic_value_slots : bool;
+    is_specialisation_site : bool
   }
 
 type dynamic_sets_of_closures = dynamic_set_of_closures Variable.Map.t

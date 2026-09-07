@@ -28,10 +28,19 @@ val is_empty : t -> bool
 (** Create a set of closures given the code for its functions and the closure
     variables. See below regarding [synthetic_value_slots]. *)
 val create :
+  ?is_specialisation_site:bool ->
   ?synthetic_value_slots:Simple.t Value_slot.Map.t ->
   value_slots:Simple.t Value_slot.Map.t ->
   Function_declarations.t ->
   t
+
+(** A specialisation site is a runtime-closed set of closures left behind by
+    lambda lifting. Its binding must be retained in code that may be simplified
+    again, even if no call uses its closures as callees and even if its
+    synthetic slots have been removed. The synthetic contents are weak hints:
+    retaining the site must not keep otherwise dead values alive. Its closures
+    are only used as callees. *)
+val is_specialisation_site : t -> bool
 
 (** The function declarations associated with the set of closures. *)
 val function_decls : t -> Function_declarations.t

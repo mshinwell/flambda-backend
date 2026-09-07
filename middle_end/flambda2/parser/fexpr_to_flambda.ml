@@ -318,7 +318,15 @@ let set_of_closures env fun_decls value_slots =
   let value_slots =
     convert_value_slots env (Option.value value_slots ~default:[])
   in
-  Set_of_closures.create ~synthetic_value_slots ~value_slots fun_decls_flambda
+  let is_specialisation_site =
+    List.exists
+      (fun (decl : Fexpr.fun_decl) -> decl.is_specialisation_site)
+      fun_decls
+  in
+  if is_specialisation_site && not (Value_slot.Map.is_empty value_slots)
+  then Misc.fatal_error "A specialisation site cannot have runtime value slots";
+  Set_of_closures.create ~is_specialisation_site ~synthetic_value_slots
+    ~value_slots fun_decls_flambda
 
 let apply_cont env acc ({ cont; args; trap_action } : Fexpr.apply_cont) =
   let trap_action : Trap_action.t option =

@@ -84,7 +84,9 @@ let analyze ?(speculative = false) ?print_name ~machine_width
       if Flambda_features.dump_flow ()
       then Format.eprintf "/// graph@\n%a@\n@." Data_flow_graph.print deps;
       (* Dead variable analysis *)
-      let dead_variable_result = Data_flow_graph.required_names deps in
+      let dead_variable_result, required_names_without_phantom_roots =
+        Data_flow_graph.required_names deps
+      in
       (* Aliases analysis *)
       let dom_graph =
         Dominator_graph.create map ~return_continuation ~exn_continuation
@@ -106,7 +108,7 @@ let analyze ?(speculative = false) ?print_name ~machine_width
       in
       let pp_node = Mutable_unboxing.pp_node reference_analysis in
       let reference_result, unboxed_blocks =
-        Mutable_unboxing.make_result reference_analysis
+        Mutable_unboxing.make_result reference_analysis ~dom:aliases
       in
       let continuation_parameters =
         Control_flow_graph.compute_continuation_extra_args_for_aliases
@@ -139,6 +141,7 @@ let analyze ?(speculative = false) ?print_name ~machine_width
               { dead_variable_result with
                 required_names = required_names_after_ref_reference_analysis
               };
+            required_names_without_phantom_roots;
             aliases_result = { aliases_kind; continuation_parameters };
             mutable_unboxing_result = reference_result
           }

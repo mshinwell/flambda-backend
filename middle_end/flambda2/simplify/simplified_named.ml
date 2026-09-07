@@ -81,6 +81,26 @@ let create_with_known_free_names ~machine_width ~find_code_characteristics
   in
   { named = simplified_named; cost_metrics; free_names }
 
+let filter_synthetic_value_slots t ~f =
+  match t.named with
+  | Simple _ | Prim _ | Rec_info _ -> t
+  | Set_of_closures (set, alloc_mode) ->
+    let synthetic_value_slots =
+      Value_slot.Map.filter
+        (fun _ simple -> f simple)
+        (Set_of_closures.synthetic_value_slots set)
+    in
+    let set =
+      Set_of_closures.create
+        ~is_specialisation_site:(Set_of_closures.is_specialisation_site set)
+        ~synthetic_value_slots
+        ~value_slots:(Set_of_closures.value_slots set)
+        (Set_of_closures.function_decls set)
+    in
+    let named = Set_of_closures (set, alloc_mode) in
+    (* Removing hints changes free names, but not the cost of the closures. *)
+    { t with named; free_names = Named.free_names (to_named named) }
+
 let print ppf { named; _ } = Named.print ppf (to_named named)
 
 let cost_metrics { cost_metrics; _ } = cost_metrics
