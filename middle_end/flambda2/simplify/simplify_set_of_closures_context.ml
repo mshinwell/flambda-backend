@@ -330,7 +330,8 @@ let compute_and_erase_depth_variables ~typing_env ~denv_inside_functions
     denv_inside_functions, free_depth_variables
 
 let create ~dacc_prior_to_sets ~simplify_function_body ~all_sets_of_closures
-    ~closure_bound_names_all_sets ~value_slot_types_all_sets =
+    ~closure_bound_names_all_sets ~value_slot_types_all_sets
+    ~specialised_value_slot_types_all_sets =
   let denv = DA.denv dacc_prior_to_sets in
   let denv_inside_functions =
     DE.enter_set_of_closures denv
@@ -340,6 +341,16 @@ let create ~dacc_prior_to_sets ~simplify_function_body ~all_sets_of_closures
     |> DE.set_rebuild_terms
   in
   let denv_inside_functions, previously_free_depth_variables =
+    (* The contents of the specialised value slots end up in the functions'
+       environments too, via the equations on the specialised parameters. *)
+    let value_slot_types_all_sets =
+      List.map2
+        (fun value_slot_types specialised_value_slot_types ->
+          Value_slot.Map.union
+            (fun _ ty _ -> Some ty)
+            value_slot_types specialised_value_slot_types)
+        value_slot_types_all_sets specialised_value_slot_types_all_sets
+    in
     compute_and_erase_depth_variables ~typing_env:(DE.typing_env denv)
       ~denv_inside_functions ~value_slot_types_all_sets
   in
