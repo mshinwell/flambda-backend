@@ -85,21 +85,23 @@ let filter_synthetic_value_slots t ~f =
   match t.named with
   | Simple _ | Prim _ | Rec_info _ -> t
   | Set_of_closures (set, alloc_mode) ->
-    let synthetic_value_slots =
-      Value_slot.Map.filter
-        (fun _ simple -> f simple)
-        (Set_of_closures.synthetic_value_slots set)
+    let synthetic_value_slots = Set_of_closures.synthetic_value_slots set in
+    let synthetic_value_slots' =
+      Value_slot.Map.filter (fun _ simple -> f simple) synthetic_value_slots
     in
-    let set =
-      Set_of_closures.create
-        ~is_specialisation_site:(Set_of_closures.is_specialisation_site set)
-        ~synthetic_value_slots
-        ~value_slots:(Set_of_closures.value_slots set)
-        (Set_of_closures.function_decls set)
-    in
-    let named = Set_of_closures (set, alloc_mode) in
-    (* Removing hints changes free names, but not the cost of the closures. *)
-    { t with named; free_names = Named.free_names (to_named named) }
+    if
+      Value_slot.Map.cardinal synthetic_value_slots'
+      = Value_slot.Map.cardinal synthetic_value_slots
+    then t
+    else
+      let set =
+        Set_of_closures.with_value_slots set
+          ~value_slots:(Set_of_closures.value_slots set)
+          ~synthetic_value_slots:synthetic_value_slots'
+      in
+      let named = Set_of_closures (set, alloc_mode) in
+      (* Removing hints changes free names, but not the cost of the closures. *)
+      { t with named; free_names = Named.free_names (to_named named) }
 
 let print ppf { named; _ } = Named.print ppf (to_named named)
 

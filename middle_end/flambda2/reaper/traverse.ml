@@ -260,24 +260,23 @@ let traverse_prim denv acc ~bound_pattern (prim : Flambda_primitive.t) ~default
 
 let traverse_set_of_closures denv acc ~(bound_pattern : Bound_pattern.t)
     set_of_closures =
+  let bound_vars =
+    match bound_pattern with
+    | Set_of_closures set -> List.map Bound_var.var set
+    | Static _ | Singleton _ ->
+      Misc.fatal_errorf
+        "Expected [Set_of_closures] bound pattern in \
+         [traverse_set_of_closures], got %a"
+        Bound_pattern.print bound_pattern
+  in
   let names_and_function_slots =
-    let bound_vars =
-      match bound_pattern with
-      | Set_of_closures set -> set
-      | Static _ | Singleton _ ->
-        Misc.fatal_errorf
-          "Expected [Set_of_closures] bound pattern in \
-           [traverse_set_of_closures], got %a"
-          Bound_pattern.print bound_pattern
-    in
     let funs =
       Function_declarations.funs_in_order
         (Set_of_closures.function_decls set_of_closures)
     in
     Function_slot.Lmap.of_list
       (List.map2
-         (fun function_slot bound_var ->
-           function_slot, Name.var (Bound_var.var bound_var))
+         (fun function_slot var -> function_slot, Name.var var)
          (Function_slot.Lmap.keys funs)
          bound_vars)
   in
@@ -286,15 +285,7 @@ let traverse_set_of_closures denv acc ~(bound_pattern : Bound_pattern.t)
     Function_declarations.code_ids
       (Set_of_closures.function_decls set_of_closures)
   in
-  Acc.add_dynamic_set_of_closures acc
-    ~bound_vars:
-      (List.map
-         (fun name ->
-           Name.pattern_match name
-             ~var:(fun var -> var)
-             ~symbol:(fun _ ->
-               Misc.fatal_error "Symbol bound by a dynamic set of closures"))
-         (Function_slot.Lmap.data names_and_function_slots))
+  Acc.add_dynamic_set_of_closures acc ~bound_vars
     { code_ids;
       has_synthetic_value_slots =
         not

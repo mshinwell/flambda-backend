@@ -1,0 +1,31 @@
+(* TEST
+ compile_only = "true";
+ ocamlopt_flags += " -no-flambda2-reaper -dflambda-invariants";
+ flambda2;
+ setup-simple-build-env;
+ fexpr with dump-simplify;
+*)
+
+(* The code of the site is only called from [g], a closed function that is
+   lifted to a symbol and only escapes from [outer] (it is never called
+   there). The site must still be kept: the code of [g] is live through the
+   symbol, and calls the new version of [helper]. *)
+
+let code inline(never) size(10) helper (x : val)
+      my_closure &my_alloc_region my_depth -> k * e : val =
+  cont k (x)
+in
+let code inline(never) size(10) g (x : val)
+      my_closure &my_alloc_region my_depth -> k * e : val =
+  apply direct(helper &my_alloc_region) (x) -> k * e
+in
+let code size(30) outer (x : val)
+      my_closure &my_alloc_region my_depth -> k * e : val =
+  let site = closure specialisation_site helper &my_alloc_region in
+  let g = closure g &my_alloc_region in
+  let pair = %block.[`0`].my_alloc_region (g, x) in
+  cont k (pair)
+in
+let $outer = closure outer &toplevel.alloc_region in
+let $camlSpecialised_params_site_via_symbol = Block 0 ($outer) in
+cont done ($camlSpecialised_params_site_via_symbol)

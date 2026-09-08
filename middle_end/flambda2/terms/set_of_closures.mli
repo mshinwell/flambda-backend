@@ -71,3 +71,10 @@ val filter_function_declarations :
   t
 
 include Container_types.S with type t := t
+
+(** Replace the value slots (of both kinds), keeping everything else. *)
+val with_value_slots :
+  t ->
+  value_slots:Simple.t Value_slot.Map.t ->
+  synthetic_value_slots:Simple.t Value_slot.Map.t ->
+  t

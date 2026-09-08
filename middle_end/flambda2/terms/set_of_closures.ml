@@ -246,3 +246,7 @@ let ids_for_export
 let filter_function_declarations t ~f =
   let function_decls = Function_declarations.filter t.function_decls ~f in
   { t with function_decls }
+
+let with_value_slots t ~value_slots ~synthetic_value_slots =
+  create ~is_specialisation_site:t.is_specialisation_site ~synthetic_value_slots
+    ~value_slots t.function_decls

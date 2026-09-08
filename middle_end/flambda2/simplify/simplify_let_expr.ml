@@ -123,14 +123,14 @@ let rebuild_let simplify_named_result removed_operations ~rewrite_id
                 let simplified_defining_expr =
                   Simplified_named.filter_synthetic_value_slots
                     simplified_defining_expr ~f:(fun simple ->
-                      Name_occurrences.fold_names (Simple.free_names simple)
-                        ~init:true ~f:(fun available name ->
-                          available
-                          && Name.Set.mem name required_names
-                          && Name.pattern_match name
-                               ~symbol:(fun _ -> true)
-                               ~var:(fun var ->
-                                 not (Variable.Set.mem var unboxed_vars))))
+                      Simple.pattern_match simple
+                        ~const:(fun _ -> true)
+                        ~name:(fun name ~coercion:_ ->
+                          Name.Set.mem name required_names
+                          &&
+                          match Name.must_be_var_opt name with
+                          | None -> true
+                          | Some var -> not (Variable.Set.mem var unboxed_vars)))
                 in
                 Keep_binding { kept_binding with simplified_defining_expr }
             | Simple _ | Rec_info _ -> binding))
@@ -398,19 +398,15 @@ let record_new_defining_expression_binding_for_data_flow dacc ~rewrite_id
     Flow.Acc.record_let_binding ~rewrite_id ~generate_phantom_lets ~let_bound
       ~simplified_defining_expr data_flow
 
-let update_data_flow dacc closure_info ~lifted_constants_from_defining_expr
+let update_data_flow dacc ~lifted_constants_from_defining_expr
     simplify_named_result ~rewrite_id data_flow =
+  (* The dependency information for lifted constants is only needed at toplevel,
+     where the constants are placed, and inside functions containing
+     specialisation sites (see [Flow_types.Specialisation_site_info]); it is
+     only computed in those cases (see [Flow_acc.normalize_acc]). *)
   let data_flow =
-    match Closure_info.in_or_out_of_closure closure_info with
-    | In_a_closure ->
-      (* The dependency information for lifted constants (stored in [Data_flow])
-         is only required at the point when the constants are placed. That
-         always happens at toplevel, never inside closures -- so we don't need
-         to do anything here. *)
+    Flow.Acc.record_lifted_constants lifted_constants_from_defining_expr
       data_flow
-    | Not_in_a_closure ->
-      Flow.Acc.record_lifted_constants lifted_constants_from_defining_expr
-        data_flow
   in
   ListLabels.fold_left
     (Simplify_named_result.bindings_to_place simplify_named_result)
@@ -478,7 +474,7 @@ let simplify_let0 ~simplify_expr ~simplify_function_body dacc let_expr
       let dacc =
         DA.map_flow_acc dacc
           ~f:
-            (update_data_flow dacc closure_info ~rewrite_id
+            (update_data_flow dacc ~rewrite_id
                ~lifted_constants_from_defining_expr simplify_named_result)
       in
       let at_unit_toplevel = DE.at_unit_toplevel (DA.denv dacc) in

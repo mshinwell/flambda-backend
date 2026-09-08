@@ -322,11 +322,8 @@ let remove_unused_value_slots uacc static_const =
       let synthetic_value_slots =
         filter_slots (Set_of_closures.synthetic_value_slots set_of_closures)
       in
-      Set_of_closures.create
-        ~is_specialisation_site:
-          (Set_of_closures.is_specialisation_site set_of_closures)
-        ~synthetic_value_slots ~value_slots
-        (Set_of_closures.function_decls set_of_closures))
+      Set_of_closures.with_value_slots set_of_closures ~value_slots
+        ~synthetic_value_slots)
 
 let create_let_symbols uacc lifted_constant ~body =
   let bound_static = LC.bound_static lifted_constant in

@@ -524,22 +524,17 @@ let required_names t =
               required_names_without_phantom_roots
               t.code_id_unconditionally_used
           in
-          let rec close code_ids frontier =
-            if Code_id.Set.is_empty frontier
-            then code_ids
-            else
-              let next =
-                Code_id.Set.fold
-                  (fun code_id next ->
-                    match Code_id.Map.find_opt code_id t.code_id_to_code_id with
-                    | None -> next
-                    | Some code_ids' -> Code_id.Set.union code_ids' next)
-                  frontier Code_id.Set.empty
-              in
-              let frontier = Code_id.Set.diff next code_ids in
-              close (Code_id.Set.union code_ids frontier) frontier
+          let queue = Queue.create () in
+          Code_id.Set.iter (fun code_id -> Queue.push code_id queue) mentioned;
+          let rec close enqueued =
+            match Queue.take queue with
+            | exception Queue.Empty -> enqueued
+            | src ->
+              close
+                (Reachable.Code_id_Code_id_Edge.push ~src enqueued queue
+                   t.code_id_to_code_id)
           in
-          close mentioned mentioned
+          close mentioned
       in
       { required_names_without_phantom_roots; live_code_ids }
   in
