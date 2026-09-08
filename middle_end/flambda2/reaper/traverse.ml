@@ -138,12 +138,9 @@ let record_set_of_closures_deps denv names_and_function_slots set_of_closures
       in
       Value_slot.Map.iter add_value_slot_dep
         (Set_of_closures.value_slots set_of_closures);
-      (* The synthetic value slots are never projected, so this does not keep
-         their contents alive; if the contents no longer exist after rebuilding,
-         the slots are dropped (see
-         [Rebuild.rewrite_synthetic_slot_contents]). *)
-      Value_slot.Map.iter add_value_slot_dep
-        (Set_of_closures.synthetic_value_slots set_of_closures);
+      (* Synthetic slots are weak hints, not runtime fields. Constructor
+         dependencies would make their contents escape when the closure does.
+         Rebuilding retains only independently live contents. *)
       Function_slot.Lmap.iter
         (fun function_slot name ->
           Acc.add_constructor_dep acc
