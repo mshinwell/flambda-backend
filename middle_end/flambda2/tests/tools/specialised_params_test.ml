@@ -129,6 +129,15 @@ let mixed_kinds_different_body =
 
 let cyclic = replace base ~pattern:"sx = 0; sy = 1" ~with_:"sx = $f; sy = $f"
 
+let conflicting_synthetic_values =
+  replace base ~pattern:"sx = 0; sy = 1" ~with_:"sx = 0; sx = 1; sy = 1"
+
+let mismatched_slot_kind = replace base ~pattern:"y : val" ~with_:"y : float"
+
+let synthetic_projection =
+  replace base ~pattern:"let $camlCompare ="
+    ~with_:"let v = %project_value_slot.[f].[sx] ($f) in\nlet $camlCompare ="
+
 let cyclic_renamed =
   cyclic
   |> replace_all ~pattern:"$f" ~with_:"$g"
@@ -287,19 +296,27 @@ let () =
 let check_approximant name ~original ~changed =
   match compare ~left:original ~right:changed with
   | Equivalent -> fail "%s: expected different" name
-  | Different { approximant } -> (
+  | Different { approximant } ->
+    let printed =
+      Flambda2_ui.Flambda_colours.without_colours ~f:(fun () ->
+          Format.asprintf "%a" Print_fexpr.flambda_unit
+            (Flambda_to_fexpr.conv approximant))
+    in
     let expected = summary_of_unit (parse_fexpr changed) in
-    let actual = summary_of_unit (Flambda_to_fexpr.conv approximant) in
+    let actual = summary_of_unit (parse_fexpr printed) in
     if expected.sites <> actual.sites
     then fail "%s: approximant changed the specialisation-site markers" name;
     if expected.specialised_params <> actual.specialised_params
     then fail "%s: approximant changed the specialised parameters" name;
     if expected.synthetic_value_slots <> actual.synthetic_value_slots
     then fail "%s: approximant changed the synthetic value slots" name;
-    match Compare.flambda_units approximant (parse changed) with
+    (match Compare.flambda_units approximant (parse changed) with
     | Equivalent -> ()
     | Different _ ->
-      fail "%s: approximant is not equivalent to the second unit" name)
+      fail "%s: approximant is not equivalent to the second unit" name);
+    check_equivalent
+      (name ^ " (printed approximant)")
+      ~left:changed ~right:printed
 
 let check_approximant_both_directions name original changed =
   check_approximant name ~original ~changed;
@@ -327,24 +344,38 @@ let () =
   check_approximant_both_directions "mixed value/float slot roundtrip"
     mixed_kinds mixed_kinds_different_body
 
-(* A specialisation site cannot have ordinary value slots. The error message is
-   not printed, since it is expected. *)
-let () =
+let check_parse_error name text ~message =
+  let errors = Buffer.create 128 in
   let out_functions =
     Format.pp_get_formatter_out_functions Format.err_formatter ()
   in
   Format.pp_set_formatter_out_functions Format.err_formatter
     { out_functions with
-      out_string = (fun _ _ _ -> ());
+      out_string = Buffer.add_substring errors;
       out_flush = (fun () -> ())
     };
-  let accepted =
-    match parse malformed_site with
-    | exception Misc.Fatal_error -> false
-    | _ -> true
+  let rejected =
+    Misc.try_finally
+      ~always:(fun () ->
+        Format.pp_print_flush Format.err_formatter ();
+        Format.pp_set_formatter_out_functions Format.err_formatter out_functions)
+      (fun () ->
+        match parse text with exception Misc.Fatal_error -> true | _ -> false)
   in
-  Format.pp_set_formatter_out_functions Format.err_formatter out_functions;
-  if accepted then fail "marked site with ordinary value slots was accepted"
+  if not rejected
+  then fail "%s: was accepted" name
+  else if occurrences (Buffer.contents errors) message = []
+  then fail "%s: unexpected error: %s" name (Buffer.contents errors)
+
+let () =
+  check_parse_error "marked site with ordinary value slots" malformed_site
+    ~message:"A specialisation site cannot have runtime value slots";
+  check_parse_error "conflicting synthetic values" conflicting_synthetic_values
+    ~message:"Synthetic value slot sx is defined more than once";
+  check_parse_error "explicit slot kind mismatch" mismatched_slot_kind
+    ~message:"does not match kind";
+  check_parse_error "synthetic slot projection" synthetic_projection
+    ~message:"is used both as a synthetic and as an ordinary value slot"
 
 let () =
   Misc.remove_file filename;

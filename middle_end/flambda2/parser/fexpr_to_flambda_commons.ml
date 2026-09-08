@@ -183,10 +183,12 @@ let fresh_value_slot ?is_synthetic env { Fexpr.txt = name; loc = _ } kind =
   WT.add env.vars_within_closures name c;
   c
 
-let fresh_or_existing_value_slot ?(is_synthetic = false) env
-    ({ Fexpr.txt = name; _ } as id) kind =
+let fresh_or_existing_value_slot ?(is_synthetic = false) ?kind env
+    ({ Fexpr.txt = name; _ } as id) =
   match WT.find_opt env.vars_within_closures name with
-  | None -> fresh_value_slot ~is_synthetic env id kind
+  | None ->
+    let kind = Option.value kind ~default:Flambda_kind.value in
+    fresh_value_slot ~is_synthetic env id kind
   | Some value_slot ->
     if not (Bool.equal is_synthetic (Value_slot.is_synthetic value_slot))
     then
@@ -194,12 +196,16 @@ let fresh_or_existing_value_slot ?(is_synthetic = false) env
         "Value slot %s is used both as a synthetic and as an ordinary value \
          slot"
         name;
-    if not (Flambda_kind.equal kind (Value_slot.kind value_slot))
-    then
-      Misc.fatal_errorf
-        "Value slot %s: kind %a does not match kind %a of a previous occurrence"
-        name Flambda_kind.print kind Flambda_kind.print
-        (Value_slot.kind value_slot);
+    Option.iter
+      (fun kind ->
+        if not (Flambda_kind.equal kind (Value_slot.kind value_slot))
+        then
+          Misc.fatal_errorf
+            "Value slot %s: kind %a does not match kind %a of a previous \
+             occurrence"
+            name Flambda_kind.print kind Flambda_kind.print
+            (Value_slot.kind value_slot))
+      kind;
     value_slot
 
 let print_scoped_location ppf loc =

@@ -262,27 +262,26 @@ module Acc = struct
       } )
 end
 
-let convert_value_slots ?is_synthetic env (value_slots : Fexpr.value_slots) =
+let convert_value_slots ?(is_synthetic = false) env
+    (value_slots : Fexpr.value_slots) =
   let convert ({ var; value; kind } : Fexpr.one_value_slot) =
     let kind =
       match kind with
       | None -> Flambda_kind.value
       | Some naked_number_kind -> Flambda_kind.naked_number naked_number_kind
     in
-    let value_slot = fresh_or_existing_value_slot ?is_synthetic env var kind in
-    if not (Flambda_kind.equal (Value_slot.kind value_slot) kind)
-    then
-      (* This can happen if an occurrence of the value slot, such as a
-         projection (which assumes kind [Value], see [Fexpr_prim]), was
-         encountered before this definition. *)
-      Misc.fatal_errorf
-        "Value slot %s: kind %a does not match kind %a of a previous \
-         occurrence of this slot"
-        var.txt Flambda_kind.print kind Flambda_kind.print
-        (Value_slot.kind value_slot);
+    let value_slot = fresh_or_existing_value_slot ~is_synthetic ~kind env var in
     value_slot, simple env value
   in
-  List.map convert value_slots |> Value_slot.Map.of_list
+  List.fold_left
+    (fun slots (element : Fexpr.one_value_slot) ->
+      let value_slot, value = convert element in
+      if is_synthetic && Value_slot.Map.mem value_slot slots
+      then
+        Misc.fatal_errorf "Synthetic value slot %s is defined more than once"
+          element.var.txt;
+      Value_slot.Map.add value_slot value slots)
+    Value_slot.Map.empty value_slots
 
 let set_of_closures env fun_decls value_slots =
   let fun_decls_flambda : Function_declarations.t =
@@ -799,7 +798,7 @@ let rec expr env acc (e : Fexpr.expr) : _ * Flambda.Expr.t =
                       param.txt
                 in
                 let slot =
-                  fresh_or_existing_value_slot ~is_synthetic:true env slot kind
+                  fresh_or_existing_value_slot ~is_synthetic:true ~kind env slot
                 in
                 Variable.Map.add var slot specialised_params)
               Variable.Map.empty specialised_params
