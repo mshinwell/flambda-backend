@@ -123,10 +123,10 @@ let rebuild_let simplify_named_result removed_operations ~rewrite_id
                 let simplified_defining_expr =
                   Simplified_named.filter_synthetic_value_slots
                     simplified_defining_expr ~f:(fun simple ->
-                      Simple.pattern_match simple
-                        ~const:(fun _ -> true)
-                        ~name:(fun name ~coercion:_ ->
-                          Name.Set.mem name required_names
+                      Name_occurrences.fold_names (Simple.free_names simple)
+                        ~init:true ~f:(fun available name ->
+                          available
+                          && Name.Set.mem name required_names
                           &&
                           match Name.must_be_var_opt name with
                           | None -> true
