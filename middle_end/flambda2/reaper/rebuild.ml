@@ -495,9 +495,9 @@ let synthetic_value_slot_for_leaf env value_slot (nested : Field.t list) =
         nested
     in
     let kind =
-      match nested with
-      | [] -> Value_slot.kind value_slot
-      | _ :: _ -> Field.kind (List.nth nested (List.length nested - 1))
+      match Misc.last nested with
+      | None -> Value_slot.kind value_slot
+      | Some field -> Field.kind field
     in
     let slot =
       Value_slot.create ~is_synthetic:true

@@ -6,7 +6,8 @@
  fexpr with dump-raw, dump-simplify;
 *)
 
-(* Projection syntax omits the kind, so it must reuse the declared float kind. *)
+(* The projection syntax omits the kind, so it must reuse the declared float
+   kind. *)
 let code size(1) f (x : val)
       my_closure &my_alloc_region my_depth -> k * e : val =
   cont k (x)

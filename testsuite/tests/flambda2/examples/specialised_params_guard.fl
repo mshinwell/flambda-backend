@@ -8,7 +8,8 @@
 
 (* With unknown [x], the square call must fall back to the older candidate.
    With [x = 1], both candidates match and the newest must win. A different
-   known function, and an unknown function, must still use the generic helper. *)
+   known function, and an unknown function, must still use the generic
+   helper. *)
 
 let code size(5) square (x : val) my_closure &my_alloc_region my_depth
       -> k * e : val =
