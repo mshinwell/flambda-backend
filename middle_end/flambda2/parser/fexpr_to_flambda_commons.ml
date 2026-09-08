@@ -194,6 +194,12 @@ let fresh_or_existing_value_slot ?(is_synthetic = false) env
         "Value slot %s is used both as a synthetic and as an ordinary value \
          slot"
         name;
+    if not (Flambda_kind.equal kind (Value_slot.kind value_slot))
+    then
+      Misc.fatal_errorf
+        "Value slot %s: kind %a does not match kind %a of a previous occurrence"
+        name Flambda_kind.print kind Flambda_kind.print
+        (Value_slot.kind value_slot);
     value_slot
 
 let print_scoped_location ppf loc =

@@ -1465,9 +1465,9 @@ let simplify_effect_op dacc apply (op : Call_kind.Effect.t) ~down_to_up =
 let redirect_direct_call_to_specialised_code denv apply =
   match Apply.callee apply, Apply.call_kind apply with
   | None, Function { function_call = Direct code_id } -> (
-    match DE.find_code_specialisation denv code_id with
-    | None -> apply
-    | Some { new_code_id; assumptions } ->
+    match DE.find_code_specialisations denv code_id with
+    | [] -> apply
+    | _ :: _ as specialisations -> (
       let typing_env = DE.typing_env denv in
       let canonical simple =
         if TE.mem_simple ~min_name_mode:NM.in_types typing_env simple
@@ -1483,16 +1483,22 @@ let redirect_direct_call_to_specialised_code denv apply =
       let assumption_holds arg assumption =
         match assumption with
         | None -> true
-        | Some simple -> (
+        | Some (_value_slot, simple) -> (
           match canonical arg, canonical simple with
           | Some arg, Some simple -> Simple.equal arg simple
           | None, _ | _, None -> false)
       in
       let args = Apply.args apply in
-      if
+      let assumptions_hold
+          ({ new_code_id = _; assumptions } : DE.Code_specialisation.t) =
         List.compare_lengths args assumptions = 0
         && List.for_all2 assumption_holds args assumptions
-      then (
+      in
+      (* The most recently recorded specialisation whose assumptions hold is
+         used, in case several sets of closures for the code are in scope. *)
+      match List.find_opt assumptions_hold specialisations with
+      | None -> apply
+      | Some { new_code_id; assumptions = _ } ->
         (match DE.find_code_metadata_exn denv new_code_id with
         | exception Not_found ->
           Misc.fatal_errorf
@@ -1500,7 +1506,7 @@ let redirect_direct_call_to_specialised_code denv apply =
             Code_id.print new_code_id Code_id.print code_id Apply.print apply
         | _code_metadata -> ());
         Apply.with_call_kind apply (Call_kind.direct_function_call new_code_id))
-      else apply)
+    )
   | Some _, _
   | ( None,
       ( Function

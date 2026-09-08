@@ -34,12 +34,13 @@ val create :
   Function_declarations.t ->
   t
 
-(** A specialisation site is a runtime-closed set of closures left behind by
-    lambda lifting. Its binding must be retained in code that may be simplified
-    again, even if no call uses its closures as callees and even if its
-    synthetic slots have been removed. The synthetic contents are weak hints:
-    retaining the site must not keep otherwise dead values alive. Its closures
-    are only used as callees. *)
+(** A specialisation site is a closed set of closures left behind by lambda
+    lifting (see [Rebuild.rebuild_specialisation_carrier]). Its binding is
+    retained, in code that may be simplified again, as long as the code of one
+    of its functions may still be called, even if no call uses its closures as
+    callees and even if its synthetic value slots have been removed. The
+    contents of the synthetic value slots are weak hints: retaining the site
+    must not keep otherwise dead values alive. *)
 val is_specialisation_site : t -> bool
 
 (** The function declarations associated with the set of closures. *)

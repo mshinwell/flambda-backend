@@ -114,7 +114,11 @@ module Acc : sig
       map : Continuation_info.t Continuation.Map.t;
       extra : Continuation_extra_params_and_args.t Continuation.Map.t;
       lifted_constants : Lifted_constant_state.t;
-      dummy_toplevel_cont : Continuation.t
+      dummy_toplevel_cont : Continuation.t;
+      has_specialisation_sites : bool
+          (** Whether a specialisation site (see [Set_of_closures]) has been
+              recorded, in which case the analyses compute the extra information
+              needed to filter its synthetic value slots. *)
     }
 
   val print : Format.formatter -> t -> unit
@@ -199,10 +203,31 @@ end
 (* Result of the flow analysis *)
 (* *************************** *)
 
+(** Information only needed for the specialisation sites (see [Set_of_closures])
+    of the term being analysed, and only computed when there are some (see
+    [Acc.has_specialisation_sites]). *)
+module Specialisation_site_info : sig
+  type t =
+    { required_names_without_phantom_roots : Name.Set.t;
+          (** The names required when the roots that are only used by phantom
+              bindings are ignored: the synthetic value slots of a site may only
+              mention these. *)
+      live_code_ids : Code_id.Set.t
+          (** The code IDs mentioned by the kept terms (inside a function, all
+              code bindings having been lifted out), closed under the mentions
+              of code by code: a site is only kept if it declares one of them.
+          *)
+    }
+
+  val empty : t
+
+  val print : Format.formatter -> t -> unit
+end
+
 module Flow_result : sig
   type t =
     { data_flow_result : Data_flow_result.t;
-      required_names_without_phantom_roots : Name.Set.t;
+      specialisation_site_info : Specialisation_site_info.t;
       aliases_result : Alias_result.t;
       mutable_unboxing_result : Mutable_unboxing_result.t
     }

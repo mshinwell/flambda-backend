@@ -111,8 +111,11 @@ let rebuild_let simplify_named_result removed_operations ~rewrite_id
               if not (Set_of_closures.is_specialisation_site set)
               then binding
               else
-                let required_names =
-                  UA.required_names_without_phantom_roots uacc
+                let { Flow_types.Specialisation_site_info
+                      .required_names_without_phantom_roots = required_names;
+                      live_code_ids = _
+                    } =
+                  UA.specialisation_site_info uacc
                 in
                 let { Flow_types.Mutable_unboxing_result.unboxed_vars; _ } =
                   UA.mutable_unboxing_result uacc
@@ -204,10 +207,30 @@ let rebuild_let simplify_named_result removed_operations ~rewrite_id
                 in
                 not is_used, is_used
             in
+            let is_live_specialisation_site =
+              (* A specialisation site is useful as long as the code of one of
+                 its functions may still be called, and is then kept even if its
+                 closures are unused (see [Set_of_closures]). *)
+              match defining_expr with
+              | Set_of_closures (set, _)
+                when Set_of_closures.is_specialisation_site set ->
+                let { Flow_types.Specialisation_site_info.live_code_ids;
+                      required_names_without_phantom_roots = _
+                    } =
+                  UA.specialisation_site_info uacc
+                in
+                List.exists
+                  (fun code_id -> Code_id.Set.mem code_id live_code_ids)
+                  (Function_declarations.code_ids
+                     (Set_of_closures.function_decls set))
+              | Set_of_closures _ | Simple _ | Prim _ | Static_consts _
+              | Rec_info _ ->
+                false
+            in
             let must_be_kept =
-              is_end_region_for_used_region
+              is_end_region_for_used_region || is_live_specialisation_site
               || (not is_end_region_for_unused_region)
-                 && not (Named.can_be_deleted defining_expr)
+                 && not (Named.at_most_generative_effects defining_expr)
             in
             if must_be_kept
             then (

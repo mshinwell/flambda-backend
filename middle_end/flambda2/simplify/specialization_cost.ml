@@ -76,8 +76,12 @@ let update_cost ~f = function
 (* CR mshinwell: The closed sets of closures that the reaper leaves behind to
    record synthetic value slots (see [Rebuild.rebuild_specialisation_carrier])
    are never accessed at runtime, yet like any other set of closures they
-   prevent specialisation of the handlers containing them. It should be possible
-   to exempt them. *)
+   prevent specialisation of the handlers containing them, whereas before lambda
+   lifting removed the set entirely. Exempting them is not a matter of ignoring
+   them here: simplifying such a set produces new versions of its code, which
+   are lifted constants, and so raises the same problem as any other set of
+   closures (references to lifted constants escaping from the traversal that
+   simplified the handler). *)
 let add_set_of_closures _soc _t =
   Cannot_specialize { reason = Contains_set_of_closures }
 

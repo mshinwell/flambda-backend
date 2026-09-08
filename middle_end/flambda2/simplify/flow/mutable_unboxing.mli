@@ -25,9 +25,13 @@ val create :
   machine_width:Target_system.Machine_width.t ->
   t
 
+(** [compute_unboxed_vars] requests the set of unboxed variables in the result,
+    which is only needed to filter the synthetic value slots of specialisation
+    sites. *)
 val make_result :
   t ->
   dom:Dominator_graph.alias_map ->
+  compute_unboxed_vars:bool ->
   Flow_types.Mutable_unboxing_result.t * Simple.Set.t
 
 val pp_node : t -> Format.formatter -> Continuation.t -> unit

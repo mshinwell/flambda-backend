@@ -435,7 +435,8 @@ let rewrite_simples_with_debuginfo env simples =
   List.map (rewrite_simple_with_debuginfo env) simples
 
 (* Rewrite the contents of a synthetic value slot, returning [None] if the value
-   it mentions no longer exists after rebuilding. *)
+   it mentions no longer exists after rebuilding. Values that are unboxed are
+   dealt with by [rewrite_synthetic_value_slots]. *)
 let rewrite_synthetic_slot_contents env simple =
   Simple.pattern_match simple
     ~const:(fun _ -> Some simple)
@@ -624,14 +625,10 @@ let code_ids_to_remember env res function_decls =
        re-simplified in another compilation unit, this closure can't be
        resimplified there. Yet the current criterion will still export the code
        from this closure *)
-    Function_slot.Map.fold
-      (fun _ (decl : Function_declarations.code_id_in_function_declaration) acc
-         ->
-        match decl with
-        | Deleted _ -> acc
-        | Code_id { code_id; _ } -> Code_id.Set.add code_id acc)
-      (Function_declarations.funs function_decls)
+    List.fold_left
+      (fun acc code_id -> Code_id.Set.add code_id acc)
       res.code_ids_to_remember
+      (Function_declarations.code_ids function_decls)
   else res.code_ids_to_remember
 
 let add_set_of_closures_to_res env res ~is_phantom set_of_closures =
@@ -798,9 +795,18 @@ let rewrite_set_of_closures env res ~(bound : Name.t list) ~is_phantom
   let function_decls =
     List.map2
       (fun bound_name (function_slot, decl) ->
-        let decl =
-          rewrite_function_decl env decl ~is_used:(code_is_used bound_name)
+        let is_used =
+          code_is_used bound_name
+          || is_specialisation_site
+             &&
+             match
+               (decl : Function_declarations.code_id_in_function_declaration)
+             with
+             | Deleted _ -> false
+             | Code_id { code_id; only_full_applications = _ } ->
+               is_code_id_used env code_id
         in
+        let decl = rewrite_function_decl env decl ~is_used in
         let function_slot =
           match function_slot_rewrites with
           | None -> function_slot
@@ -1885,28 +1891,17 @@ let rebuild_singleton_binding_which_is_being_unboxed env bv
    with no callee. Since the set of closures is closed, [To_cmm] allocates it
    statically. *)
 let rebuild_specialisation_carrier env res bvs
-    ~(set_of_closures : Rev_expr.rev_set_of_closures) ~rename_bound_vars
-    ~alloc_mode ~hole =
+    ~(set_of_closures : Rev_expr.rev_set_of_closures) ~alloc_mode ~hole =
   let value_slots = set_of_closures.value_slots in
-  let function_decls =
-    Function_slot.Lmap.bindings
-      (Function_declarations.funs_in_order set_of_closures.function_decls)
-  in
   let code_ids =
-    List.filter_map
-      (fun (_, (decl : Function_declarations.code_id_in_function_declaration))
-         ->
-        match decl with
-        | Deleted _ -> None
-        | Code_id { code_id; _ } -> Some code_id)
-      function_decls
+    Function_declarations.code_ids set_of_closures.function_decls
   in
   let has_synthetic_value_slots =
     not (Value_slot.Map.is_empty set_of_closures.synthetic_value_slots)
   in
   (* Functions that are never called are left out: the closures are only ever
      used as callees, so the layout of the set does not matter. *)
-  let function_decls_and_bvs =
+  let used_functions =
     List.filter_map
       (fun ( ( function_slot,
                (decl : Function_declarations.code_id_in_function_declaration) ),
@@ -1917,11 +1912,17 @@ let rebuild_specialisation_carrier env res bvs
           if is_code_id_used env code_id
           then
             Some
-              ((function_slot, rewrite_function_decl env decl ~is_used:true), bv)
+              ( function_slot,
+                code_id,
+                rewrite_function_decl env decl ~is_used:true,
+                bv )
           else None)
-      (List.combine function_decls bvs)
+      (List.combine
+         (Function_slot.Lmap.bindings
+            (Function_declarations.funs_in_order set_of_closures.function_decls))
+         bvs)
   in
-  match function_decls_and_bvs with
+  match used_functions with
   | [] -> hole, res
   | _ :: _
     when not
@@ -1930,44 +1931,46 @@ let rebuild_specialisation_carrier env res bvs
               ~is_specialisation_site:set_of_closures.is_specialisation_site) ->
     hole, res
   | _ :: _ ->
-    let function_decls, bvs = List.split function_decls_and_bvs in
     let synthetic_value_slots =
       List.fold_left
-        (fun slots
-             (_, (decl : Function_declarations.code_id_in_function_declaration))
-           ->
-          match decl with
-          | Deleted _ -> slots
-          | Code_id { code_id; only_full_applications = _ } -> (
-            match
-              Unboxing_analysis.my_closure_decision
-                env.calling_convention_changes code_id
-            with
-            | None | Some Keep_my_closure -> slots
-            | Some (Unbox_my_closure fields) ->
-              Value_slot.Map.union_left_biased slots
-                (synthetic_value_slots_of_unboxed_closure env ~value_slots
-                   fields)))
+        (fun slots (_, code_id, _, _) ->
+          match
+            Unboxing_analysis.my_closure_decision env.calling_convention_changes
+              code_id
+          with
+          | None | Some Keep_my_closure -> slots
+          | Some (Unbox_my_closure fields) ->
+            Value_slot.Map.union_left_biased slots
+              (synthetic_value_slots_of_unboxed_closure env ~value_slots fields))
         (rewrite_synthetic_value_slots env set_of_closures.synthetic_value_slots)
-        function_decls
+        used_functions
     in
     let set_of_closures =
       Set_of_closures.create ~is_specialisation_site:true ~synthetic_value_slots
         ~value_slots:Value_slot.Map.empty
         (Function_declarations.create
-           (Function_slot.Lmap.of_list function_decls))
+           (Function_slot.Lmap.of_list
+              (List.map
+                 (fun (function_slot, _, decl, _) -> function_slot, decl)
+                 used_functions)))
     in
     let bound_pattern =
       Bound_pattern.set_of_closures
         (List.map
-           (fun bv ->
-             if rename_bound_vars
-             then
-               Bound_var.create
-                 (carrier_var env (Bound_var.var bv))
-                 Flambda_debug_uid.none Name_mode.normal
-             else bv)
-           bvs)
+           (fun (_, _, _, bv) ->
+             Bound_var.create
+               (carrier_var env (Bound_var.var bv))
+               Flambda_debug_uid.none Name_mode.normal)
+           used_functions)
+    in
+    (* The set of closures is closed, so it is allocated statically whatever its
+       allocation mode; giving it heap mode avoids keeping a local region alive
+       just for it. *)
+    let alloc_mode =
+      match (alloc_mode : Alloc_mode.For_allocations.t) with
+      | Heap _ -> alloc_mode
+      | Local { alloc_region; region = _ } ->
+        Alloc_mode.For_allocations.heap ~alloc_region
     in
     let res =
       add_set_of_closures_to_res env res ~is_phantom:false set_of_closures
@@ -1992,8 +1995,8 @@ let rebuild_set_of_closures_binding_which_is_being_unboxed env res bvs
                 (Code_id_or_name.var (Bound_var.var bv))))
       bvs);
   let hole, res =
-    rebuild_specialisation_carrier env res bvs ~set_of_closures
-      ~rename_bound_vars:true ~alloc_mode ~hole
+    rebuild_specialisation_carrier env res bvs ~set_of_closures ~alloc_mode
+      ~hole
   in
   let expr =
     List.fold_left
@@ -2227,32 +2230,38 @@ let rebuild_let_expr_holed_set_of_closures env res bvs
   then
     rebuild_set_of_closures_binding_which_is_being_unboxed env res bvs
       ~set_of_closures ~alloc_mode ~hole
-  else if set_of_closures.is_specialisation_site
-  then
-    rebuild_specialisation_carrier env res bvs ~set_of_closures
-      ~rename_bound_vars:false ~alloc_mode ~hole
-  else if not (List.exists (fun v -> is_var_used env (Bound_var.var v)) bvs)
-  then hole, res
   else
-    (* [rewrite_set_of_closures] also handles the case where the representation
-       of the set of closures has changed *)
-    let bound = List.map (fun v -> Name.var (Bound_var.var v)) bvs in
-    let bound_pattern = Bound_pattern.set_of_closures bvs in
-    let is_phantom =
-      Name_mode.is_phantom (Bound_pattern.name_mode bound_pattern)
+    let is_used =
+      List.exists (fun v -> is_var_used env (Bound_var.var v)) bvs
+      ||
+      (* A specialisation site is kept as long as one of its functions is
+         called, even with no callee (see [Set_of_closures]). *)
+      set_of_closures.is_specialisation_site
+      && List.exists (is_code_id_used env)
+           (Function_declarations.code_ids set_of_closures.function_decls)
     in
-    let set_of_closures, res =
-      rewrite_set_of_closures env res ~bound set_of_closures ~is_phantom
-    in
-    let size_of_defining_expr =
-      size_of_set_of_closures env res set_of_closures
-    in
-    let expr =
-      RE.create_let bound_pattern
-        (Named.create_set_of_closures ~alloc_mode set_of_closures)
-        ~size_of_defining_expr ~body:hole
-    in
-    expr, res
+    if not is_used
+    then hole, res
+    else
+      (* [rewrite_set_of_closures] also handles the case where the
+         representation of the set of closures has changed *)
+      let bound = List.map (fun v -> Name.var (Bound_var.var v)) bvs in
+      let bound_pattern = Bound_pattern.set_of_closures bvs in
+      let is_phantom =
+        Name_mode.is_phantom (Bound_pattern.name_mode bound_pattern)
+      in
+      let set_of_closures, res =
+        rewrite_set_of_closures env res ~bound set_of_closures ~is_phantom
+      in
+      let size_of_defining_expr =
+        size_of_set_of_closures env res set_of_closures
+      in
+      let expr =
+        RE.create_let bound_pattern
+          (Named.create_set_of_closures ~alloc_mode set_of_closures)
+          ~size_of_defining_expr ~body:hole
+      in
+      expr, res
 
 let rebuild_let_expr_singleton (env : env) res bv ~(defining_expr : Named.t)
     ~hole : RE.t * rebuild_result =
@@ -2704,8 +2713,15 @@ and rebuild_function_params_and_body (env : env) res code_metadata
   | Not_changing_calling_convention ->
     let body, res = rebuild_body () in
     let code_metadata = update_size code_metadata body in
-    (* Format.eprintf "REBUILD %a FREE %a@." Code_id.print code_id
-       Name_occurrences.print body.free_names; *)
+    (* The annotation of a parameter without any use is dropped: the value it
+       refers to may have been unboxed, and its synthetic value slot replaced by
+       slots for the unboxed fields (see [rewrite_synthetic_value_slots]),
+       without the parameter being unboxed accordingly. *)
+    let specialised_params =
+      Variable.Map.filter
+        (fun param _ -> is_var_used env param)
+        specialised_params
+    in
     ( Function_params_and_body.create ~return_continuation ~exn_continuation
         params ~body:body.expr ~free_names_of_body:(Known body.free_names)
         ~my_closure ~my_alloc_mode ~my_depth ~specialised_params,

@@ -21,14 +21,14 @@
            -> k1 * k2
  in
  let code rec size(14)
-       g_2 (z : imm tagged)
+       _g_2 (z : imm tagged)
          my_closure &my_alloc_region my_depth
          -> k1 * k2
          : imm tagged =
    let next_depth = rec_info (succ my_depth) in
-   let f = %project_function_slot.[g].[f] (my_closure) in
+   let f = %project_function_slot.[_g].[f] (my_closure) in
    (let int_sub = %int_barith.sub (z, 1) in
-    apply direct(g_2 &my_alloc_region)
+    apply direct(_g_2 &my_alloc_region)
       (my_closure ~ depth my_depth -> next_depth : _ -> imm tagged)
         (int_sub)
         -> k3 * k2)
@@ -45,7 +45,7 @@
          -> k1 * k2
          : imm tagged =
    let f = closure f_1 @f &my_alloc_region
-   and g = closure g_2 @g &my_alloc_region
+   and _g = closure _g_2 @_g &my_alloc_region
    with { y = y }
    in
    let inlined_dbg = %inlined_apply () in

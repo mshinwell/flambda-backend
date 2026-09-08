@@ -86,7 +86,10 @@ let set_of_closures ~find_code_characteristics set_of_closures =
       funs (zero, num_clos_vars)
   in
   let alloc_size =
-    Code_size.( + ) Code_size.alloc_size (Code_size.of_int (num_words - 1))
+    (* Specialisation sites are never allocated (see [Set_of_closures]). *)
+    if Set_of_closures.is_specialisation_site set_of_closures
+    then Code_size.zero
+    else Code_size.( + ) Code_size.alloc_size (Code_size.of_int (num_words - 1))
   in
   cost_metrics + from_size alloc_size
 

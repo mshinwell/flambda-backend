@@ -277,8 +277,9 @@ val set_has_seen_a_non_liftable_continuation : t -> t
 module Code_specialisation : sig
   type t =
     { new_code_id : Code_id.t;
-      assumptions : Simple.t option list
-          (** For each parameter of the code, in order, the value that the
+      assumptions : (Value_slot.t * Simple.t) option list
+          (** For each parameter of the code, in order, the synthetic value slot
+              the parameter is annotated with and the value that the
               corresponding argument must be known to be equal to for a call to
               be redirected, [new_code_id] having been simplified under the
               assumption that the parameter holds that value. This is checked
@@ -291,4 +292,7 @@ end
 val add_code_specialisation :
   t -> old_code_id:Code_id.t -> Code_specialisation.t -> t
 
-val find_code_specialisation : t -> Code_id.t -> Code_specialisation.t option
+(** The specialisations recorded for the given (old) code ID, most recently
+    recorded first. Several may be in scope, for different sets of closures with
+    the same code. *)
+val find_code_specialisations : t -> Code_id.t -> Code_specialisation.t list

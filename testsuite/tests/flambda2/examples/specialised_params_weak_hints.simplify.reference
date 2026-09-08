@@ -1,23 +1,11 @@
-let code inline_helper deleted in
 let code metadata_only deleted in
 let code live_helper deleted in
 let code mutable_alias deleted in
-let code inline(always) loopify(never) size(1) newer_version_of(inline_helper)
-      inline_helper_1 (p : val, x : val) specialised { p = p_slot }
-        my_closure &my_alloc_region my_depth
-        -> k * e
-        : val =
-  cont k (x)
-in
-let code loopify(never) size(10) newer_version_of(metadata_only)
+let code loopify(never) size(1) newer_version_of(metadata_only)
       metadata_only_1 (x : val)
         my_closure &my_alloc_region my_depth
         -> k * e
         : val =
-  let carrier =
-    closure specialisation_site inline_helper_1 @inline_helper
-      &my_alloc_region
-  in
   cont k (x)
 in
 let $metadata_only =
@@ -31,7 +19,7 @@ let code inline(never) loopify(never) size(1) newer_version_of(live_helper_1)
         : val =
   cont k (x)
 in
-let code loopify(never) size(28) newer_version_of(mutable_alias)
+let code loopify(never) size(21) newer_version_of(mutable_alias)
       mutable_alias_1 (x : val, n : imm tagged)
         my_closure &my_alloc_region my_depth
         -> k * e

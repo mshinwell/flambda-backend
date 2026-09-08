@@ -1,0 +1,38 @@
+(* TEST
+ compile_only = "true";
+ ocamlopt_flags += " -flambda2-reaper -dflambda-invariants";
+ flambda2;
+ setup-simple-build-env;
+ fexpr with dump-simplify;
+*)
+
+(* The closures of the sites cannot be unboxed, since they reach a join point
+   and are projected from there, and [helper] is never called. The reaper must
+   keep the variables bound to the sites, which are used, even though the code
+   of [helper] is not. *)
+
+let code inline(never) size(10) helper (x : val)
+      my_closure &my_alloc_region my_depth -> k * e : val =
+  cont k (x)
+in
+let code inline(never) size(10) helper2 (x : val)
+      my_closure &my_alloc_region my_depth -> k * e : val =
+  cont k (x)
+in
+let code size(50) map (b : val, x : val)
+      my_closure &my_alloc_region my_depth -> k * e : val =
+  let c1 = closure specialisation_site helper &my_alloc_region
+  and c1b = closure specialisation_site helper2 &my_alloc_region in
+  let c2 = closure specialisation_site helper &my_alloc_region
+  and c2b = closure specialisation_site helper2 &my_alloc_region in
+  let ub = %untag_imm (b) in
+  switch ub
+    | 0 -> k1 (c1)
+    | 1 -> k1 (c2)
+  where k1 (p : val) =
+    let h2 = %project_function_slot.[helper].[helper2] (p) in
+    apply &my_alloc_region h2 (x) -> k * e
+in
+let $map = closure map &toplevel.alloc_region in
+let $camlSpecialised_params_kept_site = Block 0 ($map) in
+cont done ($camlSpecialised_params_kept_site)

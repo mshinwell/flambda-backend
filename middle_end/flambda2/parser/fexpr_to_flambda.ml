@@ -309,9 +309,7 @@ let set_of_closures env fun_decls value_slots =
         match fun_decl.synthetic_value_slots with
         | None -> slots
         | Some elements ->
-          Value_slot.Map.union
-            (fun _ simple _ -> Some simple)
-            slots
+          Value_slot.Map.disjoint_union slots
             (convert_value_slots ~is_synthetic:true env elements))
       Value_slot.Map.empty fun_decls
   in
@@ -800,9 +798,10 @@ let rec expr env acc (e : Fexpr.expr) : _ * Flambda.Expr.t =
                       "Specialised parameter %s is not a parameter of the code"
                       param.txt
                 in
-                Variable.Map.add var
-                  (fresh_or_existing_value_slot ~is_synthetic:true env slot kind)
-                  specialised_params)
+                let slot =
+                  fresh_or_existing_value_slot ~is_synthetic:true env slot kind
+                in
+                Variable.Map.add var slot specialised_params)
               Variable.Map.empty specialised_params
           in
           let params_and_body =

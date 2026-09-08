@@ -1478,13 +1478,6 @@ module Named = struct
     | Static_consts _ -> true
     | Rec_info _ -> true
 
-  let can_be_deleted t =
-    match t with
-    | Set_of_closures (set, _) ->
-      not (Set_of_closures.is_specialisation_site set)
-    | Simple _ | Prim _ | Static_consts _ | Rec_info _ ->
-      at_most_generative_effects t
-
   let dummy_value ~machine_width (kind : K.t) : t =
     let simple =
       match kind with

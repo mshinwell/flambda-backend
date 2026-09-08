@@ -706,13 +706,14 @@ let did_unbox_a_mutable_block result =
       | Immutable_unique | Immutable -> false)
     result.blocks_to_unbox
 
-let make_result result ~(dom : Dominator_graph.alias_map) =
+let make_result result ~(dom : Dominator_graph.alias_map) ~compute_unboxed_vars
+    =
   let additional_epa = add_to_extra_params_and_args result in
   let let_rewrites = result.rewrites in
   let did_unbox_a_mutable_block = did_unbox_a_mutable_block result in
   let unboxed_blocks = Simple.Map.keys result.blocks_to_unbox in
   let unboxed_vars =
-    if Simple.Set.is_empty unboxed_blocks
+    if (not compute_unboxed_vars) || Simple.Set.is_empty unboxed_blocks
     then Variable.Set.empty
     else
       let vars =

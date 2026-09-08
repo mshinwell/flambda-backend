@@ -286,26 +286,19 @@ let traverse_set_of_closures denv acc ~(bound_pattern : Bound_pattern.t)
   in
   record_set_of_closures_deps denv names_and_function_slots set_of_closures acc;
   let code_ids =
-    Function_slot.Lmap.fold
-      (fun _ (decl : Function_declarations.code_id_in_function_declaration)
-           code_ids ->
-        match decl with
-        | Deleted _ -> code_ids
-        | Code_id { code_id; _ } -> code_id :: code_ids)
-      (Function_declarations.funs_in_order
-         (Set_of_closures.function_decls set_of_closures))
-      []
+    Function_declarations.code_ids
+      (Set_of_closures.function_decls set_of_closures)
   in
   Acc.add_dynamic_set_of_closures acc
-    { bound_vars =
-        List.map
-          (fun name ->
-            Name.pattern_match name
-              ~var:(fun var -> var)
-              ~symbol:(fun _ ->
-                Misc.fatal_error "Symbol bound by a dynamic set of closures"))
-          (Function_slot.Lmap.data names_and_function_slots);
-      code_ids;
+    ~bound_vars:
+      (List.map
+         (fun name ->
+           Name.pattern_match name
+             ~var:(fun var -> var)
+             ~symbol:(fun _ ->
+               Misc.fatal_error "Symbol bound by a dynamic set of closures"))
+         (Function_slot.Lmap.data names_and_function_slots))
+    { code_ids;
       has_synthetic_value_slots =
         not
           (Value_slot.Map.is_empty

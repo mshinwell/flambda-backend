@@ -24,17 +24,19 @@ type t =
 let print_specialisation_site ppf is_specialisation_site =
   if is_specialisation_site then Format.fprintf ppf "@ (specialisation_site)"
 
+let print_synthetic_value_slots ppf synthetic_value_slots =
+  if not (Value_slot.Map.is_empty synthetic_value_slots)
+  then
+    Format.fprintf ppf "@ @[<hov 1>(synthetic_value_slots@ %a)@]"
+      (Value_slot.Map.print Simple.print)
+      synthetic_value_slots
+
 let [@ocamlformat "disable"] print_with_extra_fields extra_fields ppf
       { function_decls;
         value_slots;
         synthetic_value_slots;
         is_specialisation_site
       } =
-  let print_synthetic_value_slots ppf synthetic_value_slots =
-    if not (Value_slot.Map.is_empty synthetic_value_slots) then
-      Format.fprintf ppf "@ @[<hov 1>(synthetic_value_slots@ %a)@]"
-        (Value_slot.Map.print Simple.print) synthetic_value_slots
-  in
   Format.fprintf ppf "@[<hov 1>(%tset_of_closures%t@ \
       %t\
       @[<hov 1>(function_decls@ %a)@]@ \
@@ -140,11 +142,6 @@ let [@ocamlformat "disable"] print ppf
         synthetic_value_slots;
         is_specialisation_site;
       } =
-  let print_synthetic_value_slots ppf synthetic_value_slots =
-    if not (Value_slot.Map.is_empty synthetic_value_slots) then
-      Format.fprintf ppf "@ @[<hov 1>(synthetic_value_slots@ %a)@]"
-        (Value_slot.Map.print Simple.print) synthetic_value_slots
-  in
   if Value_slot.Map.is_empty value_slots then
     Format.fprintf ppf "@[<hov 1>(%tset_of_closures%t@ \
         @[<hov 1>%a@]\
@@ -174,27 +171,19 @@ let free_names
       synthetic_value_slots;
       is_specialisation_site = _
     } =
-  let free_names_of_value_slots =
+  let free_names_of_slots slots =
     Value_slot.Map.fold
       (fun value_slot simple free_names ->
         Name_occurrences.union free_names
           (Name_occurrences.add_value_slot_in_declaration
              (Simple.free_names simple) value_slot Name_mode.normal))
-      value_slots Name_occurrences.empty
-  in
-  let free_names_of_synthetic_value_slots =
-    Value_slot.Map.fold
-      (fun value_slot simple free_names ->
-        Name_occurrences.union free_names
-          (Name_occurrences.add_value_slot_in_declaration
-             (Simple.free_names simple) value_slot Name_mode.normal))
-      synthetic_value_slots Name_occurrences.empty
+      slots Name_occurrences.empty
   in
   Name_occurrences.union
     (Name_occurrences.union
        (Function_declarations.free_names function_decls)
-       free_names_of_value_slots)
-    free_names_of_synthetic_value_slots
+       (free_names_of_slots value_slots))
+    (free_names_of_slots synthetic_value_slots)
 
 let apply_renaming
     ({ function_decls;

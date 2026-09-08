@@ -12,8 +12,9 @@
  }
 *)
 
-(* Inlining the helper removes the last runtime use of [captured]. Its
-   allocation must disappear, leaving the marked site without its weak hint. *)
+(* Inlining the helper removes the last call to its code and the last runtime
+   use of [captured]. The site, the code and the allocation must all
+   disappear. *)
 
 let code inline(always) size(1) inline_helper (p : val, x : val)
       specialised { p = p_slot }

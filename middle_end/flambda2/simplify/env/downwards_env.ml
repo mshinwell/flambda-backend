@@ -51,13 +51,15 @@ end
 module Code_specialisation = struct
   type t =
     { new_code_id : Code_id.t;
-      assumptions : Simple.t option list
+      assumptions : (Value_slot.t * Simple.t) option list
     }
 
   let print_assumption ppf assumption =
     match assumption with
     | None -> Format.pp_print_string ppf "_"
-    | Some simple -> Simple.print ppf simple
+    | Some (value_slot, simple) ->
+      Format.fprintf ppf "@[<hov 1>(%a@ =@ %a)@]" Value_slot.print value_slot
+        Simple.print simple
 
   let print ppf { new_code_id; assumptions } =
     Format.fprintf ppf
@@ -122,7 +124,7 @@ type t =
 
            CR gbury: we may not need to do this if we had free_names on handlers
            that we have not explored yet. *)
-    code_specialisations : Code_specialisation.t Code_id.Map.t
+    code_specialisations : Code_specialisation.t list Code_id.Map.t
         (* For each code ID (the key) whose code has been re-simplified, in the
            current scope, under the assumptions given by the synthetic value
            slots of a set of closures, the new code ID and the assumptions.
@@ -198,7 +200,12 @@ let [@ocamlformat "disable"] print ppf { round; machine_width; typing_env;
     (Format.pp_print_list ~pp_sep:Format.pp_print_space Lifted_cont_params.print) defined_variables_by_scope
     cost_of_lifting_continuations_out_of_current_one
     has_seen_a_non_liftable_continuation
-    (Code_id.Map.print Code_specialisation.print) code_specialisations
+    (Code_id.Map.print (fun ppf specialisations ->
+         Format.fprintf ppf "@[<hov 1>(%a)@]"
+           (Format.pp_print_list ~pp_sep:Format.pp_print_space
+              Code_specialisation.print)
+           specialisations))
+    code_specialisations
 
 let define_continuations ~can_be_lifted t conts =
   let replay_history =
@@ -884,9 +891,15 @@ let denv_for_lifted_continuation ~denv_for_join ~denv =
 
 let add_code_specialisation t ~old_code_id specialisation =
   let code_specialisations =
-    Code_id.Map.add old_code_id specialisation t.code_specialisations
+    Code_id.Map.update old_code_id
+      (function
+        | None -> Some [specialisation]
+        | Some specialisations -> Some (specialisation :: specialisations))
+      t.code_specialisations
   in
   { t with code_specialisations }
 
-let find_code_specialisation t code_id =
-  Code_id.Map.find_opt code_id t.code_specialisations
+let find_code_specialisations t code_id =
+  match Code_id.Map.find_opt code_id t.code_specialisations with
+  | None -> []
+  | Some specialisations -> specialisations

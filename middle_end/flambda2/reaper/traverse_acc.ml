@@ -45,8 +45,7 @@ type apply_dep =
   }
 
 type dynamic_set_of_closures =
-  { bound_vars : Variable.t list;
-    code_ids : Code_id.t list;
+  { code_ids : Code_id.t list;
     has_synthetic_value_slots : bool;
     is_specialisation_site : bool
   }
@@ -497,12 +496,12 @@ let record_set_of_closures_deps t =
 let add_set_of_closures t set_of_closures =
   t.all_sets_of_closures <- set_of_closures :: t.all_sets_of_closures
 
-let add_dynamic_set_of_closures t (set : dynamic_set_of_closures) =
+let add_dynamic_set_of_closures t ~bound_vars (set : dynamic_set_of_closures) =
   List.iter
     (fun var ->
       t.dynamic_sets_of_closures
         <- Variable.Map.add var set t.dynamic_sets_of_closures)
-    set.bound_vars
+    bound_vars
 
 let dynamic_sets_of_closures t = t.dynamic_sets_of_closures
 

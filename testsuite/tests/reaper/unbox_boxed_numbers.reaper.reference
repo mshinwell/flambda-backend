@@ -244,7 +244,7 @@ let code inline(never) loopify(never) size(3) newer_version_of(read_11)
   let int_of_int64 = %tag_imm (prim_1) in
   cont k (int_of_int64)
 in
-let code loopify(never) size(20) newer_version_of(test_value_slot_10)
+let code loopify(never) size(13) newer_version_of(test_value_slot_10)
       test_value_slot_10_1 (n : imm tagged)
         my_closure &my_alloc_region my_depth
         -> k * k1
@@ -257,7 +257,7 @@ let code loopify(never) size(20) newer_version_of(test_value_slot_10)
     b_into_b_field_unboxed_int64
   in
   let read =
-    closure specialisation_site read_11_1 @read &my_alloc_region &`region`
+    closure specialisation_site read_11_1 @read &my_alloc_region
       synthetic {
         b_field_unboxed_int64 : int64 = b_into_b_field_unboxed_int64
       }

@@ -170,8 +170,7 @@ let with_slot_offsets t slot_offsets = { t with slot_offsets }
 
 let required_names t = t.flow_result.data_flow_result.required_names
 
-let required_names_without_phantom_roots t =
-  t.flow_result.required_names_without_phantom_roots
+let specialisation_site_info t = t.flow_result.specialisation_site_info
 
 let reachable_code_ids t = t.flow_result.data_flow_result.reachable_code_ids
 

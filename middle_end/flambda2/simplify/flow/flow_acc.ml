@@ -35,7 +35,8 @@ let empty () =
       map = Continuation.Map.empty;
       extra = Continuation.Map.empty;
       lifted_constants = Lifted_constant_state.empty;
-      dummy_toplevel_cont = wrong_dummy_toplevel_cont
+      dummy_toplevel_cont = wrong_dummy_toplevel_cont;
+      has_specialisation_sites = false
     }
   in
   res
@@ -355,17 +356,25 @@ let record_let_binding ~rewrite_id ~generate_phantom_lets ~let_bound
     | Set_of_closures (set, alloc_mode) ->
       if Set_of_closures.is_specialisation_site set
       then
-        (* Sites are runtime-closed. Their synthetic contents are weak hints:
-           they must not keep values alive or make mutable blocks escape.
-           Unavailable hints are removed during the upwards traversal. *)
+        (* The closures of a site are closed at runtime and the contents of its
+           synthetic value slots are weak hints: they must neither keep values
+           alive nor make mutable blocks escape, and the hints whose contents
+           disappear are removed during the upwards traversal (see
+           [Simplify_let_expr]). The code is kept alive only by the calls to it,
+           the site being deleted when there are none (also see
+           [Simplify_let_expr]); the region is kept so that the site can be. *)
+        let alloc_mode_free_names =
+          Alloc_mode.For_allocations.free_names alloc_mode
+        in
         let free_names =
           Name_occurrences.union
             (Function_declarations.free_names
                (Set_of_closures.function_decls set))
-            (Alloc_mode.For_allocations.free_names alloc_mode)
+            alloc_mode_free_names
         in
-        add_used_in_current_handler free_names
-          (record_var_bindings t free_names)
+        let t = record_var_bindings t free_names in
+        add_used_in_current_handler alloc_mode_free_names
+          { t with has_specialisation_sites = true }
       else record_var_bindings t free_names
     | Rec_info _ -> record_var_bindings t free_names
     | Prim (original_prim, _) -> (

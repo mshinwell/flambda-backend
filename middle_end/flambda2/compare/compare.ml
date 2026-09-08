@@ -1493,13 +1493,18 @@ let flambda_units u1 u2 =
   let comparison =
     match exprs env body1 body2 with
     | Equivalent as comparison -> comparison
-    | Different _ ->
+    | Different _ -> (
       (* A code annotation may precede the set of closures that establishes its
          slot correspondence. Rebuild the approximant from the original inputs
          once those correspondences are known. Substituting the first
          approximant instead could rename slots that were already
          substituted. *)
-      exprs env body1 body2
+      match exprs env body1 body2 with
+      | Different _ as comparison -> comparison
+      | Equivalent ->
+        Misc.fatal_error
+          "Units compared as different at first but as equivalent when \
+           compared again with the correspondences found")
   in
   comparison
   |> Comparison.map ~f:(fun body ->

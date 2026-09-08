@@ -25,9 +25,11 @@ val create :
   code_age_relation:Code_age_relation.t ->
   used_value_slots:Name_occurrences.t Or_unknown.t ->
   code_ids_to_never_delete:Code_id.Set.t ->
+  has_specialisation_sites:bool ->
   Flow_types.Continuation_info.t Continuation.Map.t ->
   t
 
-(** Run the required names analysis. Also return a conservative liveness set
-    excluding roots used only for phantom/debug bindings, for weak hints. *)
-val required_names : t -> Flow_types.Data_flow_result.t * Name.Set.t
+(** Run the required names analysis. The information for specialisation sites is
+    only computed if [has_specialisation_sites] was set. *)
+val required_names :
+  t -> Flow_types.Data_flow_result.t * Flow_types.Specialisation_site_info.t

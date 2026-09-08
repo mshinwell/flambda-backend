@@ -292,8 +292,12 @@ let compute_code_specialisations denv ~all_sets_of_closures
                 specialised_params
             with
             | None -> None
-            | Some value_slot ->
-              Value_slot.Map.find_opt value_slot synthetic_value_slots)
+            | Some value_slot -> (
+              match
+                Value_slot.Map.find_opt value_slot synthetic_value_slots
+              with
+              | None -> None
+              | Some simple -> Some (value_slot, simple)))
           (Bound_parameters.to_list params))
   in
   List.fold_left2
@@ -307,34 +311,30 @@ let compute_code_specialisations denv ~all_sets_of_closures
         && not is_specialisation_site
       then code_specialisations
       else
-        Function_slot.Map.fold
-          (fun _ (decl : Function_declarations.code_id_in_function_declaration)
-               code_specialisations ->
-            match decl with
-            | Deleted _ -> code_specialisations
-            | Code_id { code_id = old_code_id; only_full_applications = _ } -> (
-              match
-                Code_id.Map.find_opt old_code_id old_to_new_code_ids_all_sets
-              with
-              | None -> code_specialisations
-              | Some new_code_id ->
-                let assumptions =
-                  assumptions_for_code old_code_id ~synthetic_value_slots
-                in
-                (* With no assumptions a marked site produces another generic
-                   version. Redirect calls to it too, so that the site's code
-                   stays live and the site can be revisited. *)
-                if
-                  List.for_all Option.is_none assumptions
-                  && not is_specialisation_site
-                then code_specialisations
-                else
-                  Code_id.Map.add old_code_id
-                    ({ new_code_id; assumptions } : DE.Code_specialisation.t)
-                    code_specialisations))
-          (Function_declarations.funs
-             (Set_of_closures.function_decls set_of_closures))
-          code_specialisations)
+        List.fold_left
+          (fun code_specialisations old_code_id ->
+            match
+              Code_id.Map.find_opt old_code_id old_to_new_code_ids_all_sets
+            with
+            | None -> code_specialisations
+            | Some new_code_id ->
+              let assumptions =
+                assumptions_for_code old_code_id ~synthetic_value_slots
+              in
+              (* With no assumptions a marked site produces another generic
+                 version. Redirect calls to it too, so that the site's code
+                 stays live and the site can be revisited. *)
+              if
+                List.for_all Option.is_none assumptions
+                && not is_specialisation_site
+              then code_specialisations
+              else
+                Code_id.Map.add old_code_id
+                  ({ new_code_id; assumptions } : DE.Code_specialisation.t)
+                  code_specialisations)
+          code_specialisations
+          (Function_declarations.code_ids
+             (Set_of_closures.function_decls set_of_closures)))
     Code_id.Map.empty all_sets_of_closures synthetic_value_slots_all_sets
 
 let record_code_specialisations code_specialisations denv =

@@ -53,7 +53,7 @@ let code loopify(never) size(9) newer_version_of(g_1)
       let int_add = %int_barith.add (x, apply_result) in
       cont k (int_add)
 in
-let code loopify(never) size(43) newer_version_of(f_0)
+let code loopify(never) size(29) newer_version_of(f_0)
       f_0_1 (x : imm tagged, y : imm tagged)
         my_closure &my_alloc_region my_depth
         -> k * k1
@@ -62,13 +62,12 @@ let code loopify(never) size(43) newer_version_of(f_0)
   let g_into_g_field_x = x in
   let g_into_g_field_y = y in
   let g =
-    closure specialisation_site g_1_1 @g &my_alloc_region &`region`
-      synthetic { x = x }
+    closure specialisation_site g_1_1 @g &my_alloc_region synthetic { x = x }
   in
   let u_into_u_field_g_field_x = g_into_g_field_x in
   let u_into_u_field_g_field_y = g_into_g_field_y in
   let u =
-    closure specialisation_site u_4_1 @u &my_alloc_region &`region`
+    closure specialisation_site u_4_1 @u &my_alloc_region
       synthetic {
         g_field_x = g_into_g_field_x;
         g_field_y = g_into_g_field_y
