@@ -169,6 +169,29 @@ let dacc_inside_function context ~outer_dacc ~params ~my_closure ~my_alloc_mode
      explicitly for them not to be removed from the sets of closures. *)
   List.fold_left DA.add_use_of_value_slot dacc used_synthetic_value_slots
 
+let add_lifted_constants dacc constants =
+  let dacc =
+    match
+      Closure_info.in_or_out_of_closure (DE.closure_info (DA.denv dacc))
+    with
+    | Not_in_a_closure -> dacc
+    | In_a_closure ->
+      (* Include code lifted through nested functions, not just code created
+         here: a specialisation site may be called only by that nested code. *)
+      DA.map_flow_acc dacc ~f:(fun flow ->
+          LCS.fold constants ~init:flow ~f:(fun flow constant ->
+              List.fold_left
+                (fun flow definition ->
+                  match LC.Definition.descr definition with
+                  | Code code_id ->
+                    Flow.Acc.record_code_id_binding code_id
+                      (LC.Definition.free_names definition)
+                      flow
+                  | Block_like _ | Set_of_closures _ -> flow)
+                flow (LC.definitions constant)))
+  in
+  DA.add_to_lifted_constant_accumulator ~also_add_to_env:() dacc constants
+
 let extract_accumulators_from_function outer_dacc ~dacc_after_body
     ~uacc_after_upwards_traversal =
   let lifted_consts_this_function =
@@ -196,8 +219,7 @@ let extract_accumulators_from_function outer_dacc ~dacc_after_body
     TE.code_age_relation (DA.typing_env dacc_after_body)
   in
   let outer_dacc =
-    DA.add_to_lifted_constant_accumulator ~also_add_to_env:() outer_dacc
-      lifted_consts_this_function
+    add_lifted_constants outer_dacc lifted_consts_this_function
     |> DA.with_code_ids_to_remember ~code_ids_to_remember
     |> DA.with_code_ids_to_never_delete ~code_ids_to_never_delete
     |> DA.with_code_ids_never_simplified ~code_ids_never_simplified
@@ -584,24 +606,7 @@ let simplify_function0 context ~outer_dacc function_slot_opt code_id code
   { code_id; code = Some (code, code_const); outer_dacc; should_resimplify }
 
 let introduce_code dacc code_id code_const =
-  let code = LC.create_code code_id code_const in
-  let dacc =
-    (* Inside a closure, lifted constants are not recorded in the flow analysis
-       (see [Simplify_let_expr.update_data_flow]), but the code IDs mentioned by
-       the new code are needed to decide which specialisation sites to keep (see
-       [Flow_types.Specialisation_site_info]). *)
-    match
-      Closure_info.in_or_out_of_closure (DE.closure_info (DA.denv dacc))
-    with
-    | Not_in_a_closure -> dacc
-    | In_a_closure ->
-      DA.map_flow_acc dacc
-        ~f:
-          (Flow.Acc.record_code_id_binding code_id
-             (Rebuilt_static_const.free_names code_const))
-  in
-  DA.add_to_lifted_constant_accumulator ~also_add_to_env:() dacc
-    (LCS.singleton code)
+  add_lifted_constants dacc (LCS.singleton (LC.create_code code_id code_const))
 
 let simplify_function context ~outer_dacc function_slot code_id
     ~closure_bound_names_inside_function =
