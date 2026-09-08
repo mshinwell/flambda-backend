@@ -554,7 +554,7 @@ let add_extra_args_to_call ~extra_args rewrite_id original_args =
     in
     Some args
 
-let normalize_acc ~specialization_map (t : T.Acc.t) =
+let normalize_acc ~is_toplevel ~specialization_map (t : T.Acc.t) =
   let map =
     Continuation.Map.map
       (fun (elt : T.Continuation_info.t) ->
@@ -662,7 +662,12 @@ let normalize_acc ~specialization_map (t : T.Acc.t) =
           Misc.fatal_errorf
             "Data_flow: missing continuation info for top-level expression"
         | Some elt ->
-          Some (normalize_lifted_constants_aux t.lifted_constants elt))
+          let elt =
+            if is_toplevel || t.has_specialisation_sites
+            then normalize_lifted_constants_aux t.lifted_constants elt
+            else elt
+          in
+          Some elt)
       map
   in
   { t with map; extra = Continuation.Map.empty }

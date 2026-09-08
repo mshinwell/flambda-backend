@@ -22,11 +22,14 @@
     - moving allocations out of the hot path of recursive continuations (e.g.
       the allocation of a float that was unboxed by the simplifier). *)
 
-(** Analyze the uses. *)
+(** Analyze the uses. [is_toplevel] means outside any closure, including
+    speculative inlining in that scope, even when [used_value_slots] is unknown.
+*)
 val analyze :
   ?speculative:bool ->
   ?print_name:string ->
   machine_width:Target_system.Machine_width.t ->
+  is_toplevel:bool ->
   return_continuation:Continuation.t ->
   exn_continuation:Continuation.t ->
   code_age_relation:Code_age_relation.t ->

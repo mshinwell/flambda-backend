@@ -50,7 +50,7 @@ let print_graph ~print ~print_name ~lazy_ppf ~graph =
 
 (* analysis *)
 
-let analyze ?(speculative = false) ?print_name ~machine_width
+let analyze ?(speculative = false) ?print_name ~machine_width ~is_toplevel
     ~return_continuation ~exn_continuation ~code_age_relation ~used_value_slots
     ~code_ids_to_never_delete ~specialization_map t : T.Flow_result.t =
   Profile.record_call ~accumulate:true "data_flow" (fun () ->
@@ -67,7 +67,7 @@ let analyze ?(speculative = false) ?print_name ~machine_width
              dummy_toplevel_cont;
              has_specialisation_sites
            } as t) =
-        Flow_acc.normalize_acc ~specialization_map t
+        Flow_acc.normalize_acc ~is_toplevel ~specialization_map t
       in
       assert (match stack with [] -> true | _ :: _ -> false);
       assert (
