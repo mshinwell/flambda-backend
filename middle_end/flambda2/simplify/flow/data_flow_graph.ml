@@ -20,6 +20,9 @@ type t =
     name_to_code_id : Code_id.Set.t Name.Map.t;
     code_id_to_name : Name.Set.t Code_id.Map.t;
     code_id_to_code_id : Code_id.Set.t Code_id.Map.t;
+    normal_code_id_to_name : Name.Set.t Code_id.Map.t;
+    normal_code_id_to_code_id : Code_id.Set.t Code_id.Map.t;
+    normal_code_id_unconditionally_used : Code_id.Set.t;
     unconditionally_used : Name.Set.t;
     phantom_only_roots : Name.Set.t;
     has_specialisation_sites : bool;
@@ -155,6 +158,9 @@ let empty code_age_relation is_toplevel ~code_ids_to_never_delete
     name_to_code_id = Name.Map.empty;
     code_id_to_name = Code_id.Map.empty;
     code_id_to_code_id = Code_id.Map.empty;
+    normal_code_id_to_name = Code_id.Map.empty;
+    normal_code_id_to_code_id = Code_id.Map.empty;
+    normal_code_id_unconditionally_used = code_ids_to_never_delete;
     unconditionally_used = Name.Set.empty;
     phantom_only_roots = Name.Set.empty;
     has_specialisation_sites;
@@ -167,6 +173,9 @@ let print ppf
       name_to_code_id;
       code_id_to_name;
       code_id_to_code_id;
+      normal_code_id_to_name = _;
+      normal_code_id_to_code_id = _;
+      normal_code_id_unconditionally_used = _;
       code_age_relation;
       unconditionally_used;
       phantom_only_roots = _;
@@ -240,6 +249,11 @@ let add_code_id_to_code_id ~src ~dst ({ code_id_to_code_id; _ } as t) =
   in
   { t with code_id_to_code_id }
 
+let name_occurs_normally name_occurrences name =
+  match Name_occurrences.greatest_name_mode_name name_occurrences name with
+  | Absent -> false
+  | Present mode -> Name_mode.is_normal mode
+
 let add_name_occurrences name_occurrences
     ({ unconditionally_used;
        phantom_only_roots;
@@ -257,13 +271,7 @@ let add_name_occurrences name_occurrences
     else
       Name_occurrences.fold_names name_occurrences
         ~f:(fun (used, phantom_only) name ->
-          let is_normal =
-            match
-              Name_occurrences.greatest_name_mode_name name_occurrences name
-            with
-            | Absent -> false
-            | Present mode -> Name_mode.is_normal mode
-          in
+          let is_normal = name_occurs_normally name_occurrences name in
           let phantom_only =
             if is_normal
             then Name.Set.remove name phantom_only
@@ -279,10 +287,18 @@ let add_name_occurrences name_occurrences
       (Name_occurrences.code_ids name_occurrences)
       code_id_unconditionally_used
   in
+  let normal_code_id_unconditionally_used =
+    if not has_specialisation_sites
+    then t.normal_code_id_unconditionally_used
+    else
+      Code_id.Set.union t.normal_code_id_unconditionally_used
+        (Name_occurrences.code_ids_in_normal_mode name_occurrences)
+  in
   { t with
     unconditionally_used;
     phantom_only_roots;
-    code_id_unconditionally_used
+    code_id_unconditionally_used;
+    normal_code_id_unconditionally_used
   }
 
 let add_continuation_info map ~return_continuation ~exn_continuation
@@ -372,9 +388,32 @@ let add_continuation_info map ~return_continuation ~exn_continuation
   let t =
     Code_id.Map.fold
       (fun src name_occurrences graph ->
-        fold_name_occurrences name_occurrences ~init:graph
-          ~names:(fun t dst -> add_code_id_dependency ~src ~dst t)
-          ~code_ids:(fun t dst -> add_code_id_to_code_id ~src ~dst t))
+        let graph =
+          fold_name_occurrences name_occurrences ~init:graph
+            ~names:(fun t dst -> add_code_id_dependency ~src ~dst t)
+            ~code_ids:(fun t dst -> add_code_id_to_code_id ~src ~dst t)
+        in
+        if not graph.has_specialisation_sites
+        then graph
+        else
+          (* Phantom dependencies are needed by ordinary liveness, but must not
+             keep specialisation sites or their hints alive. *)
+          let names =
+            Name_occurrences.fold_names name_occurrences ~init:Name.Set.empty
+              ~f:(fun names name ->
+                if name_occurs_normally name_occurrences name
+                then Name.Set.add name names
+                else names)
+          in
+          let code_ids =
+            Name_occurrences.code_ids_in_normal_mode name_occurrences
+          in
+          { graph with
+            normal_code_id_to_name =
+              Code_id.Map.add src names graph.normal_code_id_to_name;
+            normal_code_id_to_code_id =
+              Code_id.Map.add src code_ids graph.normal_code_id_to_code_id
+          })
       code_ids t
   in
   (* Build the graph of dependencies between continuation parameters and
@@ -474,6 +513,9 @@ let required_names0
        name_to_code_id = _;
        code_id_to_name = _;
        code_id_to_code_id = _;
+       normal_code_id_to_name = _;
+       normal_code_id_to_code_id = _;
+       normal_code_id_unconditionally_used = _;
        unconditionally_used;
        phantom_only_roots = _;
        has_specialisation_sites = _;
@@ -497,44 +539,34 @@ let required_names t =
     if not t.has_specialisation_sites
     then T.Specialisation_site_info.empty
     else
+      let t =
+        { t with
+          unconditionally_used =
+            Name.Set.diff t.unconditionally_used t.phantom_only_roots;
+          code_id_to_name = t.normal_code_id_to_name;
+          code_id_to_code_id = t.normal_code_id_to_code_id;
+          code_id_unconditionally_used = t.normal_code_id_unconditionally_used
+        }
+      in
+      let without_phantom_roots = required_names0 t in
       let required_names_without_phantom_roots =
-        if Name.Set.is_empty t.phantom_only_roots
-        then all_uses.required_names
-        else
-          let unconditionally_used =
-            Name.Set.diff t.unconditionally_used t.phantom_only_roots
-          in
-          (required_names0 { t with unconditionally_used }).required_names
+        without_phantom_roots.required_names
       in
       let live_code_ids =
-        match all_uses.reachable_code_ids with
+        match without_phantom_roots.reachable_code_ids with
         | Known { live_code_ids; ancestors_of_live_code_ids = _ } ->
           live_code_ids
-        | Unknown ->
-          (* Inside a function, the code IDs mentioned by the kept terms
-             (ignoring phantom bindings, so that a site is not kept just for
-             debugging information), closed under the mentions of code by
-             code. *)
-          let mentioned =
-            Name.Set.fold
-              (fun name code_ids ->
-                match Name.Map.find_opt name t.name_to_code_id with
-                | None -> code_ids
-                | Some code_ids' -> Code_id.Set.union code_ids' code_ids)
-              required_names_without_phantom_roots
-              t.code_id_unconditionally_used
-          in
-          let queue = Queue.create () in
-          Code_id.Set.iter (fun code_id -> Queue.push code_id queue) mentioned;
-          let rec close enqueued =
-            match Queue.take queue with
-            | exception Queue.Empty -> enqueued
-            | src ->
-              close
-                (Reachable.Code_id_Code_id_Edge.push ~src enqueued queue
-                   t.code_id_to_code_id)
-          in
-          close mentioned
+        | Unknown -> (
+          (* Site liveness also follows code through lifted symbols. Use the
+             toplevel traversal, without changing the ordinary required names or
+             making hints available through dependencies of lifted code. *)
+          let result = required_names0 { t with is_toplevel = true } in
+          match result.reachable_code_ids with
+          | Known { live_code_ids; ancestors_of_live_code_ids = _ } ->
+            live_code_ids
+          | Unknown ->
+            Misc.fatal_error
+              "Expected code reachability for specialisation sites")
       in
       { required_names_without_phantom_roots; live_code_ids }
   in

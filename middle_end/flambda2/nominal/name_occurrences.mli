@@ -138,6 +138,8 @@ val symbols : t -> Symbol.Set.t
 
 val code_ids : t -> Code_id.Set.t
 
+val code_ids_in_normal_mode : t -> Code_id.Set.t
+
 val newer_version_of_code_ids : t -> Code_id.Set.t
 
 val restrict_to_value_slots_and_function_slots : t -> t

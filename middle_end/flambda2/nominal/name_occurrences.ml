@@ -852,6 +852,11 @@ let continuations_including_in_trap_actions t =
 
 let code_ids t = For_code_ids.keys t.code_ids
 
+let code_ids_in_normal_mode t =
+  For_code_ids.fold_with_mode t.code_ids ~init:Code_id.Set.empty
+    ~f:(fun acc code_id name_mode ->
+      if Name_mode.is_normal name_mode then Code_id.Set.add code_id acc else acc)
+
 let newer_version_of_code_ids t = For_code_ids.keys t.newer_version_of_code_ids
 
 let code_ids_and_newer_version_of_code_ids t =

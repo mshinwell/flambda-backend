@@ -209,14 +209,12 @@ end
 module Specialisation_site_info : sig
   type t =
     { required_names_without_phantom_roots : Name.Set.t;
-          (** The names required when the roots that are only used by phantom
-              bindings are ignored: the synthetic value slots of a site may only
-              mention these. *)
+          (** The names required without phantom roots or phantom dependencies
+              of code. The synthetic value slots of a site may only mention
+              these. *)
       live_code_ids : Code_id.Set.t
-          (** The code IDs mentioned by the kept terms (inside a function, all
-              code bindings having been lifted out), closed under the mentions
-              of code by code: a site is only kept if it declares one of them.
-          *)
+          (** The code IDs reachable from the kept terms through code and symbol
+              dependencies. A site is only kept if it declares one of them. *)
     }
 
   val empty : t
