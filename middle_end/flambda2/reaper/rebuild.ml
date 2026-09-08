@@ -435,18 +435,7 @@ let rewrite_simples_with_debuginfo env simples =
   List.map (rewrite_simple_with_debuginfo env) simples
 
 (* Rewrite the contents of a synthetic value slot, returning [None] if the value
-   it mentions no longer exists after rebuilding.
-
-   XCR mshinwell: When the value has been unboxed, the slot could instead be
-   replaced by synthetic slots for the unboxed fields, as is done for the value
-   slots of a closure being unboxed (see
-   [synthetic_value_slots_of_unboxed_closure]); the specialised parameters
-   corresponding to such a value would likewise have to be re-expressed on the
-   unboxed leaves (see [rebuild_function_params_and_body]). At present the
-   annotations are dropped in that case.
-
-   aide: Both hints and parameter annotations now use matching unboxed
-   leaves. *)
+   it mentions no longer exists after rebuilding. *)
 let rewrite_synthetic_slot_contents env simple =
   Simple.pattern_match simple
     ~const:(fun _ -> Some simple)
